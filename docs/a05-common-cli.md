@@ -36,7 +36,7 @@ does not indicate whether the entire batch succeeded: inspect the exit status.
 
 ## Integrating a generation method
 
-The single integration seam is `src.cli.GenerateCall`:
+The single integration seam is `src.workflow.GenerateCall`:
 
 ```python
 from src.cli import main
@@ -64,9 +64,9 @@ A02/A04 and remain necessary before Subject compliance can be claimed.
 A closure or callable may own one lazily initialized model and reuse it across
 prompts. No base Decoder, model factory hierarchy, CLI method registry, or
 mandatory metadata return object is introduced. When a real adapter is ready,
-connect it at `generate_call` for `python -m src`, or inject it into `main`
-for comparison runs. Internal metrics and termination reasons belong to the
-A06 harness, outside the Subject output file.
+connect it at `src.workflow.generate_call` for `python -m src`, or inject it
+into `main` for comparison runs. Internal metrics and termination reasons belong
+to the A06 harness, outside the Subject output file.
 
 ## Validation and saving decisions
 
@@ -111,7 +111,7 @@ output may remain; no generation starts, and the nonzero exit is authoritative.
 | Exact three keys and original prompt | `FunctionCall`, `validate_result`; validation tests |
 | Dynamic candidate membership and exact arguments/types | `load_definitions`, `validate_result`; strict-type tests |
 | No semantic correctness gate | Well-typed incorrect reading is accepted in tests |
-| Fail-fast and explicit nonzero errors | `main`; generation, input, validation, save, interruption tests |
+| Fail-fast and explicit nonzero errors | `src.workflow.run`; generation, input, validation, save, interruption tests |
 | Save after each success; keep valid JSON and successful prefix | `save_results`; real file snapshots, partial-write/replace failure tests |
 | No prior-run contamination | Initial empty save; repeat-run and stale-output tests |
 | No fabricated failures or evaluation fields | Default generator errors; exact output schema |
@@ -159,7 +159,8 @@ git diff --check
 
 ## Review order
 
-1. `src/cli.py:main`: initialization order, stage diagnostics, sequential loop,
+1. `src/cli.py:main`: calls `parse_args` and delegates to the workflow.
+   `src/workflow.py:run`: initialization order, stage diagnostics, sequential loop,
    callable completion contract, and validation before saving.
 2. `src/storage.py:save_results`: publication boundary and failure cleanup.
 3. `src/validation.py:validate_result`: exact output and strict dynamic types.
