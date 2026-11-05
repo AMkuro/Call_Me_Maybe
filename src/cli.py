@@ -42,14 +42,8 @@ def _check_output_path(output: Path, inputs: tuple[Path, Path]) -> None:
             raise ValueError(f"output {output} aliases input {source}")
 
 
-def main(
-    argv: list[str] | None = None, *, generate: GenerateCall | None = None,
-) -> int:
-    """Process one input at a time and publish only validated successes.
-
-    The injected callable is a seam for integration and model-free tests.
-    Codes: 0 success, 1 failure, 2 argparse usage error, 130 Ctrl-C.
-    """
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse Subject CLI paths and report usage errors."""
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--functions_definition", type=Path,
@@ -63,7 +57,18 @@ def main(
         "--output", "-output", type=Path,
         default=Path("data/output/function_calls.json"),
     )
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
+
+
+def main(
+    argv: list[str] | None = None, *, generate: GenerateCall | None = None,
+) -> int:
+    """Process one input at a time and publish only validated successes.
+
+    The injected callable is a seam for integration and model-free tests.
+    Codes: 0 success, 1 failure, 2 argparse usage error, 130 Ctrl-C.
+    """
+    args = parse_args(argv)
     functions_path: Path = args.functions_definition
     input_path: Path = args.input
     output_path: Path = args.output
