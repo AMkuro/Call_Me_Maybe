@@ -36,7 +36,7 @@ does not indicate whether the entire batch succeeded: inspect the exit status.
 
 ## Integrating a generation method
 
-The single integration seam is `src.workflow.GenerateCall`:
+The single integration seam is `src.processing.GenerateCall`:
 
 ```python
 from src.cli import main
@@ -64,9 +64,36 @@ A02/A04 and remain necessary before Subject compliance can be claimed.
 A closure or callable may own one lazily initialized model and reuse it across
 prompts. No base Decoder, model factory hierarchy, CLI method registry, or
 mandatory metadata return object is introduced. When a real adapter is ready,
-connect it at `src.workflow.generate_call` for `python -m src`, or inject it
+connect it at `src.processing.generate_call` for `python -m src`, or inject it
 into `main` for comparison runs. Internal metrics and termination reasons belong
 to the A06 harness, outside the Subject output file.
+
+## Component responsibilities
+
+`main` parses arguments, assembles the collaborators, and calls
+`Application.run()`. No component uses argparse or imports the SDK.
+
+| Component | Owned data | Operations |
+| --- | --- | --- |
+| `InputFiles` (`src/inputs.py`) | Function and prompt file paths | Load both files and validate the dynamic definitions |
+| `CallProcessor` (`src/processing.py`) | Dynamic definitions and generation callable | Validate one input, generate using copied definitions, validate the final call |
+| `ResultStore` (`src/storage.py`) | Output path and committed results | Guard input aliases, initialize a batch, atomically append a success |
+| `Application` (`src/workflow.py`) | Input/store collaborators and the injected generator | Coordinate sequential processing; report failures and exit status |
+
+The processor can be reused without CLI or files; the result store can be
+used without generation. Only the store owns the cumulative result list.
+It advances that list after successful publication, so a failed append
+cannot reappear in a later save. Reinitialization resets both disk and memory.
+`Application` controls order without duplicating these responsibilities.
+
+The shared `operation(stage)` context manager (`src/operations.py`) preserves
+the original exception as its cause and adds the failing operation's context.
+It also carries stage information for keyboard interruptions. Each owner
+describes its own operation, replacing the batch function's mutable stage
+variable. Final stderr reporting and exit codes belong to the application.
+All runtime classes use Pydantic, with composition rather than a new class
+hierarchy. The atomic `save_results` and data validation functions remain
+reusable primitives; generation remains an injected callable.
 
 ## Validation and saving decisions
 
@@ -111,8 +138,8 @@ output may remain; no generation starts, and the nonzero exit is authoritative.
 | Exact three keys and original prompt | `FunctionCall`, `validate_result`; validation tests |
 | Dynamic candidate membership and exact arguments/types | `load_definitions`, `validate_result`; strict-type tests |
 | No semantic correctness gate | Well-typed incorrect reading is accepted in tests |
-| Fail-fast and explicit nonzero errors | `src.workflow.run`; generation, input, validation, save, interruption tests |
-| Save after each success; keep valid JSON and successful prefix | `save_results`; real file snapshots, partial-write/replace failure tests |
+| Fail-fast and explicit nonzero errors | `Application.run`, `CallProcessor`, `operation`; input, generation, validation, save, interruption tests |
+| Save after each success; keep valid JSON and successful prefix | `ResultStore`, `save_results`; file snapshots, partial-write/replace failure tests |
 | No prior-run contamination | Initial empty save; repeat-run and stale-output tests |
 | No fabricated failures or evaluation fields | Default generator errors; exact output schema |
 | Successful generation and token-time constraints | Adapter obligation; actual LLM method remains unimplemented |
@@ -130,7 +157,7 @@ Executed:
 uv sync --locked
 uv run python -m unittest discover -s tests -v
 uv run flake8 src tests examples
-uv run mypy src tests/test_cli.py tests/test_validation.py \
+uv run mypy src tests/test_cli.py tests/test_components.py tests/test_validation.py \
   --warn-return-any --warn-unused-ignores --ignore-missing-imports \
   --disallow-untyped-defs --check-untyped-defs
 uv run python -m src --help
@@ -138,7 +165,7 @@ uv run python -m src
 git diff --check
 ```
 
-- Sync, 32 tests (24 new, 8 existing), scoped lint/type checks, help, and diff
+- Sync, 39 tests (31 new, 8 existing), scoped lint/type checks, help, and diff
   whitespace checks pass. The real default CLI intentionally returns 1 with
   `input 1 generation: NotImplementedError`, leaving valid `[]`.
 - The same scoped mypy command also passes with `--python-version 3.10`.
@@ -159,13 +186,16 @@ git diff --check
 
 ## Review order
 
-1. `src/cli.py:main`: calls `parse_args` and delegates to the workflow.
-   `src/workflow.py:run`: initialization order, stage diagnostics, sequential loop,
-   callable completion contract, and validation before saving.
-2. `src/storage.py:save_results`: publication boundary and failure cleanup.
-3. `src/validation.py:validate_result`: exact output and strict dynamic types.
-4. `tests/test_cli.py`: incremental snapshots and injected failure paths;
-   `tests/test_validation.py`: valid/invalid dynamic data.
+1. `src/workflow.py:Application`: initialization order, sequential orchestration,
+   and failure policy. `src/cli.py:main` only assembles and calls components.
+2. `src/storage.py:ResultStore`: ownership of committed state and initialization;
+   `save_results`: atomic publication and failure cleanup.
+3. `src/processing.py:CallProcessor`: one-record boundary and generator isolation;
+   `src/validation.py:validate_result`: exact output and strict dynamic types.
+4. `src/operations.py:operation`: stage context and original exception causes;
+   `src/inputs.py:InputFiles`: input paths and loading.
+5. `tests/test_components.py`: independent reuse, storage state after failure,
+   and application interruption. CLI/validation tests retain full contract tests.
 
 Author self-review and one independent read-only review of code range
 `e3dd4ec..fc3706b` found no Critical, Important, or Minor defects in this scope.
@@ -173,6 +203,13 @@ Review checked the confirmed contract, failure preservation, strict dynamic
 types, alias protection, and the explicit incomplete generation route.
 The generator and submission-wide obligations listed below remain separate
 from that review verdict. No review suggestions are deferred.
+
+The subsequent responsibility refactor also received an independent read-only
+review. It found no Critical, Important, or Minor defects and confirmed that
+the four components own separate data and operations, while the application
+only coordinates them. All 39 tests, scoped flake8/mypy, and whitespace checks
+passed. Component tests cover reuse without the CLI, preserved exception
+causes, retry after failed publication, reset state, and save interruption.
 
 This scope completes the shared execution infrastructure. The real adapter,
 token-time constraints, SDK/model reuse verification, A06 measurements, and

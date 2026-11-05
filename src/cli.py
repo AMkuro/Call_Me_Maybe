@@ -3,7 +3,10 @@
 import argparse
 from pathlib import Path
 
-from src.workflow import GenerateCall, run
+from src.inputs import InputFiles
+from src.processing import GenerateCall, generate_call
+from src.storage import ResultStore
+from src.workflow import Application
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -27,8 +30,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(
     argv: list[str] | None = None, *, generate: GenerateCall | None = None,
 ) -> int:
-    """Parse CLI arguments and delegate execution to the workflow."""
+    """Parse arguments, compose the application, and call its entry point."""
     args = parse_args(argv)
-    return run(
-        args.functions_definition, args.input, args.output, generate=generate,
+    application = Application(
+        inputs=InputFiles(
+            functions_path=args.functions_definition, input_path=args.input,
+        ),
+        output=ResultStore(path=args.output),
+        generate=generate_call if generate is None else generate,
     )
+    return application.run()

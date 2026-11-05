@@ -1,82 +1,44 @@
-"""Execute sequential generation, validation, saving, and error reporting."""
+"""Coordinate input, per-record processing, and committed result storage."""
 
 import sys
-from pathlib import Path
-from typing import Callable
 
-from pydantic import JsonValue
+from pydantic import BaseModel, ConfigDict
 
-from src.storage import save_results
-from src.validation import (
-    FunctionDefinition,
-    Prompt,
-    load_definitions,
-    load_prompts,
-    validate_result,
-)
-
-GenerateCall = Callable[[str, list[FunctionDefinition]], str]
+from src.inputs import InputFiles
+from src.processing import CallProcessor, GenerateCall, generate_call
+from src.storage import ResultStore
 
 
-def generate_call(prompt: str, definitions: list[FunctionDefinition]) -> str:
-    """Fail explicitly until a real constrained LLM generator is integrated.
+class Application(BaseModel):
+    """Compose execution components and apply the fail-fast batch policy."""
 
-    Future adapters must return only a successfully completed final JSON text.
-    SDK failures, early EOS, impossible constraints, or exceeded limits must
-    raise exceptions, even if partial text happens to parse as valid JSON.
-    The adapter owns model loading/reuse and internal generation metrics.
-    """
-    raise NotImplementedError(
-        "LLM generation is not implemented; integrate a real constrained "
-        "generation method before running nonempty batches"
-    )
+    model_config = ConfigDict(strict=True, extra="forbid")
 
+    inputs: InputFiles
+    output: ResultStore
+    generate: GenerateCall = generate_call
 
-def _check_output_path(output: Path, inputs: tuple[Path, Path]) -> None:
-    """Reject input aliases before initializing output could destroy data."""
-    for source in inputs:
-        if output.resolve() == source.resolve() or (
-            output.exists() and source.exists() and output.samefile(source)
-        ):
-            raise ValueError(f"output {output} aliases input {source}")
+    def run(self) -> int:
+        """Report failures at the application boundary and return status."""
+        try:
+            self._run_batch()
+        except KeyboardInterrupt as exc:
+            print(f"interrupted: {exc}", file=sys.stderr)
+            return 130
+        except Exception as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        return 0
 
-
-def run(
-    functions_path: Path, input_path: Path, output_path: Path,
-    *, generate: GenerateCall | None = None,
-) -> int:
-    """Process one input at a time and publish only validated successes.
-
-    The injected callable is a seam for integration and model-free tests.
-    Codes: 0 success, 1 failure, 130 Ctrl-C.
-    """
-    generator = generate_call if generate is None else generate
-    stage = "output path validation"
-    try:
-        _check_output_path(output_path, (functions_path, input_path))
-        stage = f"initialize output {output_path}"
-        save_results(output_path, [])
-        stage = f"load function definitions {functions_path}"
-        definitions = load_definitions(functions_path)
-        stage = f"load prompts {input_path}"
-        records = load_prompts(input_path)
-        results: list[dict[str, JsonValue]] = []
+    def _run_batch(self) -> None:
+        """Initialize output and coordinate collaborators for each record."""
+        self.output.initialize((
+            self.inputs.functions_path, self.inputs.input_path,
+        ))
+        definitions, records = self.inputs.load()
+        processor = CallProcessor(
+            definitions=definitions, generate=self.generate,
+        )
         for index, record in enumerate(records, start=1):
-            stage = f"input {index} input validation ({input_path})"
-            prompt = Prompt.model_validate(record).prompt
-            stage = f"input {index} generation"
-            text = generator(
-                prompt, [item.model_copy(deep=True) for item in definitions],
-            )
-            stage = f"input {index} result validation"
-            result = validate_result(text, prompt, definitions)
-            stage = f"input {index} save output {output_path}"
-            results.append(result.model_dump())
-            save_results(output_path, results)
-    except KeyboardInterrupt:
-        print(f"interrupted: {stage}", file=sys.stderr)
-        return 130
-    except Exception as exc:
-        print(f"error: {stage}: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 1
-    return 0
+            result = processor.process(record, index)
+            self.output.append(result, index)
