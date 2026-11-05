@@ -2,13 +2,11 @@
 
 import json
 import os
-from contextlib import suppress
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from pydantic import BaseModel, ConfigDict, JsonValue, PrivateAttr
 
-from src.operations import operation
 from src.validation import FunctionCall
 
 
@@ -37,8 +35,10 @@ def save_results(path: Path, results: list[dict[str, JsonValue]]) -> None:
         os.replace(temporary, path)
     finally:
         if temporary is not None:
-            with suppress(OSError):
+            try:
                 temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 class ResultStore(BaseModel):
@@ -51,18 +51,32 @@ class ResultStore(BaseModel):
 
     def initialize(self, inputs: tuple[Path, Path]) -> None:
         """Protect input paths, then reset both published and owned results."""
-        with operation("output path validation"):
+        stage = "output path validation"
+        try:
             self._check_inputs(inputs)
-        with operation(f"initialize output {self.path}"):
+            stage = f"initialize output {self.path}"
             save_results(self.path, [])
             self._results = []
+        except KeyboardInterrupt as exc:
+            raise KeyboardInterrupt(stage) from exc
+        except Exception as exc:
+            raise RuntimeError(
+                f"{stage}: {type(exc).__name__}: {exc}"
+            ) from exc
 
     def append(self, result: FunctionCall, index: int) -> None:
         """Publish a validated result, advancing state only after success."""
-        with operation(f"input {index} save output {self.path}"):
+        stage = f"input {index} save output {self.path}"
+        try:
             results = [*self._results, result.model_dump()]
             save_results(self.path, results)
             self._results = results
+        except KeyboardInterrupt as exc:
+            raise KeyboardInterrupt(stage) from exc
+        except Exception as exc:
+            raise RuntimeError(
+                f"{stage}: {type(exc).__name__}: {exc}"
+            ) from exc
 
     def _check_inputs(self, inputs: tuple[Path, Path]) -> None:
         """Reject direct, relative, symlink, and hardlink input aliases."""

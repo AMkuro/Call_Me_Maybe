@@ -4,7 +4,6 @@ from typing import Callable
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
-from src.operations import operation
 from src.validation import (
     FunctionCall,
     FunctionDefinition,
@@ -39,12 +38,19 @@ class CallProcessor(BaseModel):
 
     def process(self, record: JsonValue, index: int) -> FunctionCall:
         """Return a fully validated call or fail with its operation context."""
-        with operation(f"input {index} input validation"):
+        stage = f"input {index} input validation"
+        try:
             prompt = Prompt.model_validate(record).prompt
-        with operation(f"input {index} generation"):
+            stage = f"input {index} generation"
             text = self.generate(
                 prompt,
                 [item.model_copy(deep=True) for item in self.definitions],
             )
-        with operation(f"input {index} result validation"):
+            stage = f"input {index} result validation"
             return validate_result(text, prompt, self.definitions)
+        except KeyboardInterrupt as exc:
+            raise KeyboardInterrupt(stage) from exc
+        except Exception as exc:
+            raise RuntimeError(
+                f"{stage}: {type(exc).__name__}: {exc}"
+            ) from exc

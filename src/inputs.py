@@ -4,7 +4,6 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
-from src.operations import operation
 from src.validation import FunctionDefinition, load_definitions, load_prompts
 
 
@@ -18,8 +17,15 @@ class InputFiles(BaseModel):
 
     def load(self) -> tuple[list[FunctionDefinition], list[JsonValue]]:
         """Load both files before generation, retaining sequential prompts."""
-        with operation(f"load function definitions {self.functions_path}"):
+        stage = f"load function definitions {self.functions_path}"
+        try:
             definitions = load_definitions(self.functions_path)
-        with operation(f"load prompts {self.input_path}"):
+            stage = f"load prompts {self.input_path}"
             records = load_prompts(self.input_path)
+        except KeyboardInterrupt as exc:
+            raise KeyboardInterrupt(stage) from exc
+        except Exception as exc:
+            raise RuntimeError(
+                f"{stage}: {type(exc).__name__}: {exc}"
+            ) from exc
         return definitions, records

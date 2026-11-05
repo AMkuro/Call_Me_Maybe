@@ -86,11 +86,11 @@ It advances that list after successful publication, so a failed append
 cannot reappear in a later save. Reinitialization resets both disk and memory.
 `Application` controls order without duplicating these responsibilities.
 
-The shared `operation(stage)` context manager (`src/operations.py`) preserves
-the original exception as its cause and adds the failing operation's context.
-It also carries stage information for keyboard interruptions. Each owner
-describes its own operation, replacing the batch function's mutable stage
-variable. Final stderr reporting and exit codes belong to the application.
+Each component uses ordinary `try`/`except` to attach its operation's context
+and preserve the original exception with `raise ... from exc`. A local `stage`
+string identifies the operation being attempted, including on interruption.
+There is no custom decorator, generator, or context manager in error handling.
+Final stderr reporting and exit codes belong to the application.
 All runtime classes use Pydantic, with composition rather than a new class
 hierarchy. The atomic `save_results` and data validation functions remain
 reusable primitives; generation remains an injected callable.
@@ -138,7 +138,7 @@ output may remain; no generation starts, and the nonzero exit is authoritative.
 | Exact three keys and original prompt | `FunctionCall`, `validate_result`; validation tests |
 | Dynamic candidate membership and exact arguments/types | `load_definitions`, `validate_result`; strict-type tests |
 | No semantic correctness gate | Well-typed incorrect reading is accepted in tests |
-| Fail-fast and explicit nonzero errors | `Application.run`, `CallProcessor`, `operation`; input, generation, validation, save, interruption tests |
+| Fail-fast and explicit nonzero errors | `Application.run` and component exception handlers; input, generation, validation, save, interruption tests |
 | Save after each success; keep valid JSON and successful prefix | `ResultStore`, `save_results`; file snapshots, partial-write/replace failure tests |
 | No prior-run contamination | Initial empty save; repeat-run and stale-output tests |
 | No fabricated failures or evaluation fields | Default generator errors; exact output schema |
@@ -192,7 +192,7 @@ git diff --check
    `save_results`: atomic publication and failure cleanup.
 3. `src/processing.py:CallProcessor`: one-record boundary and generator isolation;
    `src/validation.py:validate_result`: exact output and strict dynamic types.
-4. `src/operations.py:operation`: stage context and original exception causes;
+4. Component `try`/`except` blocks: stage context and original exception causes;
    `src/inputs.py:InputFiles`: input paths and loading.
 5. `tests/test_components.py`: independent reuse, storage state after failure,
    and application interruption. CLI/validation tests retain full contract tests.
