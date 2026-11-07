@@ -7,6 +7,7 @@ import importlib.util
 import io
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import types
@@ -61,14 +62,59 @@ class AnonymousIdTests(unittest.TestCase):
                 with self.subTest(bad=bad), self.assertRaises(ValueError):
                     survey.validate_pc_id(bad)
 
-    def test_hmac_key_is_not_stored(self) -> None:
-        """鍵は環境変数か端末入力から読む。非対話で鍵が無ければ失敗する。"""
-        with patch.dict('os.environ', {survey.HMAC_ENV: 'k' * 16}):
-            self.assertEqual(survey.read_hmac_key(), 'k' * 16)
-        with patch.dict('os.environ', {}, clear=True), \
-                patch.object(sys, 'stdin', io.StringIO()), \
-                self.assertRaises(ValueError):
-            survey.read_hmac_key()
+    def test_key_file_is_private_and_not_overwritten(self) -> None:
+        """鍵ファイルは 600 で作り、既存の鍵は上書きしない。"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'campus-survey' / 'hmac.key'
+            survey.init_hmac_key(path)
+            key = path.read_text()
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertGreaterEqual(len(key.strip()), 16)
+            with self.assertRaises(ValueError):
+                survey.init_hmac_key(path)
+            self.assertEqual(path.read_text(), key)
+
+    def test_key_file_takes_priority(self) -> None:
+        """鍵ファイルがあれば環境変数より優先し、無ければ環境変数を使う。"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'hmac.key'
+            with patch.dict('os.environ', {survey.HMAC_ENV: 'e' * 16}):
+                self.assertEqual(survey.read_hmac_key(path), 'e' * 16)
+                survey.init_hmac_key(path)
+                self.assertEqual(survey.read_hmac_key(path),
+                                 path.read_text().strip())
+            with patch.dict('os.environ', {}, clear=True), \
+                    patch.object(sys, 'stdin', io.StringIO()), \
+                    self.assertRaises(ValueError):
+                survey.read_hmac_key(Path(directory) / 'missing')
+
+    def test_default_key_file_is_git_ignored(self) -> None:
+        """既定の鍵ファイルは Git 管理外にある。"""
+        relative = survey.HMAC_KEY_FILE.relative_to(survey.REPO_ROOT)
+        result = subprocess.run(
+            ['git', 'check-ignore', '-q', str(relative)],
+            cwd=survey.REPO_ROOT, check=False,
+        )
+        self.assertEqual(result.returncode, 0)
+
+    def test_init_then_hostname_id_is_stable(self) -> None:
+        """--init-hmac-key で作った鍵から、毎回同じIDが出る。"""
+        with tempfile.TemporaryDirectory() as directory:
+            key = str(Path(directory) / 'hmac.key')
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(survey.main(
+                    ['--init-hmac-key', '--hmac-key-file', key]), 0)
+            created = out.getvalue().split()[-1]
+            ids = []
+            for _ in range(2):
+                with patch.object(survey, 'inspect', return_value={}), \
+                        contextlib.redirect_stdout(io.StringIO()) as out:
+                    survey.main(['--pc-id-from-hostname',
+                                 '--hmac-key-file', key])
+                ids.append(out.getvalue())
+        self.assertEqual(ids[0], ids[1])
+        self.assertIn(f'pc_id = {created}', ids[0])
+        self.assertIn('pc_id_method = hmac', ids[0])
 
     def test_meta_validation(self) -> None:
         """メタデータはキー・値とも安全な形式だけ受け付ける。"""

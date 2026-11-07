@@ -22,6 +22,7 @@ import os
 import platform
 import re
 import resource
+import secrets
 import shutil
 import signal
 import socket
@@ -41,6 +42,8 @@ MODEL_DIR = 'models--Qwen--Qwen3-0.6B'
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REPORT_DIR = REPO_ROOT / 'research' / 'campus'
 HMAC_ENV = 'CAMPUS_SURVEY_HMAC_KEY'
+# 鍵はこの PC のリポジトリ内、Git 管理外（.gitignore の .cache/）に置く。
+HMAC_KEY_FILE = REPO_ROOT / '.cache' / 'campus-survey' / 'hmac.key'
 THREAD_ENVS = ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS')
 DEPENDENCIES = ('torch', 'transformers', 'huggingface-hub', 'tokenizers',
                 'safetensors', 'numpy', 'pydantic')
@@ -191,13 +194,30 @@ def hmac_pc_id(key: str, hostname: str) -> str:
     return 'h' + digest.hexdigest()[:12]
 
 
-def read_hmac_key() -> str:
-    """鍵は環境変数か端末入力から読み、どこにも保存しない。"""
+def init_hmac_key(path: Path) -> None:
+    """ランダムな鍵を所有者のみ読める権限で作る。既存の鍵は上書きしない。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise ValueError('HMAC key file already exists') from None
+    with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        stream.write(secrets.token_hex(32) + '\n')
+
+
+def read_hmac_key(path: Path) -> str:
+    """鍵ファイルを優先し、無ければ環境変数か端末入力から読む。"""
+    if path.is_file():
+        if path.stat().st_mode & 0o077:
+            print('warning: HMAC key file is readable by others; '
+                  'run chmod 600 on it', file=sys.stderr)
+        return read(path)
     key = os.environ.get(HMAC_ENV)
     if key:
         return key
     if not sys.stdin.isatty():
-        raise ValueError(f'set {HMAC_ENV} or run interactively')
+        raise ValueError('no HMAC key: run --init-hmac-key, '
+                         f'or set {HMAC_ENV}')
     return getpass.getpass('HMAC key (not stored): ')
 
 
@@ -810,7 +830,11 @@ def build_parser() -> argparse.ArgumentParser:
     ident = parser.add_mutually_exclusive_group(required=True)
     ident.add_argument('--pc-id', help='anonymous ID chosen by you')
     ident.add_argument('--pc-id-from-hostname', action='store_true',
-                       help=f'HMAC of hostname; key from {HMAC_ENV} or tty')
+                       help='HMAC of hostname with the local key file')
+    ident.add_argument('--init-hmac-key', action='store_true',
+                       help='create the local key file, print the ID, exit')
+    parser.add_argument('--hmac-key-file', type=Path, default=HMAC_KEY_FILE,
+                        help='default: .cache/campus-survey/hmac.key')
     parser.add_argument('--meta', action='append', default=[],
                         help='public metadata key=value (e.g. floor=2f)')
     parser.add_argument('--write', action='store_true',
@@ -842,8 +866,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.error('budget 10-900, repeats 1-10, gen-tokens 1-64, '
                      'threads >= 1')
     try:
+        if args.init_hmac_key:
+            init_hmac_key(args.hmac_key_file)
+            pc_id = hmac_pc_id(read(args.hmac_key_file),
+                               socket.gethostname())
+            print(f'created HMAC key; this PC is --pc-id-from-hostname '
+                  f'-> {pc_id}')
+            return 0
         if args.pc_id_from_hostname:
-            pc_id, method = hmac_pc_id(read_hmac_key(),
+            pc_id, method = hmac_pc_id(read_hmac_key(args.hmac_key_file),
                                        socket.gethostname()), 'hmac'
         else:
             pc_id, method = validate_pc_id(args.pc_id), 'explicit'

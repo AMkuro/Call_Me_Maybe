@@ -6,7 +6,7 @@
 
 このディレクトリは公開リポジトリの `develop` に置く。`main` には入れない。
 
-## 次のPCでの実行手順（Claude Code 不要）
+## 次のPCでの実行手順
 
 ```sh
 git clone -b develop https://github.com/AMkuro/Call_Me_Maybe.git
@@ -17,7 +17,7 @@ python3 -m tools.campus_survey --pc-id cmm-002 --meta floor=2f
 python3 -m tools.campus_survey --pc-id cmm-002 --meta floor=2f --write
 ```
 
-- 管理者権限・追加パッケージ・ネットワークは使わない。1 秒未満で終わる。
+- 管理者権限・追加パッケージ・ネットワークは使わない。
 - `deps.*` と `sdk.importable` は、スクリプトを実行したインタプリタでの有無を示す
   （`python3` で実行すれば、`.venv` や uv 環境の状態ではない）。
 - 同じPCで再測定するときは同じ `--pc-id` を使う。同じファイルに
@@ -32,14 +32,22 @@ python3 -m tools.campus_survey --pc-id cmm-002 --meta floor=2f --write
 「ID ↔ 実際の席」の対応表はリポジトリにも共有PCにも置かず、手元で管理すること。
 
 対応表を持ちたくない場合は、hostname の秘密鍵付き HMAC-SHA256 からIDを作れる。
+鍵はPCごとに、そのPCのリポジトリ内の Git 管理外ファイル
+`.cache/campus-survey/hmac.key`（権限 600）に置き、既定でそれを参照する。
 
 ```sh
-python3 -m tools.campus_survey --pc-id-from-hostname   # 鍵を端末で入力（エコーなし）
+python3 -m tools.campus_survey --init-hmac-key          # 初回のみ。鍵を作り、IDを表示する
+python3 -m tools.campus_survey --pc-id-from-hostname --write
 ```
 
-同じ鍵なら同じPCは常に同じID（`h` + 12桁16進）になる。鍵は16文字以上で、
-Git にも共有PCにも保存しないこと（パスワードマネージャ等で保管する）。
-鍵なしの単純ハッシュは hostname 一覧から総当たりで戻せるため使わない。
+- 同じ鍵なら、同じPCは常に同じID（`h` + 12桁16進）になる。
+- `--init-hmac-key` は既存の鍵を上書きしない。リポジトリを消すか clone し直すと
+  鍵が無くなりIDが変わるので、同じIDを使い続けるならリポジトリを残す。
+- 鍵は**絶対にコミットしない**（`.cache/` は `.gitignore` で除外済み）。共有PCの
+  ホームに置くことになるので、権限 600 を保つこと（緩いと警告を出す）。
+- 鍵ファイルが無い場合は、環境変数 `CAMPUS_SURVEY_HMAC_KEY` か端末入力を使う。
+  別の場所の鍵は `--hmac-key-file` で指定できる。
+- 鍵なしの単純ハッシュは、hostname 一覧から総当たりで元に戻せるため使わない。
 
 ## benchmark（CPU 推論測定・明示指定時のみ）
 
