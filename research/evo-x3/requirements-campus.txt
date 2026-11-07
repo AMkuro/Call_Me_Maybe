@@ -1,0 +1,9 @@
+# 校舎 pc-hdad92b5bf4f3 の benchmark レポート (deps.*) に合わせた固定版。
+# llm_sdk/uv.lock ではなく、実測時に uv が解決した版を再現する。
+torch==2.15.0
+transformers==5.22.2
+huggingface-hub==2.4.0
+tokenizers==0.23.3
+safetensors==0.8.0
+numpy==2.5.4
+pydantic==2.14.3
