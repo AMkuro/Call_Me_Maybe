@@ -80,10 +80,10 @@ torch・transformers が必要なので、SDK 環境で実行する（初回は 
 ```sh
 # 初回のみ: モデルを goinfre に取得する（このときの load 時間は比較に使えない）
 uv run --no-project --with ./llm_sdk python -m tools.campus_survey benchmark \
-  --pc-id cmm-001 --hf-home ~/goinfre/huggingface --allow-download
+  --pc-id-from-hostname --hf-home ~/goinfre/huggingface --allow-download
 # 測定（キャッシュ済みモデルのみ使用）
 uv run --no-project --with ./llm_sdk python -m tools.campus_survey benchmark \
-  --pc-id cmm-001 --hf-home ~/goinfre/huggingface --write
+  --pc-id-from-hostname --hf-home ~/goinfre/huggingface --write
 ```
 
 PC 間で条件をそろえるため、`--lengths` などの既定値は変えずに実行する。
