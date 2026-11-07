@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, ci-validation/base-20261107]
   push:
-    branches: [main]
+    branches: [main, ci-validation/base-20261107]
 
 permissions:
   contents: read
