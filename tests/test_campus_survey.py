@@ -229,10 +229,16 @@ class InspectRobustnessTests(unittest.TestCase):
                 report = survey.model_cache(hf_home)
                 self.assertEqual(report['model.cache'], 'partial')
                 (snapshot / 'tokenizer.json').write_text('{}')
-                (snapshot / 'model.safetensors').write_text('w')
+                # 新しい huggingface_hub は実体を共有 blobs/ に置く。
+                blob = hf_home / 'hub' / 'blobs' / 'weights'
+                blob.parent.mkdir()
+                with blob.open('wb') as stream:
+                    stream.truncate(3 * 2**20)
+                (snapshot / 'model.safetensors').symlink_to(blob)
                 report = survey.model_cache(hf_home)
         self.assertEqual(report['model.cache'], 'found')
         self.assertEqual(report['model.cache_location'], 'explicit')
+        self.assertEqual(report['model.cache_size_mib'], '3')
 
 
 class BenchmarkTests(unittest.TestCase):

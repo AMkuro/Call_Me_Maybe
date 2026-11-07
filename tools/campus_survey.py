@@ -437,9 +437,10 @@ def model_cache(hf_home: Path | None) -> Report:
             'model.cache_complete': 'no',
         })
         return report
-    label, hub, _ = found
-    size = sum(p.stat().st_size for p in (hub / MODEL_DIR).rglob('*')
-               if p.is_file() and not p.is_symlink())
+    label, _, snapshot = found
+    # 実体は共有 blobs/ にあることがあるので、スナップショットの symlink を
+    # たどって数える。
+    size = sum(p.stat().st_size for p in snapshot.iterdir() if p.is_file())
     report.update({
         'model.cache': 'found', 'model.cache_location': label,
         'model.cache_complete': 'yes',
