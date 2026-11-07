@@ -86,13 +86,36 @@ copied the user's uncommitted changes. No algorithm or SDK changes were made.
 
 ## Main integration and remaining limits
 
-Only the permanent infrastructure PR #30 is selected for main integration;
-its final state and main push CI will be recorded after native Auto-merge.
+The permanent infrastructure [PR #30](https://github.com/AMkuro/Call_Me_Maybe/pull/30)
+was enrolled at 02:10:05Z while state was OPEN/BLOCKED and no checks had yet
+reported. After all 3 checks passed in
+[run 42327851401](https://github.com/AMkuro/Call_Me_Maybe/actions/runs/42327851401),
+GitHub automatically squash merged it at **2026-11-07 02:10:33 UTC / 11:10:33 JST**,
+with reviews=[], as **2b4f9c8e74bb386c46334cb6b18efb68ef994a62**.
+There was no release environment or human approval step.
+
+The resulting main push also passed all 3 jobs in
+[run 42327896120](https://github.com/AMkuro/Call_Me_Maybe/actions/runs/42327896120).
+Only permanent CI/configuration/documentation was integrated. The application,
+greedy algorithm, distributed SDK and existing unit test file are unchanged.
+The final evidence is preserved by this permanent documentation follow-up.
 The original main SHA and existing feature SHA were confirmed unchanged
 through all scratch-base tests. No existing feature branch/PR was enrolled.
 
-Not yet demonstrated: a main merge, actual main direct push rejection, a
-live conflict or cancellation case, a deliberately misconfigured permission,
+Temporary main-targeted [PR #34](https://github.com/AMkuro/Call_Me_Maybe/pull/34)
+contained only a deterministic failing unittest on top of the integrated main.
+In [run 42327959196](https://github.com/AMkuro/Call_Me_Maybe/actions/runs/42327959196),
+both Quality jobs failed and Subject passed. With Auto-merge enabled,
+state remained **OPEN/BLOCKED**, mergedAt=null. Enrollment was then disabled,
+the PR closed unmerged and its temporary branch deleted. Main stayed at
+2b4f9c8 throughout this negative test.
+
+Temporary scratch PRs #31/#32 were closed unmerged; #33 merged only to the
+scratch base. All 4 scratch remote branches and the temporary Ruleset26740196
+were removed after evidence collection. Main Ruleset26740194 remains active. The permanent evidence update is also
+submitted through PR and all required checks; no direct main push is used.
+
+Not demonstrated: actual main direct push rejection, a live conflict or
+cancellation case, a deliberately misconfigured permission,
 and heavyweight Subject evaluation. Required-check/strict-merge configuration
 is evidence for the unexercised stop conditions, not a claim of live proof.
-

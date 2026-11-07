@@ -42,6 +42,6 @@
 
 - [x] Use a disposable base with equivalent protection to verify failed PR
   blocking, passing explicit auto-merge, non-enrolled PR, and direct-push denial.
-- [ ] Close temporary PRs and remove only branches created for this task.
+- [x] Close temporary PRs and remove only branches created for this task.
 - [x] Self-review and request a fresh whole-branch review; record outcomes.
-- [ ] Publish reviewable infrastructure PR, run evidence and agent instructions.
+- [x] Publish reviewable infrastructure PR, run evidence and agent instructions.
