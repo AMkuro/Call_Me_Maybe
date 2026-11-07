@@ -1,0 +1,15 @@
+{
+  "files": {
+    "llm_sdk/llm_sdk/__init__.py": "8c497ae206fb24b5425554ba95f42dc144f46a84b8cf5043de9c8bec833845a4",
+    "llm_sdk/pyproject.toml": "5eaf932b8c808b2626cd375c3191d44c97b7b49ea8cb846099eafd763f9356a1",
+    "llm_sdk/uv.lock": "571e86020172c9c2e6e9c9ed7bffa0c396593c654acbedd3e6bbdecce0d8980c"
+  },
+  "flake8": {
+    "returncode": 1,
+    "output": "llm_sdk/llm_sdk/__init__.py:2:80: E501 line too long (89 > 79 characters)\nllm_sdk/llm_sdk/__init__.py:4:1: F401 'os' imported but unused\nllm_sdk/llm_sdk/__init__.py:5:1: F401 'time' imported but unused\nllm_sdk/llm_sdk/__init__.py:6:1: F401 'typing.Tuple' imported but unused\nllm_sdk/llm_sdk/__init__.py:22:80: E501 line too long (104 > 79 characters)\nllm_sdk/llm_sdk/__init__.py:29:80: E501 line too long (94 > 79 characters)\nllm_sdk/llm_sdk/__init__.py:32:80: E501 line too long (93 > 79 characters)\nllm_sdk/llm_sdk/__init__.py:64:80: E501 line too long (86 > 79 characters)\nllm_sdk/llm_sdk/__init__.py:86:80: E501 line too long (89 > 79 characters)\nllm_sdk/llm_sdk/__init__.py:98:80: E501 line too long (95 > 79 characters)\nllm_sdk/llm_sdk/__init__.py:105:80: E501 line too long (84 > 79 characters)\n"
+  },
+  "mypy": {
+    "returncode": 1,
+    "output": "llm_sdk/llm_sdk/__init__.py:94: error: Returning Any from function declared to return \"str\"  [no-any-return]\nllm_sdk/llm_sdk/__init__.py:116: error: Returning Any from function declared to return \"str\"  [no-any-return]\nllm_sdk/llm_sdk/__init__.py:125: error: Returning Any from function declared to return \"str\"  [no-any-return]\nllm_sdk/llm_sdk/__init__.py:134: error: Returning Any from function declared to return \"str\"  [no-any-return]\nFound 4 errors in 1 file (checked 1 source file)\n"
+  }
+}
