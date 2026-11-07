@@ -34,14 +34,14 @@
 ### Task 2: GitHub execution and protection
 
 - [x] Add pinned, read-only PR/main CI with stable job names and no path filters.
-- [ ] Validate YAML and execute the real PR CI on a dedicated infra branch.
-- [ ] Snapshot settings; enable squash/Auto-merge and active main Ruleset after
+- [x] Validate YAML and execute the real PR CI on a dedicated infra branch.
+- [x] Snapshot settings; enable squash/Auto-merge and active main Ruleset after
   verifying exact check names and app identity; record changes.
 
 ### Task 3: Live verification and review
 
-- [ ] Use a disposable base with equivalent protection to verify failed PR
+- [x] Use a disposable base with equivalent protection to verify failed PR
   blocking, passing explicit auto-merge, non-enrolled PR, and direct-push denial.
 - [ ] Close temporary PRs and remove only branches created for this task.
-- [ ] Self-review and request a fresh whole-branch review; record outcomes.
+- [x] Self-review and request a fresh whole-branch review; record outcomes.
 - [ ] Publish reviewable infrastructure PR, run evidence and agent instructions.

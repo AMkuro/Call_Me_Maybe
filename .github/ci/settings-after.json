@@ -1,0 +1,98 @@
+{
+  "repository": {
+    "allow_auto_merge": true,
+    "allow_merge_commit": false,
+    "allow_rebase_merge": false,
+    "allow_squash_merge": true,
+    "default_branch": "main",
+    "permissions": {
+      "admin": true,
+      "maintain": true,
+      "pull": true,
+      "push": true,
+      "triage": true
+    }
+  },
+  "ruleset": {
+    "id": 26740194,
+    "name": "main: PR and required CI",
+    "target": "branch",
+    "source_type": "Repository",
+    "source": "AMkuro/Call_Me_Maybe",
+    "enforcement": "active",
+    "conditions": {
+      "ref_name": {
+        "exclude": [],
+        "include": [
+          "refs/heads/main"
+        ]
+      }
+    },
+    "rules": [
+      {
+        "type": "deletion"
+      },
+      {
+        "type": "non_fast_forward"
+      },
+      {
+        "type": "pull_request",
+        "parameters": {
+          "required_approving_review_count": 0,
+          "dismiss_stale_reviews_on_push": false,
+          "required_reviewers": [],
+          "require_code_owner_review": false,
+          "require_last_push_approval": false,
+          "required_review_thread_resolution": true,
+          "require_extra_approval_for_unattributed_changes": true,
+          "allowed_merge_methods": [
+            "squash"
+          ]
+        }
+      },
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "strict_required_status_checks_policy": true,
+          "do_not_enforce_on_create": false,
+          "required_status_checks": [
+            {
+              "context": "Quality (Python 3.10)",
+              "integration_id": 15368
+            },
+            {
+              "context": "Quality (Python 3.14)",
+              "integration_id": 15368
+            },
+            {
+              "context": "Subject development checks",
+              "integration_id": 15368
+            }
+          ]
+        }
+      }
+    ],
+    "node_id": "RRS_lACqUmVwb3NpdG9yec5MgZjGzgGYBeI",
+    "created_at": "2026-11-07T11:03:36.371+09:00",
+    "updated_at": "2026-11-07T11:03:36.520+09:00",
+    "bypass_actors": [],
+    "current_user_can_bypass": "never",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/AMkuro/Call_Me_Maybe/rulesets/26740194"
+      },
+      "html": {
+        "href": "https://github.com/AMkuro/Call_Me_Maybe/rules/26740194"
+      }
+    }
+  },
+  "actions": {
+    "enabled": true,
+    "allowed_actions": "all",
+    "sha_pinning_required": false
+  },
+  "workflow_permissions": {
+    "default_workflow_permissions": "read",
+    "can_approve_pull_request_reviews": false
+  }
+}
