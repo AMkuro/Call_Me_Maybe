@@ -74,6 +74,11 @@ missing checks, conflicts, unresolved discussions, or insufficient rights stop
 merging. Do not duplicate this with legacy Branch Protection; applicable rules
 would accumulate and could accidentally require approval.
 
+The existing default `require_extra_approval_for_unattributed_changes=true`
+is retained. GitHub REST documentation limits it to unattributed Copilot PRs
+when the configured approval count is nonzero; our ordinary count is zero.
+No change to this extra protection is needed for the gh agent flow.
+
 Repository Auto-merge is enabled; merge/rebase methods are disabled. Actions
 keeps read-only default permissions and cannot approve PR reviews. CI explicitly
 uses contents:read and never pushes, opens PRs, or enables auto-merge itself.
@@ -137,6 +142,7 @@ privileged workflow. Do not assume `gh pr merge --auto` can cure absent CI.
 Sources: [native Auto-merge](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/automatically-merging-a-pull-request),
 [CLI merge flags](https://cli.github.com/manual/gh_pr_merge),
 [Ruleset rules](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets),
+[Rules REST API](https://docs.github.com/en/rest/repos/rules),
 [workflow token trigger limitations](https://docs.github.com/en/actions/how-tos/writing-workflows/choosing-when-your-workflow-runs/triggering-a-workflow).
 
 ## Settings audit and live evidence

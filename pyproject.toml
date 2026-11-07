@@ -8,6 +8,7 @@ dependencies = ['numpy>=1.26', 'pydantic>=2,<3']
 dev = [
     'flake8==7.3.0',
     'mypy==2.4.1',
+    'packaging>=24',
     'tomli>=2; python_version < "3.11"',
 ]
 

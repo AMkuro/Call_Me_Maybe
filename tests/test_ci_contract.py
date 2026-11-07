@@ -5,7 +5,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from tools.check_subject import check_inputs, check_source, check_layout
+from tools.check_subject import (
+    check_dependencies, check_inputs, check_source, check_layout,
+)
 
 
 class SubjectChecksTests(unittest.TestCase):
@@ -53,6 +55,23 @@ class SubjectChecksTests(unittest.TestCase):
         errors, _ = check_layout(Path('.'),
                                  ['data/output/function_calls.json'], False)
         self.assertTrue(any('output' in error for error in errors))
+
+    def test_requirement_references_and_normalized_names(self) -> None:
+        """Recognize names in direct URLs, extras, and PEP 503 equivalents."""
+        for dependency in (
+            'torch @ https://example.invalid/torch.whl',
+            'huggingface.hub>=1', 'huggingface__hub>=1',
+            'transformers[torch]>=4',
+        ):
+            with self.subTest(dependency=dependency):
+                self.assertTrue(check_dependencies(
+                    ['numpy', 'pydantic', dependency],
+                ))
+        self.assertEqual(check_dependencies([
+            'numpy @ https://example.invalid/numpy.whl',
+            'pydantic[extra]>=2',
+        ]), [])
+        self.assertTrue(check_dependencies(['numpy', 'pydantic', '???']))
 
     def test_source_syntax_error_is_rejected(self) -> None:
         """Report syntax failures with a useful filename."""

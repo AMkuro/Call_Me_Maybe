@@ -4,9 +4,11 @@ import argparse
 import ast
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
+
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.utils import canonicalize_name
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -20,6 +22,24 @@ REQUIRED = (
     'pyproject.toml', 'uv.lock', 'README.md', 'Makefile', '.gitignore',
     'llm_sdk/llm_sdk/__init__.py',
 )
+
+
+def check_dependencies(dependencies: list[str]) -> list[str]:
+    """Parse PEP 508 requirements and normalize PEP 503 project names."""
+    errors: list[str] = []
+    packages: set[str] = set()
+    for item in dependencies:
+        try:
+            packages.add(canonicalize_name(Requirement(item).name))
+        except InvalidRequirement as exc:
+            errors.append(f'invalid runtime dependency: {exc}')
+    for name in ('numpy', 'pydantic'):
+        if name not in packages:
+            errors.append(f'missing runtime dependency: {name}')
+    forbidden = {canonicalize_name(name) for name in FORBIDDEN}
+    for name in sorted(packages & forbidden):
+        errors.append(f'forbidden direct runtime dependency: {name}')
+    return errors
 
 
 def check_source(text: str, filename: str) -> list[str]:
@@ -129,13 +149,7 @@ def main() -> int:
     errors += check_inputs(root)
     config = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))
     dependencies = config['project'].get('dependencies', [])
-    packages = {re.split(r'[<>=!~;\[]', item)[0].strip().lower()
-                .replace('-', '_') for item in dependencies}
-    for name in ('numpy', 'pydantic'):
-        if name not in packages:
-            errors.append(f'missing runtime dependency: {name}')
-    for name in packages & FORBIDDEN:
-        errors.append(f'forbidden direct runtime dependency: {name}')
+    errors += check_dependencies(dependencies)
     for filename in tracked:
         if filename.endswith('.py') and not filename.startswith('llm_sdk/'):
             errors += check_source(Path(filename).read_text(encoding='utf-8'),
