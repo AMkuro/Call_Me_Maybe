@@ -18,13 +18,13 @@ import hmac
 import importlib.metadata
 import importlib.util
 import json
+import multiprocessing
 import os
 import platform
 import re
 import resource
 import secrets
 import shutil
-import signal
 import socket
 import statistics
 import subprocess
@@ -32,7 +32,7 @@ import sys
 import time
 import traceback
 from pathlib import Path
-from types import FrameType
+from multiprocessing.connection import Connection
 from typing import Callable
 
 SCHEMA_VERSION = '1'
@@ -102,14 +102,17 @@ IPV4 = re.compile(r'(?<![\d.])\d{1,3}(\.\d{1,3}){3}(?![\d.])')
 MAC = re.compile(r'(?i)\b[0-9a-f]{2}([:-][0-9a-f]{2}){5}\b')
 IPV6 = re.compile(r'(?i)\b[0-9a-f]{0,4}(:[0-9a-f]{0,4}){2,7}\b')
 EMAIL = re.compile(r'[\w.+-]+@[\w-]+\.[\w.]+')
+# 版番号を記録するキー。4 要素の版（例: WSL2 の kernel 6.6.87.2-...）は
+# IPv4 と同じ形になるので、版番号の形式に合う値だけ IPv4 検査から外す。
+VERSION_KEY = re.compile(
+    r'os\.kernel|python\.version|uv\.version|deps\.[a-z_]+')
+VERSION_VALUE = re.compile(r'\d+(\.\d+)+([-+_.~][A-Za-z0-9._+~-]*)?')
+# 上限時間を過ぎた子プロセスに SIGTERM を送ってから SIGKILL までの猶予。
+KILL_GRACE_S = 5.0
 
 
 class LeakError(ValueError):
     """公開レポートに出してはいけない値を検出した。"""
-
-
-class BudgetExceeded(Exception):
-    """benchmark の上限時間を超えた。"""
 
 
 def unavailable(reason: str) -> str:
@@ -613,11 +616,6 @@ def estimate(points: list[tuple[int, float]], load_s: float) -> Report:
     }
 
 
-def _on_alarm(signum: int, frame: FrameType | None) -> None:
-    """SIGALRM で上限時間超過を通知する。"""
-    raise BudgetExceeded()
-
-
 def benchmark(args: argparse.Namespace) -> tuple[Report, int]:
     """CPU 推論を測る。キャッシュが無ければロード前に中止する。"""
     lengths = sorted(set(args.lengths))
@@ -660,58 +658,106 @@ def benchmark(args: argparse.Namespace) -> tuple[Report, int]:
     if args.threads:
         for name in THREAD_ENVS:
             os.environ[name] = str(args.threads)
-    previous = signal.signal(signal.SIGALRM, _on_alarm)
-    signal.setitimer(signal.ITIMER_REAL, args.budget)
-    stage = ['sdk import']
+    return supervise(args, lengths, report)
+
+
+def supervise(
+    args: argparse.Namespace, lengths: list[int], report: Report,
+) -> tuple[Report, int]:
+    """推論を子プロセスで実行し、上限時間を親プロセスから強制する。
+
+    PyTorch のネイティブ処理中は Python のシグナルハンドラが動かないため、
+    同じプロセス内のタイマーでは上限を守れない。親はパイプで実測値を
+    逐次受け取り、締め切りを過ぎたら子を SIGTERM、猶予後に SIGKILL する。
+    """
+    # 親は torch を import していないので fork しても安全（Linux 前提）。
+    context = multiprocessing.get_context('fork')
+    receiver, sender = context.Pipe(duplex=False)
+    child = context.Process(target=_measure_in_child,
+                            args=(args, lengths, sender), daemon=True)
+    deadline = time.monotonic() + args.budget
+    child.start()
+    sender.close()
+    stage = 'sdk import'
     try:
-        estimated = run_measurements(args, lengths, report, stage)
-    except BudgetExceeded:
-        report.update({'bench.status.result': 'partial',
-                       'bench.status.reason': 'budget_exceeded',
-                       'bench.status.stage': stage[0]})
-        return report, 1
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not receiver.poll(remaining):
+                report.update({'bench.status.result': 'partial',
+                               'bench.status.reason': 'budget_exceeded',
+                               'bench.status.stage': stage})
+                return report, 1
+            try:
+                kind, *payload = receiver.recv()
+            except EOFError:
+                kind, payload = 'error', ['ChildExited']
+            if kind == 'stage':
+                stage = payload[0]
+            elif kind == 'value':
+                report[payload[0]] = payload[1]
+            elif kind == 'done':
+                report['bench.status.result'] = 'completed'
+                report.update(payload[0])
+                return report, 0
+            else:
+                name = payload[0]
+                report.update({
+                    'bench.status.result': 'failed',
+                    'bench.status.stage': stage,
+                    'bench.status.error_type': (
+                        name if ERROR_TYPE.fullmatch(name) else 'error'),
+                })
+                return report, 1
+    finally:
+        receiver.close()
+        if child.is_alive():
+            child.terminate()
+            child.join(KILL_GRACE_S)
+        if child.is_alive():
+            child.kill()
+        child.join()
+
+
+def _measure_in_child(
+    args: argparse.Namespace, lengths: list[int], conn: Connection,
+) -> None:
+    """子プロセス側。段階名と実測値を親へ逐次送る。"""
+    try:
+        estimated = run_measurements(
+            args, lengths,
+            lambda key, value: conn.send(('value', key, value)),
+            lambda name: conn.send(('stage', name)),
+        )
+        conn.send(('done', estimated))
     except Exception as exc:
         if args.debug:
             traceback.print_exc()  # 端末表示のみ。レポートには保存しない。
-        name = type(exc).__name__
-        report.update({
-            'bench.status.result': 'failed',
-            'bench.status.stage': stage[0],
-            'bench.status.error_type': (
-                name if ERROR_TYPE.fullmatch(name) else 'error'),
-        })
-        return report, 1
+        conn.send(('error', type(exc).__name__))
     finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous)
-    report['bench.status.result'] = 'completed'
-    report.update(estimated)
-    return report, 0
+        conn.close()
 
 
 def run_measurements(
-    args: argparse.Namespace, lengths: list[int], out: Report,
-    stage: list[str],
+    args: argparse.Namespace, lengths: list[int],
+    record: Callable[[str, str], None], step: Callable[[str], None],
 ) -> Report:
-    """各測定を実行し、実測値は out に随時書き込み、推定値を返す。
+    """各測定を実行し、実測値は record で随時渡し、推定値を返す。
 
-    stage[0] には実行中の段階名を入れ、失敗・時間切れ時の報告に使う。
+    step には実行中の段階名を渡し、失敗・時間切れ時の報告に使う。
     """
-    def step(name: str) -> None:
-        stage[0] = name
-
     started = time.perf_counter()
     from llm_sdk import Small_LLM_Model
-    out['bench.measured.sdk_import_s'] = seconds(time.perf_counter() - started)
-    out['bench.measured.rss_after_import_mib'] = safe(
-        lambda: rss_mib('VmRSS'))
+    record('bench.measured.sdk_import_s',
+           seconds(time.perf_counter() - started))
+    record('bench.measured.rss_after_import_mib', safe(
+        lambda: rss_mib('VmRSS')))
 
     step('model load')
     started = time.perf_counter()
     model = Small_LLM_Model(MODEL_NAME, device='cpu', trust_remote_code=False)
     load_s = time.perf_counter() - started
-    out['bench.measured.model_load_s'] = seconds(load_s)
-    out['bench.measured.rss_after_load_mib'] = safe(lambda: rss_mib('VmRSS'))
+    record('bench.measured.model_load_s', seconds(load_s))
+    record('bench.measured.rss_after_load_mib', safe(lambda: rss_mib('VmRSS')))
 
     step('encode')
     needed = max([*lengths, BASE_LENGTH]) + args.gen_tokens
@@ -728,16 +774,16 @@ def run_measurements(
 
     step('first logits')
     first, logits = timed_logits(ids[:BASE_LENGTH])
-    out['bench.measured.vocab_size'] = str(len(logits))
-    out[f'bench.measured.first_logits_len_{BASE_LENGTH}_s'] = seconds(first)
+    record('bench.measured.vocab_size', str(len(logits)))
+    record(f'bench.measured.first_logits_len_{BASE_LENGTH}_s', seconds(first))
 
     step('repeated logits')
     repeated = [timed_logits(ids[:BASE_LENGTH])[0]
                 for _ in range(args.repeats)]
     prefix = f'bench.measured.repeat_logits_len_{BASE_LENGTH}'
-    out[f'{prefix}_min_s'] = seconds(min(repeated))
-    out[f'{prefix}_median_s'] = seconds(statistics.median(repeated))
-    out[f'{prefix}_max_s'] = seconds(max(repeated))
+    record(f'{prefix}_min_s', seconds(min(repeated)))
+    record(f'{prefix}_median_s', seconds(statistics.median(repeated)))
+    record(f'{prefix}_max_s', seconds(max(repeated)))
 
     points: list[tuple[int, float]] = []
     for length in lengths:
@@ -745,7 +791,7 @@ def run_measurements(
         times = [timed_logits(ids[:length])[0] for _ in range(args.repeats)]
         median = statistics.median(times)
         points.append((length, median))
-        out[f'bench.measured.logits_len_{length}_median_s'] = seconds(median)
+        record(f'bench.measured.logits_len_{length}_median_s', seconds(median))
 
     step('generation')
     sequence = ids[:BASE_LENGTH]
@@ -754,10 +800,11 @@ def run_measurements(
         logits = model.get_logits_from_input_ids(sequence)
         sequence.append(max(range(len(logits)), key=logits.__getitem__))
     total = time.perf_counter() - started
-    out[f'bench.measured.generate_{args.gen_tokens}_tokens_s'] = seconds(total)
-    out['bench.measured.generate_per_token_s'] = seconds(
-        total / args.gen_tokens)
-    out['bench.measured.peak_rss_mib'] = safe(lambda: rss_mib('VmHWM'))
+    record(f'bench.measured.generate_{args.gen_tokens}_tokens_s',
+           seconds(total))
+    record('bench.measured.generate_per_token_s', seconds(
+        total / args.gen_tokens))
+    record('bench.measured.peak_rss_mib', safe(lambda: rss_mib('VmHWM')))
 
     step('estimate')
     return safe_report(lambda: estimate(points, load_s),
@@ -774,27 +821,32 @@ def key_allowed(key: str) -> bool:
 def render(report: Report) -> str:
     """許可キー・安全な値だけを key = value 形式で出力する。"""
     lines = []
+    tokens = sensitive_tokens()
     for key, value in report.items():
         if not key_allowed(key):
             raise LeakError(f'key is not allowed: {key}')
         if not SAFE_VALUE.fullmatch(value):
             value = unavailable('unsafe_value')
+        check_leaks(key, value, tokens)
         lines.append(f'{key} = {value}')
-    text = '\n'.join(lines) + '\n'
-    check_leaks(text)
-    return text
+    return '\n'.join(lines) + '\n'
 
 
-def check_leaks(text: str) -> None:
-    """端末固有情報やアドレス形式の文字列が混入していないか検査する。"""
-    lowered = text.lower()
-    for token in sensitive_tokens():
+def check_leaks(key: str, value: str, tokens: set[str]) -> None:
+    """端末固有情報やアドレス形式の文字列が混入していないか項目ごとに検査する。"""
+    line = f'{key} = {value}'
+    lowered = line.lower()
+    for token in tokens:
         if re.search(rf'(?<![a-z0-9]){re.escape(token)}(?![a-z0-9])',
                      lowered):
             raise LeakError('report contains hostname or username')
+    is_version = (VERSION_KEY.fullmatch(key) is not None
+                  and VERSION_VALUE.fullmatch(value) is not None)
     for name, pattern in (('IPv4', IPV4), ('MAC', MAC), ('IPv6', IPV6),
                           ('email', EMAIL)):
-        if pattern.search(text):
+        if name == 'IPv4' and is_version:
+            continue
+        if pattern.search(line):
             raise LeakError(f'report contains an {name}-like value')
 
 

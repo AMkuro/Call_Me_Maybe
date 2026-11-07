@@ -70,8 +70,10 @@ python3 -m tools.campus_survey --pc-id-from-hostname --write
 - モデルがキャッシュになければ**ロード前に中止**する（終了コード 3）。
   ダウンロードは `--allow-download` を付けた場合だけ行う。
   通常は `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1` を設定して実行する。
-- 全体の上限時間は `--budget`（既定 180 秒、最大 900 秒）。超えたら
-  `bench.status.result = partial` として、その時点までの実測値を残す。
+- 全体の上限時間は `--budget`（既定 180 秒、最大 900 秒）。推論は子プロセスで
+  実行し、PyTorch のネイティブ処理中でも親プロセスが締め切りで停止させる
+  （SIGTERM、5 秒後に SIGKILL）。その場合は `bench.status.result = partial` として、
+  その時点までの実測値を残す。fork を使うため Linux 前提。
 - モデルキャッシュは `--hf-home`、`HF_HUB_CACHE`、`HF_HOME`、リポジトリの `.cache/`、
   `~/goinfre`・`~/sgoinfre` の浅い階層、`~/.cache/huggingface` の順に探す。
 

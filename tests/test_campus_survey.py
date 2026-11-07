@@ -7,9 +7,11 @@ import importlib.util
 import io
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -159,6 +161,18 @@ class PublicReportTests(unittest.TestCase):
             with self.subTest(value=value), \
                     self.assertRaises(survey.LeakError):
                 survey.render({'os.name': value})
+        # 4 要素の kernel 版（WSL2 など）は版番号のキーでだけ許可する。
+        wsl = '6.6.87.2-microsoft-standard-WSL2'
+        self.assertIn(wsl, survey.render({'os.kernel': wsl}))
+        self.assertIn('1.2.3.4', survey.render({'deps.torch': '1.2.3.4'}))
+        for key, value in (('os.name', wsl), ('meta.floor', '10.0.0.1'),
+                           ('os.kernel', 'ip 10.0.0.1'),
+                           ('os.kernel', 'aa-bb-cc-dd-ee-ff')):
+            with self.subTest(key=key, value=value), \
+                    self.assertRaises(survey.LeakError):
+                survey.render({key: value})
+        with self.assertRaises(survey.LeakError):
+            survey.render({'os.kernel': '6.6.87.2-alice'})
         # 部分一致（malice など）は誤検出しない。
         self.assertIn('malice', survey.render({'os.name': 'malice'}))
         self.assertIn('2.9.1', survey.render({'deps.torch': '2.9.1+cpu'}))
@@ -295,8 +309,23 @@ class BenchmarkTests(unittest.TestCase):
         self.model = MagicMock()
         self.model.encode.return_value.tolist.return_value = [
             list(range(400))]
-        self.model.get_logits_from_input_ids.return_value = [0.0, 2.0, 1.0]
-        self.constructor = MagicMock(return_value=self.model)
+        # benchmark は子プロセスで動くので、呼び出しはファイルに記録する。
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.log = Path(directory.name) / 'calls.log'
+
+        def logits(ids: list[int]) -> list[float]:
+            with self.log.open('a') as stream:
+                stream.write('logits\n')
+            return [0.0, 2.0, 1.0]
+
+        def construct(*args: object, **kwargs: object) -> MagicMock:
+            with self.log.open('a') as stream:
+                stream.write(f'init {args!r} {sorted(kwargs.items())!r}\n')
+            return self.model
+
+        self.model.get_logits_from_input_ids.side_effect = logits
+        self.constructor = MagicMock(side_effect=construct)
         self.sdk = types.ModuleType('llm_sdk')
         setattr(self.sdk, 'Small_LLM_Model', self.constructor)
         self.found = ('explicit', Path('hub'), Path('snapshot'))
@@ -346,15 +375,15 @@ class BenchmarkTests(unittest.TestCase):
             report, code = self.run_bench(threads=2)
         self.assertEqual(code, 0)
         self.assertEqual(report['bench.status.result'], 'completed')
-        self.constructor.assert_called_once_with(
-            survey.MODEL_NAME, device='cpu', trust_remote_code=False)
+        calls = self.log.read_text().splitlines()
+        self.assertEqual(calls[0], f"init ('{survey.MODEL_NAME}',) "
+                         "[('device', 'cpu'), ('trust_remote_code', False)]")
         self.assertEqual(self.environ['HF_HUB_OFFLINE'], '1')
         self.assertEqual(self.environ['TRANSFORMERS_OFFLINE'], '1')
         self.assertEqual(self.environ['HF_HUB_CACHE'], 'hub')
         self.assertEqual(self.environ['OMP_NUM_THREADS'], '2')
         # 1 + repeats + lengths*repeats + gen_tokens 回の forward
-        self.assertEqual(self.model.get_logits_from_input_ids.call_count,
-                         1 + 2 + 2 * 2 + 3)
+        self.assertEqual(calls.count('logits'), 1 + 2 + 2 * 2 + 3)
         for key in ('model_load_s', 'first_logits_len_64_s',
                     'repeat_logits_len_64_median_s',
                     'logits_len_16_median_s', 'generate_3_tokens_s'):
@@ -388,15 +417,54 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(report['bench.status.error_type'], 'OSError')
         self.assertNotIn('secret', ' '.join(report.values()))
 
+    def slow_after_first(self, ignore_term: bool) -> None:
+        """2 回目以降の forward が戻らない状況を作る。"""
+        calls: list[int] = []
+
+        def logits(ids: list[int]) -> list[float]:
+            calls.append(1)
+            if len(calls) > 1:
+                if ignore_term:
+                    # ネイティブ処理中のように SIGTERM でも止まらない。
+                    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+                time.sleep(30)
+            return [0.0, 1.0]
+
+        self.model.get_logits_from_input_ids.side_effect = logits
+
     def test_budget_stops_measurement(self) -> None:
-        """上限時間を超えたら partial として停止段階を記録する。"""
-        self.model.get_logits_from_input_ids.side_effect = [
-            [0.0, 1.0], survey.BudgetExceeded()]
+        """上限時間を超えたら partial とし、それまでの実測値は残す。"""
+        self.slow_after_first(ignore_term=False)
+        started = time.monotonic()
+        with patch.object(survey, 'find_model', return_value=self.found):
+            report, code = self.run_bench(budget=1)
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertEqual(code, 1)
+        self.assertEqual(report['bench.status.result'], 'partial')
+        self.assertEqual(report['bench.status.reason'], 'budget_exceeded')
+        self.assertEqual(report['bench.status.stage'], 'repeated logits')
+        self.assertIn('bench.measured.first_logits_len_64_s', report)
+
+    def test_budget_kills_unresponsive_child(self) -> None:
+        """SIGTERM で止まらない推論も、猶予後に SIGKILL で止める。"""
+        self.slow_after_first(ignore_term=True)
+        started = time.monotonic()
+        with patch.object(survey, 'find_model', return_value=self.found), \
+                patch.object(survey, 'KILL_GRACE_S', 0.2):
+            report, code = self.run_bench(budget=1)
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertEqual(report['bench.status.result'], 'partial')
+
+    def test_child_crash_is_reported(self) -> None:
+        """子プロセスが異常終了しても、失敗として報告する。"""
+        self.model.get_logits_from_input_ids.side_effect = (
+            lambda ids: os._exit(9))
         with patch.object(survey, 'find_model', return_value=self.found):
             report, code = self.run_bench()
         self.assertEqual(code, 1)
-        self.assertEqual(report['bench.status.result'], 'partial')
-        self.assertEqual(report['bench.status.stage'], 'repeated logits')
+        self.assertEqual(report['bench.status.result'], 'failed')
+        self.assertEqual(report['bench.status.stage'], 'first logits')
+        self.assertEqual(report['bench.status.error_type'], 'ChildExited')
 
     def test_linear_fit(self) -> None:
         """推定に使う一次近似が正しい。"""
