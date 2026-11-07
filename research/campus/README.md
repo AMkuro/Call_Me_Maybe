@@ -49,6 +49,37 @@ python3 -m tools.campus_survey --pc-id-from-hostname --write
   別の場所の鍵は `--hmac-key-file` で指定できる。
 - 鍵なしの単純ハッシュは、hostname 一覧から総当たりで元に戻せるため使わない。
 
+#### ID から hostname を調べる
+
+HMAC は一方向なので、ID を直接 hostname に戻すことはできない。
+**鍵**と **hostname の候補**を用意し、候補ごとに ID を計算して一致するものを探す。
+鍵は PC ごとに別なので、調べたい PC の鍵が必要になる。
+
+その PC 上なら、次のコマンドで自分の hostname と ID の組を表示できる
+（リポジトリのルートで実行する）。
+
+```sh
+python3 -c 'import socket; from tools.campus_survey import HMAC_KEY_FILE, hmac_pc_id, read; h = socket.gethostname(); print(hmac_pc_id(read(HMAC_KEY_FILE), h), h)'
+```
+
+鍵ファイルを手元にコピーしてある場合は、候補を 1 行 1 つ書いたファイルと照合する。
+hostname は小文字にし、最初の `.` より前だけを使って計算する（`c1r1p2.example` は `c1r1p2` と同じ ID になる）。
+
+```sh
+python3 - hmac.key hosts.txt <<'EOF'
+import sys
+from tools.campus_survey import hmac_pc_id, read
+key = read(sys.argv[1])
+for host in read(sys.argv[2]).split():
+    print(hmac_pc_id(key, host), host)
+EOF
+# 特定の ID だけ見る: 上のコマンドの末尾に | grep h06087776d1ed を付ける
+```
+
+- 鍵ファイルを PC の外へ持ち出すと、その鍵で作った ID が誰にでも hostname に戻せるようになる。
+  持ち出すなら Git 管理外の場所に置き、使い終わったら削除する。
+- 鍵を失うと、その鍵で作った ID は hostname に戻せなくなる。
+
 ## benchmark（CPU 推論測定・明示指定時のみ）
 
 配布 `llm_sdk` の公開 API（`Small_LLM_Model(device='cpu')`、`encode`、
