@@ -88,6 +88,26 @@ uv run --no-project --with ./llm_sdk python -m tools.campus_survey benchmark \
   --pc-id-from-hostname --hf-home ~/goinfre/huggingface --write
 ```
 
+### 測定条件の記録と公平な比較
+
+実行中の環境を `bench.env.*` に記録する（実測値・推定値とは別扱い）。
+
+| キー | 内容 |
+|---|---|
+| `temp_start_c` / `temp_max_c` | CPU 温度（hwmon の coretemp 等）の開始時と最高値 |
+| `throttle_events` | 実行中のサーマルスロットリング発生回数（Intel のみ） |
+| `other_load_avg_cores` / `other_load_max_cores` | benchmark 以外の CPU 負荷（システム全体 − benchmark） |
+| `bench_cpu_avg_cores` | benchmark 自身の平均 CPU 使用量 |
+
+初回 PC（i5-8500、6 コア）での調査では、logits（64 トークン）が 0.33〜0.45 秒の幅で変動した。
+主な原因は、他プロセス負荷（平均 0.6 コア程度でも約 35% 遅くなる）と、連続実行時の
+高温（92°C でスロットリング）だった。メモリ（空き容量・スワップ）は無関係だった。
+比較では次を守り、`bench.env.*` で外れ値を除くこと。
+
+- 他のアプリ（ブラウザ・ビルド等）を閉じ、何もしていない状態で実行する。
+- 連続実行の直後は避け、`temp_start_c` が低い状態から始める。
+- 1 台につき 3 回以上実行し、`throttle_events > 0` や `other_load_avg_cores` が高い回を除く。
+
 PC 間で条件をそろえるため、`--lengths` などの既定値は変えずに実行する。
 変えた場合は `bench.config.*` に記録される。`bench.config.model_cached_before_run = no`
 の回はダウンロード時間を含むので、比較から除く。

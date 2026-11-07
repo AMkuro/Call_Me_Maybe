@@ -97,6 +97,7 @@ DYNAMIC_KEYS = (
     re.compile(r'disk\.[a-z_]+\.(free_gib|total_gib)'),
     re.compile(r'bench\.measured\.[a-z0-9_]+'),
     re.compile(r'bench\.estimated\.[a-z0-9_]+'),
+    re.compile(r'bench\.env\.[a-z0-9_]+'),
 )
 IPV4 = re.compile(r'(?<![\d.])\d{1,3}(\.\d{1,3}){3}(?![\d.])')
 MAC = re.compile(r'(?i)\b[0-9a-f]{2}([:-][0-9a-f]{2}){5}\b')
@@ -109,6 +110,9 @@ VERSION_KEY = re.compile(
 VERSION_VALUE = re.compile(r'\d+(\.\d+)+([-+_.~][A-Za-z0-9._+~-]*)?')
 # 上限時間を過ぎた子プロセスに SIGTERM を送ってから SIGKILL までの猶予。
 KILL_GRACE_S = 5.0
+# 測定中に温度・負荷を記録する間隔。
+MONITOR_INTERVAL_S = 0.5
+CPU_SENSORS = ('coretemp', 'k10temp', 'zenpower', 'cpu_thermal')
 
 
 class LeakError(ValueError):
@@ -661,6 +665,119 @@ def benchmark(args: argparse.Namespace) -> tuple[Report, int]:
     return supervise(args, lengths, report)
 
 
+def cpu_temp_c() -> float:
+    """CPU 温度センサー（hwmon）の最高値を返す。"""
+    temps = []
+    for hwmon in Path('/sys/class/hwmon').glob('hwmon*'):
+        try:
+            if read(hwmon / 'name') not in CPU_SENSORS:
+                continue
+        except OSError:
+            continue
+        temps += [int(read(t)) / 1000 for t in hwmon.glob('temp*_input')]
+    if not temps:
+        raise FileNotFoundError('cpu temperature sensor')
+    return max(temps)
+
+
+def throttle_count() -> int:
+    """全 CPU のサーマルスロットリング発生回数の合計（Intel のみ）。"""
+    paths = list(Path('/sys/devices/system/cpu').glob(
+        'cpu[0-9]*/thermal_throttle/*_throttle_count'))
+    if not paths:
+        raise NotImplementedError('thermal_throttle')
+    return sum(int(read(path)) for path in paths)
+
+
+def system_busy_s() -> float:
+    """システム全体の CPU 使用時間（秒）。個別のプロセスは読まない。"""
+    values = [int(v) for v in read('/proc/stat').splitlines()[0].split()[1:]]
+    idle = values[3] + values[4]
+    return (sum(values[:8]) - idle) / os.sysconf('SC_CLK_TCK')
+
+
+def process_cpu_s(pid: int) -> float:
+    """自分が起動したプロセス（全スレッド）の CPU 使用時間（秒）。"""
+    fields = read(f'/proc/{pid}/stat').rsplit(')', 1)[1].split()
+    return (int(fields[11]) + int(fields[12])) / os.sysconf('SC_CLK_TCK')
+
+
+class RunMonitor:
+    """benchmark 実行中の温度・スロットリング・他プロセス負荷を記録する。
+
+    公平な比較のため、測定条件を乱した要因を後から見分けられるようにする。
+    他プロセス負荷は「システム全体の使用量 - benchmark 子プロセスの使用量」。
+    """
+
+    def __init__(self, pid: int) -> None:
+        """開始時点の値を記録する。取得できない値は None にする。"""
+        self.pid = pid
+        self.throttle_start = self._try(throttle_count)
+        self.temp_start = self._try(cpu_temp_c)
+        self.temp_max = self.temp_start
+        self.first = self.last = self._usage()
+        self.other_max: float | None = None
+
+    @staticmethod
+    def _try(function: Callable[[], float]) -> float | None:
+        """取得に失敗したら None を返す。"""
+        try:
+            return float(function())
+        except Exception:
+            return None
+
+    def _usage(self) -> tuple[float, float, float] | None:
+        """(時刻, システム全体, benchmark) の CPU 使用時間。"""
+        try:
+            return (time.monotonic(), system_busy_s(),
+                    process_cpu_s(self.pid))
+        except Exception:
+            return None
+
+    def sample(self) -> None:
+        """現在の温度と、前回からの他プロセス負荷を記録する。"""
+        temp = self._try(cpu_temp_c)
+        if temp is not None:
+            self.temp_max = max(temp, self.temp_max or temp)
+        now = self._usage()
+        if now is None or self.last is None:
+            return
+        elapsed = now[0] - self.last[0]
+        if elapsed < MONITOR_INTERVAL_S / 2:
+            return
+        other = max(0.0, (now[1] - self.last[1]) - (now[2] - self.last[2]))
+        self.other_max = max(other / elapsed, self.other_max or 0.0)
+        self.last = now
+
+    def summary(self) -> Report:
+        """記録した値を bench.env.* にまとめる。"""
+        def fmt(value: float | None, reason: str) -> str:
+            return unavailable(reason) if value is None else f'{value:.1f}'
+
+        throttle_end = self._try(throttle_count)
+        events = (None if throttle_end is None or self.throttle_start is None
+                  else throttle_end - self.throttle_start)
+        report = {
+            'bench.env.temp_start_c': fmt(self.temp_start, 'not_found'),
+            'bench.env.temp_max_c': fmt(self.temp_max, 'not_found'),
+            'bench.env.throttle_events': (
+                unavailable('not_supported') if events is None
+                else str(int(events))),
+            'bench.env.other_load_max_cores': fmt(self.other_max, 'error'),
+        }
+        if self.first is not None and self.last is not None and \
+                self.last[0] > self.first[0]:
+            elapsed = self.last[0] - self.first[0]
+            bench = (self.last[2] - self.first[2]) / elapsed
+            other = max(0.0, (self.last[1] - self.first[1]) / elapsed - bench)
+            report['bench.env.other_load_avg_cores'] = f'{other:.1f}'
+            report['bench.env.bench_cpu_avg_cores'] = f'{bench:.1f}'
+        else:
+            report['bench.env.other_load_avg_cores'] = unavailable('error')
+            report['bench.env.bench_cpu_avg_cores'] = unavailable('error')
+        return report
+
+
 def supervise(
     args: argparse.Namespace, lengths: list[int], report: Report,
 ) -> tuple[Report, int]:
@@ -678,15 +795,19 @@ def supervise(
     deadline = time.monotonic() + args.budget
     child.start()
     sender.close()
+    monitor = RunMonitor(child.pid or 0)
     stage = 'sdk import'
     try:
         while True:
             remaining = deadline - time.monotonic()
-            if remaining <= 0 or not receiver.poll(remaining):
+            if remaining <= 0:
                 report.update({'bench.status.result': 'partial',
                                'bench.status.reason': 'budget_exceeded',
                                'bench.status.stage': stage})
                 return report, 1
+            if not receiver.poll(min(remaining, MONITOR_INTERVAL_S)):
+                monitor.sample()
+                continue
             try:
                 kind, *payload = receiver.recv()
             except EOFError:
@@ -709,6 +830,9 @@ def supervise(
                 })
                 return report, 1
     finally:
+        # 子を止める前に最後の値を記録する（return 済みの report にも反映）。
+        monitor.sample()
+        report.update(monitor.summary())
         receiver.close()
         if child.is_alive():
             child.terminate()

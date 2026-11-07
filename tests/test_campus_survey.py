@@ -389,6 +389,10 @@ class BenchmarkTests(unittest.TestCase):
                     'logits_len_16_median_s', 'generate_3_tokens_s'):
             self.assertIn(f'bench.measured.{key}', report)
         self.assertIn('bench.estimated.sample_total_s', report)
+        for key in ('temp_start_c', 'temp_max_c', 'throttle_events',
+                    'other_load_avg_cores', 'other_load_max_cores',
+                    'bench_cpu_avg_cores'):
+            self.assertIn(f'bench.env.{key}', report)
         self.assertIn('bench.estimated.assumed_gen_tokens', report)
         self.assertFalse(any(
             key.startswith('bench.measured.') and 'estimated' in key
@@ -465,6 +469,49 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(report['bench.status.result'], 'failed')
         self.assertEqual(report['bench.status.stage'], 'first logits')
         self.assertEqual(report['bench.status.error_type'], 'ChildExited')
+
+    def test_monitor_separates_other_load(self) -> None:
+        """他プロセス負荷 = システム全体 - benchmark とし、温度等も記録する。"""
+        with patch.object(time, 'monotonic', side_effect=[0.0, 1.0, 2.0]), \
+                patch.object(survey, 'system_busy_s',
+                             side_effect=[0.0, 3.0, 7.0]), \
+                patch.object(survey, 'process_cpu_s',
+                             side_effect=[0.0, 2.0, 4.0]), \
+                patch.object(survey, 'cpu_temp_c',
+                             side_effect=[50.0, 70.0, 60.0]), \
+                patch.object(survey, 'throttle_count',
+                             side_effect=[10, 13]):
+            monitor = survey.RunMonitor(123)
+            monitor.sample()
+            monitor.sample()
+            summary = monitor.summary()
+        self.assertEqual(summary, {
+            'bench.env.temp_start_c': '50.0',
+            'bench.env.temp_max_c': '70.0',
+            'bench.env.throttle_events': '3',
+            'bench.env.other_load_max_cores': '2.0',
+            'bench.env.other_load_avg_cores': '1.5',
+            'bench.env.bench_cpu_avg_cores': '2.0',
+        })
+
+    def test_monitor_without_sources(self) -> None:
+        """センサーやスロットリング情報が無い PC（AMD 等）でも完走する。"""
+        with patch.object(survey, 'cpu_temp_c',
+                          side_effect=FileNotFoundError), \
+                patch.object(survey, 'throttle_count',
+                             side_effect=NotImplementedError), \
+                patch.object(survey, 'process_cpu_s', side_effect=OSError):
+            monitor = survey.RunMonitor(123)
+            monitor.sample()
+            summary = monitor.summary()
+        self.assertEqual(summary['bench.env.temp_max_c'],
+                         'unavailable (not_found)')
+        self.assertEqual(summary['bench.env.throttle_events'],
+                         'unavailable (not_supported)')
+        self.assertEqual(summary['bench.env.other_load_avg_cores'],
+                         'unavailable (error)')
+        with patch.object(survey, 'sensitive_tokens', return_value=TOKENS):
+            survey.render(summary)
 
     def test_linear_fit(self) -> None:
         """推定に使う一次近似が正しい。"""
