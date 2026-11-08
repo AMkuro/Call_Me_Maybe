@@ -70,7 +70,7 @@ Pydantic inheritance, exception handling on every path, dynamic private SDK
 access, unseen-function semantic accuracy, 100% schema-valid generated JSON,
 or a sub-five-minute evaluation. These need application tests, human review
 and the separate model benchmark. Existing feature work is not auto-integrated
-to fill those gaps. README documents the current implementation honestly.
+to fill those gaps. docs/development.md documents the current state honestly.
 
 ## Protection and settings
 

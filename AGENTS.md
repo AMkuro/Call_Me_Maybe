@@ -4,7 +4,10 @@ Subject v1.7 requirements are summarized in docs/subject-v1.7.md. Read it
 instead of fetching the Subject from GitHub; re-check the original only if the
 version changes or the summary cannot settle an important question.
 
-Read README.md and docs/ci-auto-integration.md before changing CI or merging.
+Read docs/development.md and docs/ci-auto-integration.md before changing CI,
+the build environment or merging. README.md is a submission artifact: keep
+development-only content (PoC, CI, GPU setup, SDK patches, branches, status)
+out of it and put it in docs/development.md.
 Work on a new branch cut from the latest integration branch (currently
 origin/develop; fetch first), and open the PR against that branch, so merges
 stay small. Do not push directly to main or develop.
