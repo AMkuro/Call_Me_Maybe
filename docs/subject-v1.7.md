@@ -9,8 +9,8 @@
 ## 出典とバージョン
 
 - バージョン: **1.7**（原文表紙に `Version: 1.7`）
-- 原文: <https://github.com/AMkuro/pdf>、ブランチ `milestone3`、`Call_Me_Maybe/` 配下
-  （`Call-Me-Maybe.en.subject.txt`、`en.subject.pdf`）。コミットハッシュは記録しない。
+- 原文: 配布された Subject（`Call-Me-Maybe.en.subject.txt`、`en.subject.pdf`）。
+  原文の場所は、このリポジトリには記録しない。
 - 章番号は原文のもの（例: V.5 = 第V章 第5節）。原文はテキスト抽出のため、一部の行順が崩れている。
 
 ## 記号の約束
