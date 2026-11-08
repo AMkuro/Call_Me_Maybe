@@ -26,6 +26,7 @@
 | [0008](adr/0008-dependencies-and-sdk.md) | 依存関係と配布 SDK | 決定(リスクあり) |
 | [0009](adr/0009-environment-and-config.md) | 環境と設定 | 決定(未確定の細部あり) |
 | [0010](adr/0010-measurement-policy.md) | 測定の方針 | 決定 |
+| [0011](adr/0011-name-trie-and-output-path.md) | 関数名の木、出力先、ポートの形 | 決定(サンプル 5 名のみ確認) |
 
 ## 未解決の一覧
 1. 関数が増えたときの関数選択の精度(ADR-0001)。関数セットを変えたテストで測る。
