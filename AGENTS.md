@@ -1,5 +1,9 @@
 # Development and integration
 
+Subject v1.7 requirements are summarized in docs/subject-v1.7.md. Read it
+instead of fetching the Subject from GitHub; re-check the original only if the
+version changes or the summary cannot settle an important question.
+
 Read README.md and docs/ci-auto-integration.md before changing CI or merging.
 Work on a new branch from current origin/main. Do not push directly to main.
 Do not merge existing experimental/PoC branches as part of unrelated work.
