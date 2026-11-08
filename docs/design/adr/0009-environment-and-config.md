@@ -17,6 +17,11 @@
   `~/goinfre` → Hugging Face の既定。
 - 【設計判断】時間の評価は CPU で行う。GPU は後で、既存の SDK 環境に `accelerate` を足して使う。
   SDK 自体は変えない。
+- CPU 版と GPU 版の選び方(ユーザーの質問、2026-11-08):
+  - 【測定】`uv sync` には、CPU/GPU を自動で判定するオプションがない(`uv sync --help` で確認)。
+  - 【設計判断】レビュー機は `uv sync` だけを実行するので、`pyproject.toml` の既定は CPU 版にする。
+  - 案(未検証): 開発機では、`make install` が GPU の有無を判定し(例: `nvidia-smi` や `/dev/kfd` の有無)、
+    uv の extra(競合の設定つき)で GPU 版のインデックスを選ぶ。判定を Make に置けば、既定を変えずに済む。
 
 ## 未確定
 - 設定ファイルの扱いと CI の関係: 「コードか Make の中に書き、CI では開発環境のままであることを伝える」
