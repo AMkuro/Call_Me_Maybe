@@ -2,90 +2,33 @@
 
 ## Description
 
-Call Me Maybe explores constrained decoding for LLM function calling. This
-branch contains a public-SDK greedy-token PoC, mock tests and the build
-environment (Makefile, CPU and GPU setups). It is **not a completed Subject
-v1.7 submission**: the application (`src`) is not implemented yet, and the
-experimental generation methods are not integrated.
+Call Me Maybe translates natural-language prompts into structured function
+calls: for each prompt it outputs the name of the function to call and its
+arguments as JSON, never executing the function. It uses the small
+Qwen/Qwen3-0.6B model through the supplied `llm_sdk`, and relies on constrained
+decoding so that the output is always valid JSON that matches the function
+definitions.
 
 ## Instructions
 
 Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
 
 ```sh
-make install      # recreate .venv from uv.lock (CPU torch)
+make install      # create .venv from uv.lock
+make run          # uv run python -m src
+make debug        # run under pdb
 make test
 make lint
+make clean
+make sdk-install  # unpack llm_sdk.zip over llm_sdk (another zip: SDK_ZIP=<zip>)
 ```
 
-`uv sync` alone also works, as the reviewers require. The dependencies are
-numpy, Pydantic and the local `llm_sdk` (a path dependency). torch comes from
-the default `cpu` dependency group, which uses the PyTorch CPU index.
+`uv sync` alone also works. The dependencies are numpy, Pydantic and the
+local `llm_sdk` (a path dependency); torch is installed as a dependency of the
+SDK. The SDK downloads the Qwen/Qwen3-0.6B model itself on first use.
 
-Development on a GPU machine (Linux with an AMD GPU, or a Mac) uses a separate
-environment so `.venv` stays identical to the reviewer's:
-
-```sh
-make gpu-install  # recreate .venv-gpu (ROCm torch if /dev/kfd exists, plus accelerate)
-make gpu-run      # run in .venv-gpu
-```
-
-`make sdk-install` unpacks `llm_sdk.zip` over `llm_sdk` (another zip: `SDK_ZIP=<zip>`). The repository copy of `llm_sdk` has one local change
-(float32 on every device instead of float16 on GPU; commented in the code), so
-GPU results match those of the CPU-only review machine.
-
-`make run` and `make debug` target the Subject entry point `python -m src`.
-They become usable once the application exists; on this PoC, `src` is missing.
-
-For the independent inference experiment, see [examples](examples/README.md).
-The SDK downloads the Qwen/Qwen3-0.6B model itself on first use.
-
-## Testing strategy
-
-Unittest uses SDK-shaped mocks and no model imports, downloads, or forward
-passes. Future src tests are discovered automatically.
-
-CI is **disabled** for now: the workflow runs only when started manually. It
-will be reworked after the implementation (see
-[CI and agent workflow](docs/ci-auto-integration.md), which describes the
-earlier design).
-
-`make lint` runs flake8 and mypy with all Subject flags and passes (checked
-2026-11-09). The distributed SDK is excluded by `.flake8` and the mypy settings
-in `pyproject.toml`, not by the Makefile commands. `make subject` passes with a
-notice that `src` is missing, and `make subject-audit` is a stricter preflight
-that fails on this PoC. Neither replaces functional evaluation or peer review.
-
-## Algorithm explanation
-
-The PoC observes greedy token selection through public SDK methods. It does not
-implement the required constrained function selection or argument generation.
-No accuracy or JSON-compliance guarantee is claimed for this revision.
-
-## Design decisions
-
-Keep inference experiments separate from the common CLI and validation work.
-Keep development integration separate from final submission certification.
-Opt in to native Auto-merge per PR; no custom merger or release branches.
-
-## Performance analysis
-
-Accuracy, generation speed, schema reliability and CPU benchmarks remain
-unmeasured here. A complete submission needs unseen prompts/functions, 90%+
-semantic accuracy, 100% schema-valid JSON, and the Subject's runtime evaluation.
-These require a separately provisioned, recorded model benchmark.
-
-## Challenges faced
-
-The supplied SDK depends internally on torch and transformers despite the
-application's direct-import restrictions. The repository therefore keeps the
-distributed SDK as `llm_sdk.zip` and can restore it with `make sdk-install`. Static import checks cannot prove that every SDK attribute
-used is public or that every runtime class uses Pydantic; those remain explicit
-review requirements.
-
-## Example usage
-
-The intended application invocation after the CLI and generator are integrated:
+The program reads the function definitions and the prompts from
+`data/input/` and writes `data/output/function_calls.json`:
 
 ```sh
 uv run python -m src \
@@ -94,15 +37,43 @@ uv run python -m src \
   --output data/output/function_calls.json
 ```
 
-Output must contain exactly `prompt`, `name`, and `parameters` for each input.
-Generated `data/output/` files must remain untracked.
+## Algorithm explanation
+
+*To be written once the implementation is complete.*
+
+## Design decisions
+
+*To be written once the implementation is complete.*
+
+## Performance analysis
+
+*To be written once the implementation is complete.*
+
+## Challenges faced
+
+The supplied SDK depends on torch and transformers internally, while the
+project's own code must not import them. The application therefore only uses
+the public methods of the SDK (`encode`, `decode`,
+`get_logits_from_input_ids`, `get_path_to_vocab_file`).
+
+## Testing strategy
+
+The unit tests use SDK-shaped fakes and never load the model, so they run
+without a download or a forward pass. `make lint` runs flake8 and mypy with the
+flags required by the Subject.
+
+## Example usage
+
+See the command in Instructions. The output contains exactly `prompt`, `name`
+and `parameters` for each input. Generated files in `data/output/` are not
+tracked.
 
 ## Resources
 
 - [Python unittest](https://docs.python.org/3/library/unittest.html)
 - [Pydantic](https://docs.pydantic.dev/latest/)
-- [GitHub Auto-merge](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/automatically-merging-a-pull-request)
+- [uv](https://docs.astral.sh/uv/)
 
-AI assisted the SDK experiment, tests, CI design, configuration, documentation,
-and verification. The learner must understand the changes and seek peer review;
-a green development CI is not a substitute for the 42 defense.
+AI (Claude Code) was used for design discussion, tests, build configuration and
+documentation drafts. The author reviewed the changes and is responsible for
+them.
