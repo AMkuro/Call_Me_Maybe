@@ -95,7 +95,7 @@ uv run python -m src [--functions_definition <file>] [--input <file>] [--output 
 
 - `llm_sdk` は提出リポジトリに含める（VIII）。`src` と同じ階層にコピーしてよい（IV.3.1）。
 - privateなメソッド・属性は使用禁止（IV.3.1）。
-- 【設計判断】配布 `llm_sdk` は変更しない（`AGENTS.md`）。
+- 【設計判断】配布 `llm_sdk` は、開発用の局所変更を 1 つだけ入れる（全デバイスで dtype を float32 にする。コードにコメントあり）。`make sdk-install` で配布の版に戻せる（`AGENTS.md`）。
 
 ## 4. 動的スキーマとConstrained Decoding
 
