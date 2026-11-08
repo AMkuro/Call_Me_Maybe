@@ -1,0 +1,591 @@
+{
+  "title": "小さなLLMの制約付き関数呼び出し: 文献の抜き書き",
+  "question": "Qwen3-0.6B で関数呼び出し JSON を作るとき、A（1段）・B（番号で選ぶ）・C（名前で選ぶ）の差は何に由来し得るか。トークン境界・選択の偏り・小さなモデル・引数・時間の5点を、原文で確かめる。",
+  "stopped": "4周には届かず、1周（33本を保存、各論点の原文は付いたが、論点4〜6は一部のみ）で区切った。理由: 論点2・3には原文が付き、論点4〜6は探した範囲に直接の研究が無かったため。方式の選定は人が行う。",
+  "claims": [
+    {
+      "claim": "文法の端とサブワードトークンのずれ（トークンの不整合）は、制約付き生成の精度を大きく下げることがある",
+      "status": "根拠あり",
+      "note": "A と C で『結合トークンを許す』直しが大きく効いた現象と同じ種類の指摘。強制した固定文字列を、モデルの自然なトークン化と違う形で入れる問題は、SGLang の jump-forward の説明にも出てくる。",
+      "quotes": [
+        {
+          "file": "arxiv-2403.06988-domino-guiding-llms.txt",
+          "line": 90,
+          "end": 91,
+          "text": "showing empirically that misalignment can lead … to a significant decrease in downstream accuracy",
+          "ja": "不整合が下流の精度の大きな低下につながり得ることを実験で示した。",
+          "mark": "〔論文〕測定あり"
+        },
+        {
+          "file": "arxiv-2312.07104-sglang.txt",
+          "line": 1098,
+          "end": 1099,
+          "text": "we still need to convert the string into tokens for the next decoding phases and it is not straightforward due to the LLM’s specific pretraining and tokenization method",
+          "ja": "強制して進めた文字列は、次の復号のためにトークンへ直す必要があり、LLM 固有の事前学習とトークン化のせいで単純ではない。",
+          "mark": "〔論文〕"
+        }
+      ]
+    },
+    {
+      "claim": "値の先頭の空白を含むトークンを許すと性能が上がる",
+      "status": "一部のみ",
+      "note": "原文の1文だけを切り出した。どのタスク・どの割合で効くかは、この抜き書きだけでは分からない。",
+      "quotes": [
+        {
+          "file": "arxiv-2502.14969-lost-in-space.txt",
+          "line": 41,
+          "text": "We find leading whitespace helps models",
+          "ja": "先頭の空白がモデルの助けになると分かった。",
+          "mark": "〔論文〕測定あり"
+        }
+      ]
+    },
+    {
+      "claim": "文法を課すデコードは、LLM が学んだ分布をゆがめて、性能を損なうことがある",
+      "status": "根拠あり",
+      "note": "A・B・C はどれも『有効なトークンの中で argmax』なので、この指摘は3方式すべてに関わる。方式ごとの違いは、この論文では扱っていない。",
+      "quotes": [
+        {
+          "file": "arxiv-2405.21047-grammar-aligned-decoding.txt",
+          "line": 51,
+          "end": 52,
+          "text": "introduce a new problem: structured decoding distorts the LLM’s learned language distribution, effectively hindering the LLM’s capabilities.",
+          "ja": "構造化デコードは、LLM が学んだ言語の分布をゆがめ、LLM の能力を損なうという新しい問題を持ち込む。",
+          "mark": "〔論文〕"
+        }
+      ]
+    },
+    {
+      "claim": "選択肢の ID（A/B/C/D など）への偏りは、位置よりも ID トークンへの事前の偏りが主因だと報告されている",
+      "status": "根拠あり",
+      "note": "B（番号で選ぶ）の位置偏りの説明を直す材料。ID を使わない選び方は、この偏りを避けられる、という報告も同じ論文にある。BiasBusters は、ツール選択でも位置の偏りがあると述べる（先行研究の紹介）。",
+      "quotes": [
+        {
+          "file": "arxiv-2309.03882-not-robust-mc-selectors.txt",
+          "line": 127,
+          "end": 129,
+          "text": "intrinsic cause of selection bias as the model’s token bias when predicting answers from the option IDs given the standard MCQ prompt, where the model a priori assigns more probabilistic mass to specific ID tokens (e.g., A/B/C/D).",
+          "ja": "選択バイアスのより顕著な内在的原因は、標準の多肢選択プロンプトで選択肢 ID から答えを予測するときのモデルのトークンの偏りで、モデルは特定の ID トークン（A/B/C/D など）に最初から多くの確率を割り当てる。",
+          "mark": "〔論文〕測定あり"
+        },
+        {
+          "file": "arxiv-2510.00307-biasbusters.txt",
+          "line": 166,
+          "end": 167,
+          "text": "Prior research has revealed significant positional selection biases in how LLMs answer multiple-choice questions.",
+          "ja": "先行研究は、LLM が多肢選択問題に答える際に、位置による選択の偏りがあることを明らかにしている。",
+          "mark": "〔論文〕"
+        }
+      ]
+    },
+    {
+      "claim": "関数名を複数トークンで作らせると誤りが出るので、関数ごとに専用のトークンを割り当てて1トークンの分類にする手法がある（学習が必要）",
+      "status": "一部のみ",
+      "note": "関数名を選ぶ段（C）の弱点と、番号で選ぶ段（B）の考え方の中間にある手法。専用トークンの追加とモデルの変更を含むので、公開 SDK だけでは再現できない。",
+      "quotes": [
+        {
+          "file": "arxiv-2404.01744-octopus-v2.txt",
+          "line": 136,
+          "end": 137,
+          "text": "When utilizing a language model to formulate a function name, multiple tokens must be generated to form a single function name, which can lead to inaccuracies.",
+          "ja": "関数名を言語モデルで作るには複数のトークンを生成する必要があり、不正確になり得る。",
+          "mark": "〔論文〕"
+        },
+        {
+          "file": "arxiv-2404.01744-octopus-v2.txt",
+          "line": 140,
+          "end": 142,
+          "text": "symbolize these functions. This transforms the prediction task for function names into a single-token classification among the N functional tokens, enhancing the accuracy of function name prediction while simultaneously reducing the number of tokens required.",
+          "ja": "関数名の予測を N 個の関数トークンの中から1トークンを選ぶ分類に変え、予測の精度を上げながら必要なトークン数も減らす。",
+          "mark": "〔論文〕"
+        }
+      ]
+    },
+    {
+      "claim": "小さな言語モデルは、ゼロショットから few-shot で改善するが、出力の形式を守るのが苦手",
+      "status": "根拠あり",
+      "note": "A・B・C はどれも形式を制約付きデコードで担保しているので、この弱点は文法側で消している。few-shot の効果の大きさは、この抜き書きでは分からない。",
+      "quotes": [
+        {
+          "file": "arxiv-2504.19277-small-models-big-tasks.txt",
+          "line": 40,
+          "end": 42,
+          "text": "Our findings show that while SLMs improve … from zero-shot to few-shot and perform best with fine-tuning, they … struggle significantly with adhering to the given output format.",
+          "ja": "SLM はゼロショットから few-shot で改善し、ファインチューニングで最もよくなるが、指定された出力形式を守るのは大きく苦手だった。",
+          "mark": "〔論文〕測定あり"
+        }
+      ]
+    },
+    {
+      "claim": "必要な関数だけに絞るとプロンプトを短くできる（ツール検索）",
+      "status": "一部のみ",
+      "note": "TinyAgent は小さな分類モデルで関数を絞る方式。今回の課題では関数選択を LLM に任せる決まりなので、そのまま使えるとは限らない。短くすると精度も上がる、という書き方に留まる。",
+      "quotes": [
+        {
+          "file": "arxiv-2409.00608-tinyagent.txt",
+          "line": 336,
+          "end": 339,
+          "text": "imperative to select the right set of tools to minimize the … prompt size and increase performance.",
+          "ja": "ツールの正しい集合を選び、プロンプトの大きさを最小にして性能を上げることが不可欠。",
+          "mark": "〔論文〕"
+        }
+      ]
+    },
+    {
+      "claim": "自然言語から正規表現を作るとき、最も多い誤りは * の位置の誤りや不要な追加だった（強いモデルでの観察）",
+      "status": "一部のみ",
+      "note": "小さなモデルでの測定ではない。vowel を [aeiou] ではなく aeiou とする誤りなど、私たちの失敗とは種類が違う可能性がある。",
+      "quotes": [
+        {
+          "file": "arxiv-2403.18327-autoeval-formal-synthesis.txt",
+          "line": 1244,
+          "end": 1245,
+          "text": "The most common mistake when constructing a regular expression from natural language was misplacing ∗ or adding it when it was not needed",
+          "ja": "自然言語から正規表現を作るときの最も多い誤りは、∗ を置く場所を間違えるか、不要なのに足すことだった。",
+          "mark": "〔論文〕測定あり"
+        }
+      ]
+    },
+    {
+      "claim": "出力の形式を厳しくすると、推論の性能が落ちることがある",
+      "status": "一部のみ",
+      "note": "図1の説明から1文だけを切り出した。どれくらい落ちるかはこの抜き書きでは分からない。",
+      "quotes": [
+        {
+          "file": "arxiv-2408.02442-let-me-speak-freely.txt",
+          "line": 73,
+          "text": "but failed when format restrictions were applied.",
+          "ja": "ただし、形式の制約をかけると失敗した。",
+          "mark": "〔論文〕"
+        }
+      ]
+    },
+    {
+      "claim": "プロンプトに入れる関数（ツール）が多いほど、関数呼び出しの精度は下がる。小さなモデルほど影響が大きいとも報告されている",
+      "status": "根拠あり",
+      "note": "A・B・C は、関数一覧とスキーマを毎回プロンプトに入れる。今回の関数セットは小さいが、評価で関数が増えたときの影響を見る材料になる。B・C の2段目は選んだ1関数だけをプロンプトに入れる設計なので、この点で有利になり得るが、論文はこの設計を比べてはいない。",
+      "quotes": [
+        {
+          "file": "arxiv-2506.01859-confetti.txt",
+          "line": 598,
+          "end": 602,
+          "text": "API schemas go into the prompt, more tools imply … longer prompts. … more choices to select from. … ing more tools lead to performance degradation.",
+          "ja": "API のスキーマはプロンプトに入るので、ツールが多いほどプロンプトが長くなる。選択肢が増え、選び間違える機会も増える。一般にツールが多いと性能が下がる。",
+          "mark": "〔論文〕測定あり"
+        },
+        {
+          "file": "arxiv-2411.15399-less-is-more-edge-function-calling.txt",
+          "line": 78,
+          "end": 80,
+          "text": "Our key insight is that selectively reducing the number of tools … available to the LLM significantly improves its decision-making … ability. By presenting the LLM with fewer, more relevant tools,",
+          "ja": "核心は、ツールの数を選んで減らすと、LLM の判断力が大きく上がること。少なく、関連の深いツールだけを見せる。",
+          "mark": "〔論文〕測定あり"
+        }
+      ]
+    },
+    {
+      "claim": "プロンプトが長いほど精度が落ちる。小さなモデルはプロンプトの長さに敏感だとされる",
+      "status": "一部のみ",
+      "note": "aPSF の付録の実験は Llama-3.1-8B-Instruct の GSM8K（算数）で、0.6B の関数呼び出しではない。『500トークンを超えると大きく下がる』という本人たちの表の注記。私たちの A の v5（約550トークン）と同じ水準なので、参考にはなるが、同じ現象とは言えない。",
+      "quotes": [
+        {
+          "file": "arxiv-2604.06699-apsf-prompt-structure.txt",
+          "line": 1335,
+          "end": 1337,
+          "text": "Prior work has shown that smaller language … els are sensitive to prompt length",
+          "ja": "先行研究は、小さな言語モデルがプロンプトの長さに敏感だと示している。",
+          "mark": "〔論文〕"
+        },
+        {
+          "file": "arxiv-2604.06699-apsf-prompt-structure.txt",
+          "line": 1353,
+          "text": "as prompts exceed 500 tokens",
+          "ja": "プロンプトが500トークンを超えると（精度が大きく下がる）。",
+          "mark": "〔論文〕測定あり"
+        }
+      ]
+    },
+    {
+      "claim": "1B未満の超小型モデルは、1〜3Bのモデルより関数呼び出しの精度がはっきり低い",
+      "status": "根拠あり",
+      "note": "Qwen3-0.6B は『1B未満』に入る。この論文はファインチューニングを含む比較で、制約付きデコードのみで補う私たちの設定とは条件が違う。",
+      "quotes": [
+        {
+          "file": "arxiv-2511.22138-tinyllm-edge-agentic.txt",
+          "line": 38,
+          "end": 40,
+          "text": "medium-sized models … (1-3B parameters) significantly outperform ultra-compact … models (¡1B parameters)",
+          "ja": "中くらい（1〜3B）のモデルは、超小型（1B未満）のモデルを大きく上回る。",
+          "mark": "〔論文〕測定あり"
+        }
+      ]
+    },
+    {
+      "claim": "オンデバイスの推論では、プロンプトの処理（prefill）が全体の遅延の大半を占め、その時間はプロンプトの長さに比例する",
+      "status": "根拠あり",
+      "note": "KV キャッシュ無しの私たちの設計では、生成のたびに全系列をもう一度処理するので、この比例の影響をさらに受ける（これは論文の主張ではなく、私たちの設計についての推論）。CPU・KV キャッシュ無しで文法制約つきデコードの時間を測った研究は、探した範囲で見つかっていない。",
+      "quotes": [
+        {
+          "file": "arxiv-2407.05858-mllm-npu-prefill.txt",
+          "line": 82,
+          "end": 84,
+          "text": "the prompt processing (prefill stage) … often dominates the end-to-end inference latency, e.g., 94.4%– … 98.8% for UI automation tasks.",
+          "ja": "プロンプトの処理（prefill 段階）が、エンドツーエンドの遅延の大半を占めることが多い。UI 自動化のタスクで 94.4〜98.8%。",
+          "mark": "〔論文〕測定あり"
+        },
+        {
+          "file": "arxiv-2603.23640-edge-inference-prefill.txt",
+          "line": 96,
+          "text": "this phase is compute-bound, proportional to prompt length",
+          "ja": "この段階は計算律速で、プロンプトの長さに比例する。",
+          "mark": "〔論文〕"
+        }
+      ]
+    },
+    {
+      "claim": "Qwen3-0.6B を、制約付きデコード無しの道具利用ベンチマークで測った結果がある。道具1回の呼び出しの段（A）で 44%、道具を使わない段（A0）で 80%、2道具の連鎖（B）で 39%、分岐のある段（C）で 4%",
+      "status": "根拠あり",
+      "note": "AgentFloor は Ollama 上の通常のツール呼び出しで測ったと読める（制約付きデコードの記述は未確認）。私たちの課題は『道具1回の呼び出し』（A の段）にあたり、制約付きデコードと関数セットが違うので、数字はそのまま比べられない。それでも、素の 0.6B は単純な呼び出しでも 44% 前後であり、文法で補う意味を示す材料にはなる。",
+      "quotes": [
+        {
+          "file": "arxiv-2605.00334-agentfloor-small-models-tool-use.txt",
+          "line": 181,
+          "end": 182,
+          "text": "instruction following without tools (A0), single tool call … (A), sequential 2-tool chain",
+          "ja": "ツール無しの指示追従（A0）、ツール1回の呼び出し（A）、2つのツールの連鎖（B）。",
+          "mark": "〔論文〕"
+        },
+        {
+          "file": "arxiv-2605.00334-agentfloor-small-models-tool-use.txt",
+          "line": 394,
+          "text": "qwen3:0.6b 0.6 B 80 [73,86] 44 [35,53] 39 [30,48] 4 [1,8] 8 [4,13] 0 [0,0]",
+          "ja": "表2の qwen3:0.6b の行。A0 80%、A 44%、B 39%、C 4%、D 8%、E 0%（各段の成功率、括弧は95%信頼区間）。",
+          "mark": "〔論文〕測定あり"
+        }
+      ]
+    },
+    {
+      "claim": "ツールの候補を必要な数に絞ると、LLM が正しいツールを選ぶ割合が上がる（強いモデルでの測定）",
+      "status": "一部のみ",
+      "note": "Claude Sonnet 4.6 での検証で、0.6B の結果ではない。今回の課題では関数選択を LLM に任せる決まりなので、事前に絞る方式は使えない可能性が高い。",
+      "quotes": [
+        {
+          "file": "arxiv-2605.24660-how-many-tools-should-an-agent-see.txt",
+          "line": 35,
+          "end": 37,
+          "text": "shorter adaptive lists also improve the LLM’s ability to select the right tool: 93.1% versus 87.1% when always shown 5 tools",
+          "ja": "短く適応させた一覧は、LLM が正しいツールを選ぶ力も高める。常に5つ見せる場合の 87.1% に対し 93.1%。",
+          "mark": "〔論文〕測定あり"
+        }
+      ]
+    },
+    {
+      "claim": "選択肢を記号（A/B/C）で答えさせる方式は、記号と選択肢を結びつける能力（MCSB）が要り、その能力はモデルによって大きく違う",
+      "status": "根拠あり",
+      "note": "B（番号で選ぶ）は、この MCSB に頼る方式にあたる。この論文で試したのは大きなモデル（GPT-3 系・Codex・InstructGPT）が中心で、0.6B の結果ではない。記号を使わず内容そのもので選ぶ方式（cloze、C に近い）は、この論文では『従来の方式』として比較されている。",
+      "quotes": [
+        {
+          "file": "arxiv-2210.12353-robinson-mcp-symbol-binding.txt",
+          "line": 31,
+          "end": 32,
+          "text": "multiple choice symbol binding (MCSB) ability. This ability … varies greatly by model.",
+          "ja": "多肢選択の記号結びつけ（MCSB）の能力。この能力はモデルによって大きく違う。",
+          "mark": "〔論文〕測定あり"
+        }
+      ]
+    },
+    {
+      "claim": "0.5B・1B の小さなモデルでは、in-context の例を 10 個から 1 個に減らすと、関数型の課題の精度が目に見えて下がる",
+      "status": "一部のみ",
+      "note": "モデルは一から学習した 0.13B/0.5B/1B で、課題は Todd らの関数ベクトル用の課題（ツール呼び出しではない）。制約付きデコードは使っていない。",
+      "quotes": [
+        {
+          "file": "arxiv-2509.22947-induction-signatures-icl.txt",
+          "line": 1077,
+          "end": 1078,
+          "text": "the function-style probes degrade notably at 0.5B and 1B when reduced to 1-shot, while the 0.13B model shows only a small drop.",
+          "ja": "関数型の課題は、1-shot に減らすと 0.5B と 1B で目に見えて下がり、0.13B では小さな低下にとどまる。",
+          "who": "Induction Signatures Are Not Enough（ICLR 2026 ワークショップ）"
+        }
+      ]
+    },
+    {
+      "claim": "選択肢のラベルを数字にすると、3-shot の例を足しても精度は偶然並みのまま改善が有意にならない（Qwen 0.5B〜72B を含む 20 モデル）",
+      "status": "一部のみ",
+      "note": "題材は MMLU などの多肢選択で、制約付きデコードは使っていない。B の番号選択に近い形式だが、関数選択そのものではない。",
+      "quotes": [
+        {
+          "file": "arxiv-2510.17388-atomic-instruction-gap.txt",
+          "line": 134,
+          "text": "spanning 0.5B to 72B parameters.",
+          "ja": "0.5B から 72B までのパラメータ数のモデルを対象とする。",
+          "who": "The Atomic Instruction Gap"
+        },
+        {
+          "file": "arxiv-2510.17388-atomic-instruction-gap.txt",
+          "line": 306,
+          "end": 307,
+          "text": "corporating 3-shot explicit examples does not yield … statistically significant improvements.",
+          "ja": "3-shot の例を加えても、統計的に有意な改善は得られない。",
+          "who": "The Atomic Instruction Gap"
+        },
+        {
+          "file": "arxiv-2510.17388-atomic-instruction-gap.txt",
+          "line": 333,
+          "text": "models, 15 demonstrate gains",
+          "ja": "20 モデル中 15 モデルで精度が上がった。",
+          "who": "The Atomic Instruction Gap"
+        }
+      ]
+    },
+    {
+      "claim": "KV キャッシュが無いと、生成の時間は全体のトークン数の2乗に比例する（有ると線形）",
+      "status": "一部のみ",
+      "note": "理論の式による説明で、実測の時間ではない。制約付きデコードのマスク計算は含まない。実装によって係数は変わる。",
+      "quotes": [
+        {
+          "file": "arxiv-2510.01251-entity-linking-uncertainty.txt",
+          "line": 1206,
+          "text": "is quadratic in the number of overall",
+          "ja": "（KV キャッシュ無しでは）全体のトークン数の2乗に比例する。",
+          "who": "Efficient Uncertainty Estimation for LLM-based Entity Linking"
+        },
+        {
+          "file": "arxiv-2510.01251-entity-linking-uncertainty.txt",
+          "line": 1242,
+          "text": "is linear in the number of overall tokens",
+          "ja": "（KV キャッシュ有りでは）全体のトークン数に線形になる。",
+          "who": "同上"
+        }
+      ]
+    },
+    {
+      "claim": "0.6B〜4B のモデルでの制約付きデコードのオーバーヘッド: XGrammar は 1.6〜3.7%、Outlines は 9〜13% のスループット低下（測定環境は「consumer hardware」とだけあり、CPU かは未記載）",
+      "status": "一部のみ",
+      "note": "KV キャッシュ有りの通常の実装での比率。キャッシュ無しの CPU での時間ではない。",
+      "quotes": [
+        {
+          "file": "arxiv-2609.23742-constrained-small-llms-semantic-gap.txt",
+          "line": 156,
+          "end": 160,
+          "text": "XGrammar adds negligible overhead: 4–8 ms … schema compilation and 1.6–3.7% throughput re-",
+          "ja": "XGrammar のオーバーヘッドはごくわずかで、スキーマのコンパイルが 4〜8 ms、スループット低下は 1.6〜3.7%。",
+          "who": "Constrained Decoding Eliminates Structural Failures in Small LLMs"
+        },
+        {
+          "file": "arxiv-2609.23742-constrained-small-llms-semantic-gap.txt",
+          "line": 163,
+          "end": 166,
+          "text": "FSM masking costs a further 9–13% generation",
+          "ja": "Outlines はトークンごとの FSM マスクで、さらに 9〜13% 生成速度が落ちる。",
+          "who": "同上"
+        }
+      ]
+    },
+    {
+      "claim": "Qwen3-0.6B を 4 コア CPU で関数呼び出しに使うと、1 クエリあたり平均約 46〜48 秒（ブログの測定）",
+      "status": "一部のみ",
+      "note": "〔本人〕ブログ。制約付きデコードは使わない。KV キャッシュは通常有り。ブログ自身が、最初の実装で EOS が出ず 256 トークンを使い切り約 230 秒かかったバグを報告している。",
+      "quotes": [
+        {
+          "file": "heyneo-2026-needle-vs-qwen3-0.6b-cpu.md",
+          "line": 31,
+          "text": "Mean CPU latency10,933 ms47,863 ms45,831 ms",
+          "ja": "平均 CPU 遅延: Needle 10,933 ms、Qwen3（既定）47,863 ms、Qwen3（プロンプト調整）45,831 ms。",
+          "who": "HeyNeo ブログ",
+          "mark": "〔本人〕測定あり"
+        },
+        {
+          "file": "heyneo-2026-needle-vs-qwen3-0.6b-cpu.md",
+          "line": 79,
+          "text": "4-core CPU, no GPU",
+          "ja": "4 コア CPU、GPU 無し。",
+          "who": "同上"
+        }
+      ]
+    },
+    {
+      "claim": "関数定義を1トークンにして静的プロンプトを約95%減らしても、タスク完了の精度の低下は小さい（CAMPHOR）",
+      "status": "一部のみ",
+      "note": "On-device のエージェント論文で、1つの課題設定。制約付きデコードではなく、小モデルの微調整が前提。",
+      "quotes": [
+        {
+          "file": "arxiv-2410.09407-camphor.txt",
+          "line": 357,
+          "text": "Applying prompt compression significantly reduces the prompt size with marginal changes in accuracy.",
+          "ja": "プロンプトの圧縮は、精度の変化を小さく保ったままプロンプトの大きさを大きく減らす。",
+          "who": "CAMPHOR（表3の題）"
+        },
+        {
+          "file": "arxiv-2410.09407-camphor.txt",
+          "line": 365,
+          "text": "-95.02%",
+          "ja": "タスク完了エージェントのツール用トークンが 261 から 13 に（−95.02%）。",
+          "who": "CAMPHOR（表3）"
+        }
+      ]
+    },
+    {
+      "claim": "ツール名を trie で、引数を有限状態機械（FSM）で制約し、学習も長いプロンプトも使わずに構文エラーを無くす方式がある（ToolDec）。C の「関数名を選ばせてから引数」と同じ形にあたる",
+      "status": "根拠あり",
+      "note": "対象は 7B 級が中心で、0.6B の結果ではない。CPU 時間の記述は無い。",
+      "quotes": [
+        {
+          "file": "arxiv-2310.07075-tooldec.txt",
+          "line": 26,
+          "text": "T OOL D EC eliminates all syntax errors",
+          "ja": "ToolDec は構文エラーをすべて無くす。",
+          "who": "Don't Fine-Tune, Decode（2023）"
+        },
+        {
+          "file": "arxiv-2310.07075-tooldec.txt",
+          "line": 115,
+          "text": "compute or prompting while guaranteeing the model is syntax error-free.",
+          "ja": "計算量やプロンプトの手間をかけずに、構文エラーが無いことを保証する。",
+          "who": "同上"
+        },
+        {
+          "file": "arxiv-2310.07075-tooldec.txt",
+          "line": 178,
+          "text": "resulting in longer prompts and syntax errors.",
+          "ja": "（in-context 学習は）プロンプトを長くし、構文エラーも残る。",
+          "who": "同上"
+        }
+      ]
+    },
+    {
+      "claim": "制約のマスク計算は、1トークンあたり μs 単位（trie 0.65 µs、XGrammar 5〜10 µs、LLGuidance 73〜141 µs）で、モデルの前向き計算（GPU で約 10 ms）より桁が小さい",
+      "status": "一部のみ",
+      "note": "GPU サービング（Qwen3-8B）での測定。KV キャッシュ無しの CPU ではない。ただしマスク計算の項は、前向き計算に比べて小さいという大きさの目安になる。",
+      "quotes": [
+        {
+          "file": "arxiv-2608.12574-trie-tool-selection.txt",
+          "line": 440,
+          "end": 442,
+          "text": "LLGuidance achieves near-zero compilation (0.6–24ms) but per-step masking costs 73–141µs. XGrammar balances both (3–239ms compilation, 5–10µs masking). The trie minimizes per- step cost (0.65µs)",
+          "ja": "LLGuidance はコンパイルがほぼゼロだが、ステップごとのマスクは 73〜141 µs。XGrammar は 5〜10 µs。trie はステップごとのコストが最小（0.65 µs）。",
+          "who": "trie 論文（COLM 2026）"
+        }
+      ]
+    },
+    {
+      "claim": "制約付きデコードの利得は、学習データや例が少ない条件で大きい（意味解析のベンチマーク BenchCLAMP）",
+      "status": "一部のみ",
+      "note": "対象は意味解析で、モデルは GPT-3/Codex/BART 級。0.6B ではない。『例の数を変えた』比較ではなく、データ量の比較。",
+      "quotes": [
+        {
+          "file": "arxiv-2206.10668-benchclamp.txt",
+          "line": 411,
+          "end": 412,
+          "text": "constrained decoding is most beneficial in low-data regimes, giving on average 2.7% gain over unconstrained decoding.",
+          "ja": "制約付きデコードは低データの条件で最も有益で、平均 2.7% の向上をもたらす。",
+          "who": "BenchCLAMP"
+        }
+      ]
+    },
+    {
+      "claim": "約1Bの小さなモデルで、0-shot→4-shot は +9.4 点、制約付きデコードは +3.8 点。4-shot は推論時間が平均 53% 増え、制約付きデコードは実行時間に有意な影響がない",
+      "status": "根拠あり",
+      "note": "Gemma-3 1B、Qwen3、Llama-3.2 1B 等で、医療 NLP の抽出課題。vLLM と outlines を使った GPU サービング。関数呼び出しではない。『制約付き＋少数ショット』の併用が最も良い（+13.2）とも書いてある。",
+      "quotes": [
+        {
+          "file": "arxiv-2602.17475-small-llms-medical-nlp.txt",
+          "line": 344,
+          "end": 346,
+          "text": "from 0-shot of +9.4 points, consistently yielding … higher performance than constraint decoding (+3.8 … average increase).",
+          "ja": "0-shot からの平均上昇は +9.4 点で、制約付きデコード（平均 +3.8）より一貫して高い。",
+          "who": "Small LLMs for Medical NLP（2026）"
+        },
+        {
+          "file": "arxiv-2602.17475-small-llms-medical-nlp.txt",
+          "line": 350,
+          "end": 351,
+          "text": "creases by an average of 53% when moving from 0-shot to 4-shot configurations",
+          "ja": "0-shot から 4-shot にすると、推論時間が平均 53% 増える。",
+          "who": "同上"
+        }
+      ]
+    },
+    {
+      "claim": "文法制約つきデコード（GCD）は、0-shot でも制約なしの 5-shot より精度が高いことが多く、利得は小さいモデルと少ない shot ほど大きい。shot を足す相対的な改善は、GCD のほうが小さい",
+      "status": "根拠あり",
+      "note": "論理式への変換（FOLIO・GSM-symbolic）。2B〜14B 超のモデル。0.6B ではない。",
+      "quotes": [
+        {
+          "file": "acl-2025-industry-34-gcd-logical-parsers.txt",
+          "line": 276,
+          "end": 278,
+          "text": "achieves higher accuracy than unconstrained de- … coding with 5 shots",
+          "ja": "GCD の 0-shot は、制約なしの 5-shot より精度が高い。",
+          "who": "Grammar-Constrained Decoding Makes LLMs Better Logical Parsers（ACL 2025 産業）"
+        }
+      ]
+    },
+    {
+      "claim": "制約付きデコードは、in-context の例を増やしたときの改善が、制約なしより急である（4〜8B のモデル、k=1〜9）",
+      "status": "一部のみ",
+      "note": "上の ACL 2025 産業論文（GCD では shot を足す相対改善が小さい）と向きが食い違う。モデルは 4〜8B、課題は事実抽出・分類。",
+      "quotes": [
+        {
+          "file": "ranlp-2025-124-constrained-fewshot.txt",
+          "line": 39,
+          "end": 40,
+          "text": "models showing steeper performance gains … from additional demonstrations",
+          "ja": "追加の例から得られる性能向上が、制約付きのモデルのほうが急である。",
+          "who": "The Hidden Cost of Structure（RANLP 2025）"
+        }
+      ]
+    }
+  ],
+  "disagreements": [
+    {
+      "topic": "例（shot）を増やしたときの改善は、制約付きデコードのほうが小さいか大きいか",
+      "quotes": [
+        {
+          "file": "acl-2025-industry-34-gcd-logical-parsers.txt",
+          "line": 276,
+          "end": 278,
+          "text": "achieves higher accuracy than unconstrained de- … coding with 5 shots",
+          "ja": "GCD の 0-shot は制約なしの 5-shot より精度が高い（論理式変換）。",
+          "who": "ACL 2025 産業"
+        },
+        {
+          "file": "ranlp-2025-124-constrained-fewshot.txt",
+          "line": 39,
+          "end": 40,
+          "text": "models showing steeper performance gains … from additional demonstrations",
+          "ja": "制約付きのほうが、例の追加による向上が急（4〜8B、抽出・分類）。",
+          "who": "RANLP 2025"
+        }
+      ]
+    },
+    {
+      "topic": "選択の偏りの原因は、選択肢の位置か、ID トークンの事前の偏りか",
+      "quotes": [
+        {
+          "file": "arxiv-2309.03882-not-robust-mc-selectors.txt",
+          "line": 125,
+          "end": 126,
+          "text": "selection bias arises less from LLMs’ position bias, where they are deemed to favor options pre- sented at specific ordering positions (like first or last).",
+          "ja": "選択バイアスは、特定の順序の位置（最初や最後など）の選択肢を好む位置バイアスから生じる度合いは小さい。",
+          "who": "Zheng ら（ICLR 2024）"
+        },
+        {
+          "file": "arxiv-2510.00307-biasbusters.txt",
+          "line": 166,
+          "end": 167,
+          "text": "Prior research has revealed significant positional selection biases in how LLMs answer multiple-choice questions.",
+          "ja": "先行研究は、多肢選択問題で位置による選択の偏りがあることを明らかにしている。",
+          "who": "BiasBusters（先行研究の紹介）"
+        }
+      ]
+    }
+  ],
+  "unreached": [
+    "BFCL の論文（ICML 2025）は、PMLR が 404、OpenReview が 403 で取得できなかった",
+    "『関数名を専用トークンにする』を、学習なしで近似する研究は見つからなかった",
+    "33本のうち、抜き書きにしたのは9つの論点分だけ。残りは sources/ に保存したが、まだ読んでいない",
+    "0.6B のツール呼び出しで、制約付きデコードを使い、few-shot の数・プロンプトの長さを変えて測った統制実験は見つからなかった。近い研究: 約1Bの医療NLP（4-shot +9.4 点、制約付き +3.8 点）、2B〜14B超の論理式変換（GCD の 0-shot が制約なし 5-shot を上回ることが多い）、4〜8B の事実抽出（制約付きは例を足すほど急に改善）。後二者は向きが食い違う",
+    "KV キャッシュ無しの CPU 上で、制約付きデコードの時間を実測した研究は見つからなかった。近い研究: 理論式（KV キャッシュ無しは全体のトークン数の2乗）、マスク計算が μs 単位で前向き計算より桁が小さい GPU 測定、約1Bで制約付きデコードは実行時間に有意な影響がないという測定"
+  ]
+}
