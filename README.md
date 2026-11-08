@@ -2,49 +2,60 @@
 
 ## Description
 
-Call Me Maybe explores constrained decoding for LLM function calling. The
-current main branch contains a public SDK greedy-token PoC and mock tests.
-It is **not a completed Subject v1.7 submission**. The shared CLI lives on an
-independent, unmerged feature branch; this infrastructure change does not
-integrate it or the experimental generation methods.
+Call Me Maybe explores constrained decoding for LLM function calling. This
+branch contains a public-SDK greedy-token PoC, mock tests and the build
+environment (Makefile, CPU and GPU setups). It is **not a completed Subject
+v1.7 submission**: the application (`src`) is not implemented yet, and the
+experimental generation methods are not integrated.
 
 ## Instructions
 
 Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
 
 ```sh
-uv sync --locked
+make install      # recreate .venv from uv.lock (CPU torch)
 make test
-make lint-app
-make lint-sdk
-make subject
+make lint
 ```
 
-`uv sync` also works as required by the reviewer. Root dependencies are numpy
-and Pydantic; SDK inference dependencies are deliberately separate. `make run`
-and `make debug` target the Subject entry point `python -m src`; they become
-usable when an application is integrated. On this PoC, src is missing.
+`uv sync` alone also works, as the reviewers require. The dependencies are
+numpy, Pydantic and the local `llm_sdk` (a path dependency). torch comes from
+the default `cpu` dependency group, which uses the PyTorch CPU index.
+
+Development on a GPU machine (Linux with an AMD GPU, or a Mac) uses a separate
+environment so `.venv` stays identical to the reviewer's:
+
+```sh
+make gpu-install  # recreate .venv-gpu (ROCm torch if /dev/kfd exists, plus accelerate)
+make gpu-run      # run in .venv-gpu
+```
+
+`make sdk-install` restores `llm_sdk` from `llm_sdk.zip` and checks its sha256
+against `llm_sdk.sha256`. The repository copy of `llm_sdk` has one local change
+(float32 on every device instead of float16 on GPU; commented in the code), so
+GPU results match those of the CPU-only review machine.
+
+`make run` and `make debug` target the Subject entry point `python -m src`.
+They become usable once the application exists; on this PoC, `src` is missing.
 
 For the independent inference experiment, see [examples](examples/README.md).
-Running it requires a separately provisioned SDK environment and may download
-the Qwen/Qwen3-0.6B model. PR CI never provisions this environment.
+The SDK downloads the Qwen/Qwen3-0.6B model itself on first use.
 
 ## Testing strategy
 
 Unittest uses SDK-shaped mocks and no model imports, downloads, or forward
-passes. CI runs Python 3.10 and 3.14, locked dependencies, owned-code flake8,
-the mandatory mypy flags, development Subject checks, and an exact SDK audit.
-Future src tests are discovered automatically. An absent/failed required check
-blocks merging. See [CI and agent workflow](docs/ci-auto-integration.md).
+passes. Future src tests are discovered automatically.
 
-`make lint` executes full-tree flake8 and mypy using all Subject flags. It
-currently **fails**: the unchanged upstream SDK has 11 flake8 and 4 mypy errors.
-`make lint-sdk` prints these diagnostics and compares exact outputs and SDK
-hashes with [.github/ci/sdk-baseline.json](.github/ci/sdk-baseline.json).
-Any difference fails; do not refresh that baseline to hide problems. Development
-CI checks owned code separately, preserving the SDK's public type annotations.
-`make subject-audit` is a stricter submission preflight and also fails on this
-PoC. It does not replace functional evaluation or peer review.
+CI is **disabled** for now: the workflow runs only when started manually. It
+will be reworked after the implementation (see
+[CI and agent workflow](docs/ci-auto-integration.md), which describes the
+earlier design).
+
+`make lint` runs flake8 and mypy with all Subject flags and passes (checked
+2026-11-09). The distributed SDK is excluded by `.flake8` and the mypy settings
+in `pyproject.toml`, not by the Makefile commands. `make subject` passes with a
+notice that `src` is missing, and `make subject-audit` is a stricter preflight
+that fails on this PoC. Neither replaces functional evaluation or peer review.
 
 ## Algorithm explanation
 
@@ -68,10 +79,11 @@ These require a separately provisioned, recorded model benchmark.
 ## Challenges faced
 
 The supplied SDK depends internally on torch and transformers despite the
-application's direct-import restrictions. CI fingerprints and audits that
-upstream code without installing its heavy dependencies or changing it.
-Static import checks cannot prove all SDK attributes are public or that all
-runtime classes use Pydantic; those remain explicit review requirements.
+application's direct-import restrictions. The repository therefore pins the
+distributed SDK by sha256 (`llm_sdk.sha256`) and can restore it with
+`make sdk-install`. Static import checks cannot prove that every SDK attribute
+used is public or that every runtime class uses Pydantic; those remain explicit
+review requirements.
 
 ## Example usage
 

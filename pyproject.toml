@@ -2,7 +2,7 @@
 name = 'Call_Me_Maybe'
 version = '0.1.0'
 requires-python = '>=3.10'
-dependencies = ['numpy>=1.26', 'pydantic>=2,<3']
+dependencies = ['numpy>=1.26', 'pydantic>=2,<3', 'llm-sdk']
 
 [dependency-groups]
 dev = [
@@ -11,10 +11,25 @@ dev = [
     'packaging>=24',
     'tomli>=2; python_version < "3.11"',
 ]
+# torch is declared here so the CPU index applies (transitive deps ignore
+# tool.uv.sources). A GPU build is overlaid by `make install` (see Makefile).
+cpu = ['torch>=2.0.0']
+
+[tool.uv]
+default-groups = ['dev', 'cpu']
+
+[tool.uv.sources]
+llm-sdk = { path = 'llm_sdk' }
+torch = { index = 'pytorch-cpu', group = 'cpu' }
+
+[[tool.uv.index]]
+name = 'pytorch-cpu'
+url = 'https://download.pytorch.org/whl/cpu'
+explicit = true
 
 [tool.mypy]
 mypy_path = 'llm_sdk'
-exclude = ['^llm_sdk/', '^\.venv/']
+exclude = ['^llm_sdk/', '^\.venv/', '^\.venv-gpu/']
 
 # Only the unchanged vendor implementation is audited separately.
 # Preserve its public annotations when checking application calls.
