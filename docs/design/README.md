@@ -3,6 +3,8 @@
 状態: **下書き**。2026-11-08 にユーザーが決めた内容を記録した。ユーザーのレビュー前で、実装はまだ始めない
 (`AGENTS.md` の「Design and implementation process」)。
 
+ファイル構成の案、実行順、Subject のコード規則は [../architecture.md](../architecture.md) にある。
+
 記号は `docs/subject-v1.7.md` と同じ。
 
 - 【明文】Subject に書かれている事項

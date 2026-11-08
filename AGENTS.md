@@ -40,8 +40,10 @@ Do not start implementing from a vague request. Design first.
 4. Write tests first. Put the model behind a small port so tests can use a
    fake model with fixed logits, and check the constraint properties (every
    output parses and matches the schema) without loading Qwen3.
-5. Work in small units. Run a reviewer on each unit and show the result and
-   the checks to the human before starting the next unit.
+5. Implement the approved design in one batch, not unit by unit: this keeps
+   the AI's context whole and avoids reworking changes that were already
+   audited. Run the checks (lint, tests) and a reviewer once at the end and
+   show the result to the human. Keep docs/architecture.md in sync.
 6. Keep facts apart from guesses. If something cannot be verified, say so and
    say what was tried.
 7. Keep accuracy measurements and timing measurements separate in every
