@@ -31,8 +31,8 @@ explicit = true
 mypy_path = 'llm_sdk'
 exclude = ['^llm_sdk/', '^\.venv/', '^\.venv-gpu/']
 
-# Only the unchanged vendor implementation is audited separately.
-# Preserve its public annotations when checking application calls.
+# The distributed SDK is not linted (excluded above). follow_imports = 'silent'
+# keeps its public annotations for checking application calls.
 [[tool.mypy.overrides]]
 module = ['llm_sdk', 'llm_sdk.*']
 follow_imports = 'silent'

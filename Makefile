@@ -51,8 +51,13 @@ debug:
 	$(call require_env,$(VENV),install)
 	$(UV) run --no-sync python -m pdb -m src $(FLAGS)
 
+# Caches only: environments, uv.lock and generated output are left alone.
 clean:
-	find . -type d \( -name '.venv*' -o -name .git -o -name llm_sdk \) -prune -o -type d \( -name __pycache__ -o -name .mypy_cache \) -exec rm -rf {} +
+	@set -eu; \
+	find . -type d -name .git -prune -o -type d \
+		\( -name __pycache__ -o -name .mypy_cache -o -name .pytest_cache -o -name .ruff_cache \) \
+		-prune -exec rm -rf {} +; \
+	echo "Clean Successful."
 
 # Tests are not part of the submission, so a checkout without tests/ is fine.
 test:
