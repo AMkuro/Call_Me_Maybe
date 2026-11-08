@@ -101,7 +101,6 @@ Generated `data/output/` files must remain untracked.
 
 ## Resources
 
-- [Subject v1.7](https://github.com/AMkuro/pdf/blob/milestone3/Call_Me_Maybe/Call-Me-Maybe.en.subject.txt)
 - [Python unittest](https://docs.python.org/3/library/unittest.html)
 - [Pydantic](https://docs.pydantic.dev/latest/)
 - [GitHub Auto-merge](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/automatically-merging-a-pull-request)
