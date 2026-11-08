@@ -30,8 +30,7 @@ make gpu-install  # recreate .venv-gpu (ROCm torch if /dev/kfd exists, plus acce
 make gpu-run      # run in .venv-gpu
 ```
 
-`make sdk-install` restores `llm_sdk` from `llm_sdk.zip` and checks its sha256
-against `llm_sdk.sha256`. The repository copy of `llm_sdk` has one local change
+`make sdk-install` unpacks `llm_sdk.zip` over `llm_sdk` (another zip: `SDK_ZIP=<zip>`). The repository copy of `llm_sdk` has one local change
 (float32 on every device instead of float16 on GPU; commented in the code), so
 GPU results match those of the CPU-only review machine.
 
@@ -79,9 +78,8 @@ These require a separately provisioned, recorded model benchmark.
 ## Challenges faced
 
 The supplied SDK depends internally on torch and transformers despite the
-application's direct-import restrictions. The repository therefore pins the
-distributed SDK by sha256 (`llm_sdk.sha256`) and can restore it with
-`make sdk-install`. Static import checks cannot prove that every SDK attribute
+application's direct-import restrictions. The repository therefore keeps the
+distributed SDK as `llm_sdk.zip` and can restore it with `make sdk-install`. Static import checks cannot prove that every SDK attribute
 used is public or that every runtime class uses Pydantic; those remain explicit
 review requirements.
 

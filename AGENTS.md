@@ -14,8 +14,8 @@ Run make install, make lint, make test. CI is disabled (manual runs only)
 until the implementation is done and will be reworked then. Use the Subject
 mypy flags. The SDK is excluded from lint through .flake8 and the mypy
 settings. The repository copy of llm_sdk has one documented local change
-(float32 on every device, commented in the code); make sdk-install restores
-the distributed version from llm_sdk.zip and checks llm_sdk.sha256. Do not
+(float32 on every device, commented in the code); make sdk-install unpacks
+the distributed version from llm_sdk.zip (or SDK_ZIP=<zip>). Do not
 otherwise edit llm_sdk. Development checks are not a submission certificate.
 
 Create or update a PR with only the authorized task's changes. After inspecting

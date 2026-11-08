@@ -5,8 +5,7 @@
 > `.github/ci/sdk-mypy.ini`) were removed, so the sections below describe the
 > 2026-11-07 design, not the current state. CI is reworked after the
 > implementation. The SDK is now excluded from `make lint` through `.flake8`
-> and the mypy settings, and its integrity is checked by `make sdk-install`
-> (`llm_sdk.sha256`). The main Ruleset's required checks cannot report while the
+> and the mypy settings, and `make sdk-install` unpacks the distributed zip. The main Ruleset's required checks cannot report while the
 > workflow is disabled. `.github/ci/sdk-baseline.json` is kept only because
 > `tools/campus_survey.py` reads it.
 

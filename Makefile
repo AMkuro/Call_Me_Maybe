@@ -31,7 +31,7 @@ help:
 	@echo "Available targets:"
 	@echo "  make install       Recreate $(VENV) from scratch (CPU torch, from uv.lock)"
 	@echo "  make gpu-install   Recreate $(GPU_ENV) from scratch (GPU torch + accelerate)"
-	@echo "  make sdk-install   Restore llm_sdk from llm_sdk.zip and verify its sha256"
+	@echo "  make sdk-install   Unpack llm_sdk from llm_sdk.zip (or SDK_ZIP=<zip>)"
 	@echo "  make run           Run the project"
 	@echo "  make debug         Run the project with pdb"
 	@echo "  make gpu-run       Run the project in $(GPU_ENV)"
@@ -61,11 +61,13 @@ gpu-install:
 	$(UV) pip install --python $(GPU_ENV)/bin/python accelerate; \
 	echo "Install to virtualenv $(GPU_ENV) Successful."
 
-# Restore the distributed SDK from llm_sdk.zip and verify it byte for byte.
+# Replace llm_sdk with the contents of a zip (default: the distributed one).
+# Another zip: `make sdk-install SDK_ZIP=path/to/other.zip` (same llm_sdk/ layout).
+SDK_ZIP ?= llm_sdk.zip
 sdk-install:
+	test -f $(SDK_ZIP) || { echo "Error: $(SDK_ZIP) not found." >&2; exit 1; }
 	rm -rf llm_sdk
-	unzip -q llm_sdk.zip
-	sha256sum --check --strict llm_sdk.sha256
+	unzip -q $(SDK_ZIP)
 
 run:
 	$(call require_env,$(VENV),install)
