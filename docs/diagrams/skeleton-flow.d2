@@ -1,0 +1,46 @@
+...@workflow-style
+direction: down
+
+main: "main (__main__)"
+parse_args: "parse_args (cli)"
+load_inputs: "load_functions, load_prompts (loader)"
+load_model: "Model() (model_port)"
+load_vocab: "load_vocab (vocab)"
+build_trie: "build_name_trie (name_trie)"
+
+next_prompt: 次の入力はあるか {
+  shape: diamond
+}
+process_prompt: "process_prompt (pipeline)\n内部の処理は詳細図を参照"
+save_results: "save_results (writer)"
+
+has_results: 成功した結果はあるか {
+  shape: diamond
+}
+save_empty: "save_results: 空配列を保存 (writer)"
+return_code: 終了コードを返す
+write_error: "原因を標準エラーへ出して\n非0で終了"
+
+main -> parse_args -> load_inputs -> load_model -> load_vocab -> build_trie -> next_prompt
+next_prompt -> process_prompt: ある
+process_prompt -> save_results -> next_prompt
+process_prompt -> next_prompt: "PromptError: 飛ばす" {
+  style.stroke-dash: 3
+}
+next_prompt -> has_results: ない
+has_results -> return_code: ある
+has_results -> save_empty: ない
+save_empty -> return_code
+save_results -> write_error: OSError {
+  style.stroke-dash: 3
+}
+save_empty -> write_error: OSError {
+  style.stroke-dash: 3
+}
+
+vars: {
+  d2-config: {
+    layout-engine: dagre
+    pad: 24
+  }
+}

@@ -9,7 +9,7 @@
 `docs/subject-v1.7.md` の第1章から、コードに直接かかわるものを移した。出典の章番号は原文のもの。
 
 - 【明文】Python 3.10 以上。flake8 準拠。変数・引数・戻り値に型ヒント。全関数で mypy エラーなし(IV.1)。
-- 【明文】関数とクラスに PEP 257 の docstring(IV.1)。
+- 【明文】関数とクラスに PEP 257 の 英語のdocstring(IV.1)。
 - 【明文】例外を適切に処理する。未処理の例外でクラッシュしたら「動作しない」扱い。資源はコンテキスト
   マネージャ等で確実に解放する(IV.1)。
 - 【明文】**すべてのクラスは、検証に pydantic を使う**(IV.3.1、原文 "All classes must use pydantic for
@@ -31,25 +31,21 @@
 
 ## 2. 今日決まったこと(ユーザー、2026-11-09)
 - 【設計判断】**出力先の既定は `data/output/`**(既定ファイル名は `function_calls.json`)。Subject の記述が
-  曖昧なので、最も明確な解釈を採る。
-- 【設計判断】関数名の trie は**トークン単位**で作る(ADR-0001 の案 a のとおり。各名前を `encode` した
-  トークン列を木にする)。木の終端は名前のトークン列の最後(葉)とし、葉に着いたら選択を打ち切って、
-  後ろの `",` 以降は骨組みとして強制する(ユーザーの指摘、2026-11-09。下の【測定】で、サンプルでは問題なし)。
-  起動時に「名前だけの列が、名前 + `",` の列の接頭辞か」を確かめ、違う名前があればエラーにする。
+  曖昧なので、最も明確な解釈を採ることに決定。
+- 【設計判断】関数名の木は**トークン単位**で、`encode(名前 + 終端)` で作る(案 B)。根拠は ADR-0011。終端の形は未決(§5)。
 - 【設計判断】実装は**小さな単位ごとの監査をせず、まとめて進める**。理由: AI の文脈を保てる。1つずつ
   監査すると、前の変更を直したくなったときに手間が増える。(`AGENTS.md` の工程 5 を直した)
 - 【設計判断】スケルトン(関数の形だけのコード)は別ブランチ・別 PR で作る。PR を境目にする。
-- 【設計判断】**モデルのポートは `typing.Protocol` にする。** 原文は「検証に pydantic を使う」で、モデルである
-  ことまでは求めていない。ポートの入出力と設定は pydantic で検証する。例外クラスも、持たせるデータを pydantic で
-  検証する形で足りるとみなす。リスク: レビュアーの読み方は確かめられない。
-- 出力先、名前の木、ポート、`import torch` の禁止は、`docs/design/adr/0011-name-trie-and-output-path.md` に記録した。
+- 【設計判断】モデルは、`llm_sdk` を包む具体的なクラス `Model`(`model_port.py`、§3)。根拠は ADR-0011。
+- 出力先、名前の木、モデルのラッパー、`import torch` の禁止は、`docs/design/adr/0011-name-trie-and-output-path.md` に記録した。
+- 値の終了・JSON の組み立て・保存に関する修正方針は、[ADR-0012](design/adr/0012-skeleton-review-corrections.md) に記録した。
 
 ### 【測定】トークン化(2026-11-09、SDK のトークナイザー、サンプルの関数 5 つ)
 - 骨組み `{"prompt": "...", "name": "` の直後に名前を続けても、骨組み側のトークンは変わらなかった。
 - 名前 + 閉じ引用符を、文脈の中でエンコードした結果と、単独でエンコードした結果は、5 つとも同じだった。
-- **`",`(閉じ引用符 + カンマ)は 1 つのトークン**になる。ただし、名前だけをエンコードした列は、名前 + `"`、
+- **`",`(閉じ引用符 + カンマ)は 1 つのトークン**になる。また、名前だけをエンコードした列は、名前 + `"`、
   名前 + `",`、名前 + `", "parameters": {` のどれをエンコードした列の接頭辞にもなっていた(5 つとも。
-  追加の測定)。このため、名前の木は名前だけで作り、葉で打ち切ってよい。
+  追加の測定)。
 - 語彙 151643 のうち、引用符と他の文字を含むトークンは 1343 個。
 - 限界: 5 つのサンプル名だけ。レビューの関数名では確かめていない。トークン列は 1 つの正規の分割だけを許す
   (別の分割は許さない)。
@@ -61,35 +57,112 @@ src/
   cli.py        引数の定義と検証(pydantic)
   loader.py     functions_definition.json と入力 JSON の読み込み・検証
   schema.py     pydantic のモデル: 関数定義、出力 1 件、型名。引数の事後検証用モデルを動的に作る
-  model_port.py モデルの境界。SDK を import するのはこのファイルだけ
+  model_port.py モデルのラッパー(`Model`)。SDK を import するのはこのファイルだけ
   vocab.py      語彙ファイルの読み込み。トークン ID と文字列の対応
   name_trie.py  関数名のトークン列の木。接頭辞の衝突は終端(閉じ引用符 + 後続)で解く
-  skeleton.py   関数定義から、強制する骨組み(キー、記号)と値の位置を組み立てる
+  skeleton.py   関数定義から、強制する骨組み(キー、記号)と値の位置・終端を組み立てる
   values.py     値の型ごとの許可トークン(number、string、boolean)
   decoder.py    制約付きデコードの共通ループ(マスク、貪欲選択、強制トークン)
   prompt.py     プロンプトの組み立て(差し替え可能な設定)
   pipeline.py   1 件の処理: 関数名の選択 → 骨組み → 値の生成 → 組み立て → 検証
   writer.py     出力の保存(1 件ずつ原子的に)
   errors.py     エラーの種類とメッセージ
-tests/          fake モデル(固定 logits)を使うテスト。モデルの読み込みはしない
+tests/          純粋な部分はデータで、ループは固定 logits を返す関数で、全体は実モデルで確かめる(`AGENTS.md` の工程 4)
 ```
 - 【設計判断】平らに置くのは、早い段階で大きな構成を決めないため。育ったら、まとまりごとに分ける。
-- 【設計判断】SDK に触れるのは `model_port.py` だけ。それ以外は、ポートの先が fake でも本物でも同じに動く。
+- 【設計判断】SDK に触れるのは `model_port.py` だけ。
+- 【設計判断】データの pydantic モデルは `frozen=True`(変更できない)。副作用のある関数は、docstring に `Effect:` の行を書く。
+  `Effect:` がない関数は、引数だけで結果が決まる(純粋)。
+
+### モデルのラッパー(`model_port.py`)
+`Model` は、`llm_sdk` のモデルを包む**薄いクラス**。SDK は tensor を返すが、`Model` は普通のリストを返すので、
+ほかのコードは `torch` を見ない。
+
+```python
+class Model:
+    def __init__(self) -> None: ...                       # llm_sdk のモデルを読み込む(失敗は明確なメッセージで終了。ADR-0007)
+    def encode(self, text: str) -> list[int]: ...         # 文章 → トークン ID
+    def decode(self, ids: list[int]) -> str: ...          # トークン ID → 文章
+    def logits(self, ids: list[int]) -> list[float]: ...  # 次のトークンの点数(語彙の数だけ)
+    def vocab_path(self) -> str: ...                      # 語彙ファイルの場所
+```
+
+| `Model` の操作 | SDK の公開 API | 違い |
+|---|---|---|
+| `encode` | `encode` | SDK は `torch.Tensor` を返す。`Model` が `list[int]` にして、`torch` を `src` に出さない |
+| `decode` | `decode` | 同じ |
+| `logits` | `get_logits_from_input_ids` | 名前だけ短くした |
+| `vocab_path` | `get_path_to_vocab_file` | 名前だけ短くした |
+
+- **使う側**: `pipeline` の各関数は `Model` を受け取る。`decoder.generate` はループに要る `logits` の関数だけを受け取る。
+- 抽象的な型を置かない理由、pydantic の扱い、テストのしかたは ADR-0011 と `AGENTS.md` の工程 4。
 
 ## 4. 実行順(どの関数がどの順で呼ばれるか)
 1. `__main__` が `cli` で引数を検証する。
-2. `loader` が関数定義と入力を読んで検証する(空、重複、名前の接頭辞の衝突、未対応の型は起動時エラー)。
-3. `model_port` がモデルを作る。モデルの確認(ADR-0007)をここで行う。
+2. `loader` が関数定義と入力を読んで検証する(空、重複、未対応の型は起動時エラー)。
+3. `model_port` の `Model()` がモデルを読み込む。読み込みの失敗は、明確なメッセージで終了する(ADR-0007)。
 4. `vocab` が語彙を読み、`name_trie` が関数名の木を作る。
 5. 入力 1 件ごとに `pipeline` が次を行う。
    1. `prompt` が関数選択用のプロンプトを作る。
    2. `decoder` と `name_trie` で関数名を選ぶ。候補が 1 つになったら残りのトークンを強制する。
    3. `skeleton` が、選んだ関数の骨組みを作る。
-   4. 骨組みを強制しながら、値の位置で `values` の許可トークンだけを残して生成する。`prompt` は入力から
-      コピーする。
-   5. 組み立てた全文を JSON としてパースし、`schema` の動的モデルで検証する。
-6. `writer` が 1 件ずつ保存する。失敗した件は飛ばし、標準エラーに理由を出し、最後に終了コードを非 0 にする。
+   4. `pipeline` が prompt と名前を JSON 文字列として組み立てる。骨組みを強制しながら、値の位置で
+      `values` の許可トークンだけを残して生成する。値は `ValueSlot.terminator` の区切りまで含める。
+   5. 組み立てた全文を JSON としてパースし、`schema` の動的モデルで検証する。検証・変換後の parameters を返す。
+6. `writer` が成功した結果を 1 件ずつ保存する。失敗した件は飛ばし、標準エラーに理由を出し、
+   最後に終了コードを非 0 にする。結果 0 件なら `[]` を保存する。保存の `OSError` は `main` が
+   捕捉し、原因を表示して非 0 で終了する。
+
+### 実行順の図(スケルトンの関数名)
+`括弧内` はファイル。`src/` の関数と対応している。薄い青紫の枠は関数単位のまとまり、
+内側の箱はその関数内の処理、ひし形は分岐を表す。実線は実行順、破線は例外の経路である。
+末端関数は未実装で、図は現在の呼び出しと契約を示す。
+
+![実行順の図(スケルトンの関数名)](diagrams/skeleton-flow.svg)
+
+[全体図の D2 ソース](diagrams/skeleton-flow.d2)。
+
+#### process_prompt の内部
+
+1 件の入力は `select_name` → `generate_parameters` → `validate_call` の順に進む。
+図の矢印に、関数定義 `fn`、JSON 全文 `text` という受け渡すデータを示した。
+
+![process_prompt の内部の実行順](diagrams/process-prompt.svg)
+
+[process_prompt の D2 ソース](diagrams/process-prompt.d2)。
+
+#### select_name: プロンプトから関数を選ぶ
+
+`build_name_prompt` はユーザーの入力と全関数の定義から関数選択用の文字列を作り、
+`model.encode` がトークン列にする。本文の組み立ては未実装なので、図には入力と出力を示した。
+
+`generate` は毎回 `allowed_next` を呼ぶ。この関数は、起動時に作った名前の木を使い、
+`leaf_name` で完了を確認し、未完了なら `next_tokens` で続けられる ID を得る。
+許可 ID が 1 個なら強制し、複数ならモデルの点数から選ぶ。名前の木に含める終端の形は未決(ADR-0011)。
+
+![select_name の関数選択ループ](diagrams/select-name.svg)
+
+[select_name の D2 ソース](diagrams/select-name.d2)。
+
+#### generate_parameters: 骨組みと引数値を組み立てる
+
+`Forced` はそのまま書き、`ValueSlot` は `generate_value` で値と区切りを生成する。
+値の生成にも同じ `generate` を使うが、完了判定と許可 ID の取得は `values` の関数が担当する。
+
+![generate_parameters の引数生成ループ](diagrams/generate-parameters.svg)
+
+[引数生成図の D2 ソース](diagrams/generate-parameters.d2)。
+配色は [workflow-style.d2](diagrams/workflow-style.d2) で共有する。
+D2 v0.9.0 で描画を確認した。レイアウトエンジンと余白は各 D2 ソースの末尾に指定する。
+詳細図は TALA の `top`・`left` で行と列を揃え、戻り線で枠が広がるのを防いでいる。
+ラベルを変更したときは、箱と文字の重なりも確認する。再生成:
+
+```sh
+for diagram in skeleton-flow process-prompt select-name generate-parameters; do
+  d2 "docs/diagrams/$diagram.d2" "docs/diagrams/$diagram.svg"
+done
+```
 
 ## 5. 未決(人が決める)
 - 文字列の値の細部(ADR-0003)。実装後に決める。
-- モデルの確認の細部(ADR-0007)。
+- 案 B の終端の形(ADR-0011)。
