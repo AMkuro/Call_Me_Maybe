@@ -7,6 +7,9 @@ class Model:
     The SDK returns tensors; this class returns plain lists, so the rest of
     the program never sees torch.
 
+    Effect: every method uses the model, so a caller of any method has an
+    effect. The model itself is not changed by the calls.
+
     Judgment: a plain class with no abstract interface in front of it.
     It holds the SDK handle and no data to validate, so it is outside the
     pydantic rule (ADR-0011). logits is a shorter name for the SDK's

@@ -1,6 +1,6 @@
 """The forced part of the output and the places the model fills in."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from .schema import FunctionDef, ParamType
 
@@ -8,11 +8,15 @@ from .schema import FunctionDef, ParamType
 class Forced(BaseModel):
     """Text written as is: keys, quotes, colons, braces."""
 
+    model_config = ConfigDict(frozen=True)
+
     text: str
 
 
 class ValueSlot(BaseModel):
     """A place where the model generates the value of one parameter."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str
     type: ParamType

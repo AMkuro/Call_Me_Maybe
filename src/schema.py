@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 ParamType = Literal["number", "string", "boolean"]
 
@@ -10,11 +10,15 @@ ParamType = Literal["number", "string", "boolean"]
 class ParamSpec(BaseModel):
     """The type of one parameter (or of a return value)."""
 
+    model_config = ConfigDict(frozen=True)
+
     type: ParamType
 
 
 class FunctionDef(BaseModel):
     """One entry of functions_definition.json."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str
     description: str
@@ -24,6 +28,8 @@ class FunctionDef(BaseModel):
 
 class FunctionCall(BaseModel):
     """One output record: exactly the keys prompt, name and parameters."""
+
+    model_config = ConfigDict(frozen=True)
 
     prompt: str
     name: str

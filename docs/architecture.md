@@ -70,6 +70,8 @@ tests/          純粋な部分はデータで、ループは固定 logits を�
 ```
 - 【設計判断】平らに置くのは、早い段階で大きな構成を決めないため。育ったら、まとまりごとに分ける。
 - 【設計判断】SDK に触れるのは `model_port.py` だけ。
+- 【設計判断】データの pydantic モデルは `frozen=True`(変更できない)。副作用のある関数は、docstring に `Effect:` の行を書く。
+  `Effect:` がない関数は、引数だけで結果が決まる(純粋)。
 
 ### モデルのラッパー(`model_port.py`)
 `Model` は、`llm_sdk` のモデルを包む**薄いクラス**。SDK は tensor を返すが、`Model` は普通のリストを返すので、
@@ -121,7 +123,7 @@ flowchart TD
   F --> G{"次の入力はあるか"}
   G -->|ある| H["process_prompt (pipeline)"]
   H --> I["select_name<br/>build_name_prompt (prompt)<br/>generate (decoder) + next_tokens, leaf_name (name_trie)"]
-  I --> J["generate_parameters<br/>build_skeleton (skeleton)<br/>generate (decoder) + allowed_value_tokens (values)"]
+  I --> J["generate_parameters<br/>build_skeleton (skeleton)<br/>generate_value, generate (decoder) + allowed_value_tokens, is_value_complete (values)"]
   J --> K["validate_call (pipeline)<br/>build_parameters_model (schema)"]
   K --> L["save_results (writer)"]
   L --> G

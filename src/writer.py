@@ -10,6 +10,8 @@ def save_results(path: Path, calls: list[FunctionCall]) -> None:
 
     Called after every prompt with all results so far.
 
+    Effect: writes a file.
+
     Judgment: rewrite the whole file after every prompt (temporary file,
     then replace), so a crash keeps the results so far. Slow when there
     are many prompts (not measured).

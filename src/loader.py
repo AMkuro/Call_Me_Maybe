@@ -10,10 +10,15 @@ def load_functions(path: Path) -> list[FunctionDef]:
 
     Raises StartupError on a missing or invalid file, an empty list,
     duplicate names, or an unsupported parameter type.
+
+    Effect: reads a file.
     """
     raise NotImplementedError
 
 
 def load_prompts(path: Path) -> list[str]:
-    """Read the prompts (the ``prompt`` key of each input entry)."""
+    """Read the prompts (the ``prompt`` key of each input entry).
+
+    Effect: reads a file.
+    """
     raise NotImplementedError

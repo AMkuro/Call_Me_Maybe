@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Sequence
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class NameTrie(BaseModel):
@@ -13,6 +13,8 @@ class NameTrie(BaseModel):
     because it holds data and the Subject says classes use pydantic for
     validation.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     children: dict[int, "NameTrie"] = {}
     name: str | None = None
