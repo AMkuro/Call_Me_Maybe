@@ -69,6 +69,16 @@
   (`.flake8` と mypy の設定で除外。決定は変えない)。`.github/ci/sdk-baseline.json` は
   `tools/campus_survey.py` が読むので残したが、SDK の変更後は一致しない。
 - 【設計判断】AGENTS.md の「Never edit the supplied llm_sdk」は、上の局所変更の例外つきに直した。
+- 【測定】(2026-11-09)「リスクあり」の根拠を確かめた。配布 zip の `llm_sdk/llm_sdk/__init__.py` は、設定を使わずに
+  `flake8` を実行すると 23 件(E303 が 6、E501 が 6、F401 が 2 など)、Subject の mypy のフラグで 3 件のエラー
+  (`--strict` では 5 件)が出る。Subject の `flake8 .` と `mypy .` は、文字どおりには `llm_sdk/` も対象に入るので、
+  設定ファイルによる除外が外れると、lint が通らない。リスクは、除外を認めるかの解釈に残る。
+- 【測定】(2026-11-09)背景の「`dc9e9e0` の差は整形だけ」は、差分で確認した(import の並べ替え、行の折り返し、空行の
+  削除。コミットは「fix the layout」)。整形の動機が lint だったかは、推測のまま。#41 で、`__init__.py` を zip から
+  戻したので、この整形版は今のリポジトリにない(今の差は float32 の局所変更だけ)。
+- 【測定】(2026-11-09)見直しの条件にある「`uv sync` の後に `llm_sdk` を import できないかもしれない」は、起きなかった。
+  リポジトリ直下から `import llm_sdk` すると、インストール済みの通常のパッケージが読まれ、`Small_LLM_Model` が
+  使えた(`site-packages` の版)。
 - 【測定】uv は、ローカルの SDK のソース変更を拾わず、古いキャッシュのビルドを使い回す(float16 が残った)。
   `uv sync --locked --reinstall-package llm-sdk` で回避した(`make install`)。
 - 【測定】`uv.lock` の macOS 用 torch(2.14.1 と 2.15.0)の wheel は `macosx_14_0_arm64` だけ。Intel Mac
