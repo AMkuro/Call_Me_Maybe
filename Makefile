@@ -8,7 +8,7 @@ SDK_ZIP ?= llm_sdk.zip
 help:
 	@echo "Available targets:"
 	@echo "  make install       Recreate $(VENV) from scratch (CPU torch, from uv.lock)"
-	@echo "  make sdk-install   Unpack llm_sdk from llm_sdk.zip (or SDK_ZIP=<zip>)"
+	@echo "  make sdk-install   Unpack an SDK zip over llm_sdk (SDK_ZIP=<zip>, default llm_sdk.zip)"
 	@echo "  make run           Run the project"
 	@echo "  make debug         Run the project with pdb"
 	@echo "  make clean         Remove caches"
