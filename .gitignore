@@ -225,3 +225,7 @@ __marimo__/
 
 # Generated runtime results are not submitted.
 data/output/
+
+# Local make overrides
+.local.mk
+.venv-gpu/

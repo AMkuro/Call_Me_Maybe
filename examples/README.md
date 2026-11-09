@@ -118,6 +118,5 @@ argmax, finite-logit check), then `main` (single constructor and error boundary)
 and finally the mock assertions. Passing a real-model run remains necessary
 before claiming that public-SDK inference has been demonstrated on this machine.
 
-Context: [Issue #9](https://github.com/AMkuro/Call_Me_Maybe/issues/9),
-[design discussion #8](https://github.com/AMkuro/Call_Me_Maybe/issues/8), and
-[Subject v1.7](https://github.com/AMkuro/pdf/blob/milestone3/Call_Me_Maybe/Call-Me-Maybe.en.subject.txt).
+Context: [Issue #9](https://github.com/AMkuro/Call_Me_Maybe/issues/9) and
+[design discussion #8](https://github.com/AMkuro/Call_Me_Maybe/issues/8).

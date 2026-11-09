@@ -9,8 +9,8 @@
 ## 出典とバージョン
 
 - バージョン: **1.7**（原文表紙に `Version: 1.7`）
-- 原文: <https://github.com/AMkuro/pdf>、ブランチ `milestone3`、`Call_Me_Maybe/` 配下
-  （`Call-Me-Maybe.en.subject.txt`、`en.subject.pdf`）。コミットハッシュは記録しない。
+- 原文: 配布された Subject（`Call-Me-Maybe.en.subject.txt`、`en.subject.pdf`）。
+  原文の場所は、このリポジトリには記録しない。
 - 章番号は原文のもの（例: V.5 = 第V章 第5節）。原文はテキスト抽出のため、一部の行順が崩れている。
 
 ## 記号の約束
@@ -95,7 +95,7 @@ uv run python -m src [--functions_definition <file>] [--input <file>] [--output 
 
 - `llm_sdk` は提出リポジトリに含める（VIII）。`src` と同じ階層にコピーしてよい（IV.3.1）。
 - privateなメソッド・属性は使用禁止（IV.3.1）。
-- 【設計判断】配布 `llm_sdk` は変更しない（`AGENTS.md`）。
+- 【設計判断】配布 `llm_sdk` は、開発用の局所変更を 1 つだけ入れる（全デバイスで dtype を float32 にする。コードにコメントあり）。`make sdk-install` で配布の版に戻せる（`AGENTS.md`）。
 
 ## 4. 動的スキーマとConstrained Decoding
 

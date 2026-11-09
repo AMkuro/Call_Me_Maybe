@@ -1,0 +1,14 @@
+# Paths are relative to the repository root. Only committed regular files.
+# Read by tools/export_submission.py. Everything else (tests, docs, tools,
+# dev.mk, research, examples, .github, AGENTS.md) stays in the development repo.
+.gitignore
+.flake8
+Makefile
+README.md
+pyproject.toml
+uv.lock
+llm_sdk/llm_sdk/__init__.py
+llm_sdk/pyproject.toml
+llm_sdk/uv.lock
+data/input/*.json
+src/**/*.py
