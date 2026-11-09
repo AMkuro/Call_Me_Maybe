@@ -114,7 +114,9 @@ class Model:
    捕捉し、原因を表示して非 0 で終了する。
 
 ### 実行順の図(スケルトンの関数名)
-`括弧内` はファイル。`src/` の関数と対応している。
+`括弧内` はファイル。`src/` の関数と対応している。薄い青紫の枠は関数単位のまとまり、
+内側の箱はその関数内の処理、ひし形は分岐を表す。実線は実行順、破線は例外の経路である。
+末端関数は未実装で、図は現在の呼び出しと契約を示す。
 
 ![実行順の図(スケルトンの関数名)](diagrams/skeleton-flow.svg)
 
@@ -122,16 +124,41 @@ class Model:
 
 #### process_prompt の内部
 
-枠は関数ごとの処理、矢印は実行順を表す。引数生成では、骨組みの各部分と値の各トークンで
-繰り返す箇所を示した。末端関数は未実装で、図は現在の呼び出しと契約を表す。
+1 件の入力は `select_name` → `generate_parameters` → `validate_call` の順に進む。
+図の矢印に、関数定義 `fn`、JSON 全文 `text` という受け渡すデータを示した。
 
 ![process_prompt の内部の実行順](diagrams/process-prompt.svg)
 
-[詳細図の D2 ソース](diagrams/process-prompt.d2)。D2 v0.9.0 で描画を確認した。再生成:
+[process_prompt の D2 ソース](diagrams/process-prompt.d2)。
+
+#### select_name: プロンプトから関数を選ぶ
+
+`build_name_prompt` はユーザーの入力と全関数の定義から関数選択用の文字列を作り、
+`model.encode` がトークン列にする。本文の組み立ては未実装なので、図には入力と出力を示した。
+
+`generate` は毎回 `allowed_next` を呼ぶ。この関数は、起動時に作った名前の木を使い、
+`leaf_name` で完了を確認し、未完了なら `next_tokens` で続けられる ID を得る。
+許可 ID が 1 個なら強制し、複数ならモデルの点数から選ぶ。名前の木に含める終端の形は未決(ADR-0011)。
+
+![select_name の関数選択ループ](diagrams/select-name.svg)
+
+[select_name の D2 ソース](diagrams/select-name.d2)。
+
+#### generate_parameters: 骨組みと引数値を組み立てる
+
+`Forced` はそのまま書き、`ValueSlot` は `generate_value` で値と区切りを生成する。
+値の生成にも同じ `generate` を使うが、完了判定と許可 ID の取得は `values` の関数が担当する。
+
+![generate_parameters の引数生成ループ](diagrams/generate-parameters.svg)
+
+[引数生成図の D2 ソース](diagrams/generate-parameters.d2)。
+配色は [workflow-style.d2](diagrams/workflow-style.d2) で共有する。
+D2 v0.9.0 で描画を確認した。再生成:
 
 ```sh
-d2 --layout elk docs/diagrams/skeleton-flow.d2 docs/diagrams/skeleton-flow.svg
-d2 --layout elk docs/diagrams/process-prompt.d2 docs/diagrams/process-prompt.svg
+for diagram in skeleton-flow process-prompt select-name generate-parameters; do
+  d2 --layout dagre "docs/diagrams/$diagram.d2" "docs/diagrams/$diagram.svg"
+done
 ```
 
 ## 5. 未決(人が決める)

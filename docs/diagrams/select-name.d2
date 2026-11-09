@@ -1,0 +1,55 @@
+...@workflow-style
+direction: down
+
+select_name: "select_name (pipeline): 関数名を選ぶ" {
+  style.fill: "#E4E9FE"
+  prompt: "build_name_prompt (prompt)\n入力: user_prompt と全関数の functions\n出力: 関数選択用のプロンプト文字列\n本文の組み立ては未実装"
+  encode: "model.encode\nプロンプト文字列を prompt_ids にする"
+
+  generate: "generate (decoder): 名前のトークンを1個ずつ選ぶ" {
+    style.fill: "#E4E9FE"
+    init: "生成列 generated を空リストで始める"
+
+    allowed_next: "allowed_next (select_name 内の関数)" {
+      style.fill: "#E4E9FE"
+      leaf: "leaf_name (name_trie)\ngenerated の ID 列に沿って木をたどる\n葉なら関数名、葉でなければ None"
+      finished: 葉に到達したか {
+        shape: diamond
+      }
+      children: "next_tokens (name_trie)\n現在の接頭辞から進める\n子のトークン ID だけを許可する"
+    }
+
+    limit: "生成数が max_steps に達したか" {
+      shape: diamond
+    }
+    single: 許可 ID は1個か {
+      shape: diamond
+    }
+    force: "その ID を選ぶ\nモデルの logits は呼ばない"
+    logits: "model.logits(prompt_ids + generated)\n語彙全体の次トークンの点数を得る"
+    choose: "choose_token (decoder)\n許可外の点数を負の無限大にする\n許可 ID のうち点数が最大のものを選ぶ"
+    append: "選んだ ID を generated に追加する"
+    result: "allowed_next が None を返し\ngenerate が生成 ID 列を返す"
+    error: "PromptError を送出する\n終端に達する前に上限を超えた"
+  }
+
+  name: "leaf_name (name_trie)\n生成 ID 列の葉にある関数名を取得する"
+  result: "functions の名前と照合し\n対応する FunctionDef を返す"
+}
+
+select_name.prompt -> select_name.encode -> select_name.generate.init -> select_name.generate.allowed_next.leaf
+select_name.generate.allowed_next.leaf -> select_name.generate.allowed_next.finished
+select_name.generate.allowed_next.finished -> select_name.generate.result: はい
+select_name.generate.allowed_next.finished -> select_name.generate.allowed_next.children: いいえ
+select_name.generate.allowed_next.children -> select_name.generate.limit: 許可 ID のリスト
+select_name.generate.limit -> select_name.generate.error: はい {
+  style.stroke-dash: 3
+}
+select_name.generate.limit -> select_name.generate.single: いいえ
+select_name.generate.single -> select_name.generate.force: はい
+select_name.generate.single -> select_name.generate.logits: いいえ
+select_name.generate.logits -> select_name.generate.choose
+select_name.generate.force -> select_name.generate.append
+select_name.generate.choose -> select_name.generate.append
+select_name.generate.append -> select_name.generate.allowed_next.leaf: 次のトークンへ
+select_name.generate.result -> select_name.name -> select_name.result
