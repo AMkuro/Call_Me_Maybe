@@ -116,27 +116,22 @@ class Model:
 ### 実行順の図(スケルトンの関数名)
 `括弧内` はファイル。`src/` の関数と対応している。
 
-```mermaid
-flowchart TD
-  A["main (__main__)"] --> B["parse_args (cli)"]
-  B --> C["load_functions, load_prompts (loader)"]
-  C --> D["Model() (model_port)"]
-  D --> E["load_vocab (vocab)"]
-  E --> F["build_name_trie (name_trie)"]
-  F --> G{"次の入力はあるか"}
-  G -->|ある| H["process_prompt (pipeline)"]
-  H --> I["select_name<br/>build_name_prompt (prompt)<br/>generate (decoder) + next_tokens, leaf_name (name_trie)"]
-  I --> J["generate_parameters<br/>build_skeleton (skeleton)<br/>generate_value, generate (decoder) + allowed_value_tokens, is_value_complete (values)"]
-  J --> K["validate_call (pipeline)<br/>build_parameters_model (schema)"]
-  K --> L["save_results (writer)"]
-  L --> G
-  H -.->|PromptError: 飛ばす| G
-  G -->|ない| Z{"成功した結果はあるか"}
-  Z -->|ある| M["終了コードを返す"]
-  Z -->|ない| S["save_results: 空配列を保存 (writer)"]
-  S --> M
-  L -.->|OSError| N["原因を標準エラーへ出して非0で終了"]
-  S -.->|OSError| N
+![実行順の図(スケルトンの関数名)](diagrams/skeleton-flow.svg)
+
+[全体図の D2 ソース](diagrams/skeleton-flow.d2)。
+
+#### process_prompt の内部
+
+枠は関数ごとの処理、矢印は実行順を表す。引数生成では、骨組みの各部分と値の各トークンで
+繰り返す箇所を示した。末端関数は未実装で、図は現在の呼び出しと契約を表す。
+
+![process_prompt の内部の実行順](diagrams/process-prompt.svg)
+
+[詳細図の D2 ソース](diagrams/process-prompt.d2)。D2 v0.9.0 で描画を確認した。再生成:
+
+```sh
+d2 --layout elk docs/diagrams/skeleton-flow.d2 docs/diagrams/skeleton-flow.svg
+d2 --layout elk docs/diagrams/process-prompt.d2 docs/diagrams/process-prompt.svg
 ```
 
 ## 5. 未決(人が決める)

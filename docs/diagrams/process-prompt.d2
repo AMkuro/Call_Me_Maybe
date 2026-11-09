@@ -1,0 +1,76 @@
+direction: down
+
+start: "process_prompt (pipeline)\nuser_prompt, functions, model, trie, vocab を受け取る"
+
+select_name: "1. select_name (pipeline): 関数名を選ぶ" {
+  make_prompt: "build_name_prompt (prompt)\nmodel.encode で prompt_ids にする"
+  decode_name: "generate (decoder)\nleaf_name (name_trie) で完了を確認\nnext_tokens (name_trie) で候補を絞る\n1候補は強制、複数なら LLM の logits から選ぶ"
+  find_function: "leaf_name (name_trie) で名前を取得\nfunctions から対応する FunctionDef を返す"
+}
+
+parameters: "2. generate_parameters (pipeline): 引数を生成する" {
+  make_prompt: "build_parameters_prompt (prompt)\nmodel.encode で入力 IDs にする"
+  head: "prompt と名前を json.dumps でエスケープ\nJSON の先頭を text に書く\nmodel.encode した IDs も追加する"
+  skeleton: "build_skeleton (skeleton)\nForced と ValueSlot の列を作る"
+  next_part: 次の部分はあるか {
+    shape: diamond
+  }
+  kind: 部分の種類は何か {
+    shape: diamond
+  }
+  force: "Forced.text を text に追加\nmodel.encode した IDs も追加\nLLM の logits は呼ばない"
+
+  value: "generate_value (pipeline): 値と区切りを生成する" {
+    decode: "model.decode\n生成した IDs を文字列 written にする"
+    complete: "is_value_complete (values)\n値と slot.terminator が揃ったか" {
+      shape: diamond
+    }
+    allowed: "allowed_value_tokens (values)\n型・written・terminator から許可 IDs を求める"
+    step: "generate (decoder) の次の1トークン\n1候補: 強制する\n複数候補: model.logits → choose_token (decoder)\n選んだ ID を生成列へ追加する"
+    result: "生成 IDs を返す\n区切りのカンマまたは閉じ波括弧を含む"
+  }
+  append_value: "model.decode した値と区切りを text に追加\n生成 IDs も入力列へ追加する"
+  result: 組み立てた JSON 全文を返す
+}
+
+validation: "3. validate_call (pipeline): 出力を検証する" {
+  parse: "json.loads\nJSON 全文をパースする"
+  record: "FunctionCall.model_validate (schema)\nprompt・name・parameters を検証する"
+  arguments: "build_parameters_model (schema)\nmodel_validate で選んだ関数の引数を検証・変換する"
+  result: "検証後の parameters.model_dump を使い\n新しい FunctionCall を作る"
+}
+
+return_call: "process_prompt が FunctionCall を返す\nmain が結果へ追加して保存する"
+prompt_error: "PromptError を送出する\nmain が理由を表示し、この1件を飛ばす"
+
+start -> select_name.make_prompt -> select_name.decode_name -> select_name.find_function
+select_name.find_function -> parameters.make_prompt: 選んだ関数 fn
+parameters.make_prompt -> parameters.head -> parameters.skeleton -> parameters.next_part
+parameters.next_part -> parameters.kind: ある
+parameters.kind -> parameters.force: Forced
+parameters.force -> parameters.next_part
+parameters.kind -> parameters.value.decode: ValueSlot
+parameters.value.decode -> parameters.value.complete
+parameters.value.complete -> parameters.value.result: はい
+parameters.value.complete -> parameters.value.allowed: いいえ
+parameters.value.allowed -> parameters.value.step -> parameters.value.decode
+parameters.value.result -> parameters.append_value -> parameters.next_part
+parameters.next_part -> parameters.result: ない
+parameters.result -> validation.parse: JSON 全文
+validation.parse -> validation.record -> validation.arguments -> validation.result -> return_call
+
+select_name.decode_name -> prompt_error: トークン上限を超えた {
+  style.stroke-dash: 3
+}
+parameters.value.step -> prompt_error: トークン上限を超えた {
+  style.stroke-dash: 3
+}
+validation.parse -> prompt_error: JSON が不正 {
+  style.stroke-dash: 3
+}
+validation.record -> prompt_error: 出力の検証に失敗 {
+  style.stroke-dash: 3
+}
+validation.arguments -> prompt_error: 引数の検証に失敗 {
+  style.stroke-dash: 3
+}
