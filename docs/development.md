@@ -49,10 +49,12 @@ checkout:
 .venv/bin/python -m tools.export_submission <directory> [--ref <commit>]
 ```
 
-It fails while a manifest entry matches nothing (today `src/**/*.py`). Open
-point: the repository copy of `llm_sdk/` carries the local float32 change, so
-an export holds that copy, not the distributed one (`make sdk-install` in the
-export restores it). Fly-in also has a release-candidate flow
+It fails while a manifest entry matches nothing (today `src/**/*.py`).
+`llm_sdk.zip` is not submitted (the Subject lists the `llm_sdk/` directory only).
+The repository copy of `llm_sdk/` carries the local float32 change, so before
+the final submission run `make sdk-install` to restore the distributed
+version, commit it, and only then export. Nothing checks this yet.
+Fly-in also has a release-candidate flow
 (`tools/prepare_submission.py`, workflows); it is not adopted here yet.
 
 ## Checks
