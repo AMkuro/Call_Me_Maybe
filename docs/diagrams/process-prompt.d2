@@ -2,18 +2,20 @@
 direction: down
 
 process_prompt: "process_prompt (pipeline)" {
+  label.near: top-center
   style.fill: "#E4E9FE"
   input: "user_prompt・functions・model・trie・vocab を受け取る"
   select_name: "1. select_name (pipeline)\n全関数から呼び出す関数を選ぶ\n詳細: 関数名の選択図"
   generate_parameters: "2. generate_parameters (pipeline)\n選んだ関数の引数を生成する\n詳細: 引数生成図"
 
   validate_call: "3. validate_call (pipeline)" {
+    label.near: top-center
     style.fill: "#E4E9FE"
     parse: "json.loads\n生成した JSON 全文をパースする"
     record: "FunctionCall.model_validate (schema)\nprompt・name・parameters を検証する"
     arguments: "build_parameters_model (schema)\n選んだ関数の引数を検証・型変換する"
     result: "検証後の parameters を持つ\n新しい FunctionCall を作る"
-    invalid: "ValueError を PromptError にして送出する"
+    invalid: "ValueError を PromptError にして\n呼び出し元へ送出する"
   }
   result: "FunctionCall を呼び出し元へ返す"
 }
@@ -40,4 +42,41 @@ process_prompt.generate_parameters -> caller_error: PromptError {
 }
 process_prompt.validate_call.invalid -> caller_error: PromptError {
   style.stroke-dash: 3
+}
+
+# TALA の座標指定で読み順と列位置を固定する。
+process_prompt.validate_call.parse.top: 0
+process_prompt.validate_call.parse.left: 32
+process_prompt.validate_call.record.top: 126
+process_prompt.validate_call.record.left: 14
+process_prompt.validate_call.arguments.top: 252
+process_prompt.validate_call.arguments.left: 0
+process_prompt.validate_call.result.top: 378
+process_prompt.validate_call.result.left: 65
+process_prompt.validate_call.invalid.top: 378
+process_prompt.validate_call.invalid.left: 498
+process_prompt.input.top: 0
+process_prompt.input.left: 0
+process_prompt.select_name.top: 108
+process_prompt.select_name.left: 94
+process_prompt.generate_parameters.top: 252
+process_prompt.generate_parameters.left: 106
+process_prompt.validate_call.top: 396
+process_prompt.validate_call.left: 0
+process_prompt.result.top: 1020
+process_prompt.result.left: 100
+process_prompt.top: 0
+process_prompt.left: 0
+caller_error.top: 1248
+caller_error.left: 615
+vars: {
+  d2-config: {
+    layout-engine: tala
+    pad: 24
+    data: {
+      tala-seeds: [
+        1
+      ]
+    }
+  }
 }

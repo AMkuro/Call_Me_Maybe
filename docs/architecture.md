@@ -153,11 +153,13 @@ class Model:
 
 [引数生成図の D2 ソース](diagrams/generate-parameters.d2)。
 配色は [workflow-style.d2](diagrams/workflow-style.d2) で共有する。
-D2 v0.9.0 で描画を確認した。再生成:
+D2 v0.9.0 で描画を確認した。レイアウトエンジンと余白は各 D2 ソースの末尾に指定する。
+詳細図は TALA の `top`・`left` で行と列を揃え、戻り線で枠が広がるのを防いでいる。
+ラベルを変更したときは、箱と文字の重なりも確認する。再生成:
 
 ```sh
 for diagram in skeleton-flow process-prompt select-name generate-parameters; do
-  d2 --layout dagre "docs/diagrams/$diagram.d2" "docs/diagrams/$diagram.svg"
+  d2 "docs/diagrams/$diagram.d2" "docs/diagrams/$diagram.svg"
 done
 ```
 
