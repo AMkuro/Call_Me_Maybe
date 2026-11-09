@@ -62,7 +62,9 @@
   コメントで明記した。CPU では元から float32 なので、CPU の動作は変わらない。
 - 【設計判断】**最終提出の前に、`make sdk-install` で配布の版へ戻し、コミットしてから書き出す。**
   Subject VIII は "llm_sdk/ directory (copied from the provided package)" で、zip は提出物の一覧にない。
-  `llm_sdk.zip` は提出しない(`submission-files.txt` に入れない)。戻し忘れを検出する確認は、まだない。
+  `llm_sdk.zip` は提出しない(`submission-files.txt` に入れない)。戻し忘れの確認は、仕組みにしない(ユーザー、
+  2026-11-09。手間に見合わない)。`make sdk-install` は提出する `Makefile` に残す(レビュアーが `SDK_ZIP=<zip>` で
+  自分の zip を渡して入れ直せる)。
 - 【設計判断】**`make lint-sdk`、`tools/audit_sdk.py`、`.github/ci/sdk-mypy.ini` は削除した。** SDK は無視する
   (`.flake8` と mypy の設定で除外。決定は変えない)。`.github/ci/sdk-baseline.json` は
   `tools/campus_survey.py` が読むので残したが、SDK の変更後は一致しない。
