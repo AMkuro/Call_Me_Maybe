@@ -34,6 +34,26 @@ new checks. Report permissions
 or settings errors; do not weaken protection. Existing enrollment is not proof
 of completion: verify state=MERGED, mergedAt and mergeCommit on GitHub.
 
+# Principles
+
+The human owner requires these five. They decide how to choose between
+otherwise equal options.
+
+1. Understandability: the owner must be able to understand the mechanism,
+   the design and the meaning of the code. Prefer what can be explained;
+   explain any unfamiliar construct when introducing it.
+2. Explainability: for each important decision, be able to say why, with
+   evidence. Record it (ADR) and keep facts apart from guesses.
+3. Verifiability: check AI output and implementations by an independent means
+   (run it, measure it, diff it). Say what was not verified.
+4. Responsibility and authority: the agent may do the work, but the human
+   makes important decisions and holds final responsibility. The agent
+   proposes options with a recommendation and never marks a decision as made.
+5. Rational design choice: neither simplicity nor sophistication is a goal.
+   Choose the method that fits the requirements, performance, maintainability
+   and the cost of understanding it. Do not add variables, comments,
+   mechanisms or checks that nothing needs.
+
 # Design and implementation process
 
 Do not start implementing from a vague request. Design first.
