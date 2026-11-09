@@ -90,6 +90,27 @@ tests/          fake モデル(固定 logits)を使うテスト。モデルの�
    5. 組み立てた全文を JSON としてパースし、`schema` の動的モデルで検証する。
 6. `writer` が 1 件ずつ保存する。失敗した件は飛ばし、標準エラーに理由を出し、最後に終了コードを非 0 にする。
 
+### 実行順の図(スケルトンの関数名)
+`括弧内` はファイル。`feat/skeleton` の `src/` の関数と対応している。
+
+```mermaid
+flowchart TD
+  A["main (__main__)"] --> B["parse_args (cli)"]
+  B --> C["load_functions, load_prompts (loader)"]
+  C --> D["load_model (model_port)"]
+  D --> E["load_vocab (vocab)"]
+  E --> F["build_name_trie (name_trie)"]
+  F --> G{"次の入力はあるか"}
+  G -->|ある| H["process_prompt (pipeline)"]
+  H --> I["select_name<br/>build_name_prompt (prompt)<br/>generate (decoder) + next_tokens, leaf_name (name_trie)"]
+  I --> J["generate_parameters<br/>build_skeleton (skeleton)<br/>generate (decoder) + allowed_value_tokens (values)"]
+  J --> K["validate_call (pipeline)<br/>build_parameters_model (schema)"]
+  K --> G
+  H -.->|PromptError: 飛ばす| G
+  G -->|ない| L["save_results (writer)"]
+  L --> M["終了コードを返す"]
+```
+
 ## 5. 未決(人が決める)
 - 文字列の値の細部(ADR-0003)。実装後に決める。
 - モデルの確認の細部(ADR-0007)。
