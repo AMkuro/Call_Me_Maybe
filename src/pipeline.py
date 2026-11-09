@@ -1,6 +1,6 @@
 """Handle one prompt: name -> skeleton -> values -> check."""
 
-from .model_port import ModelPort
+from .model_port import Model
 from .name_trie import NameTrie
 from .schema import FunctionCall, FunctionDef
 
@@ -8,7 +8,7 @@ from .schema import FunctionCall, FunctionDef
 def select_name(
     user_prompt: str,
     functions: list[FunctionDef],
-    model: ModelPort,
+    model: Model,
     trie: NameTrie,
 ) -> FunctionDef:
     """Let the model choose a function, limited by the name tree."""
@@ -18,12 +18,16 @@ def select_name(
 def generate_parameters(
     user_prompt: str,
     fn: FunctionDef,
-    model: ModelPort,
+    model: Model,
     vocab: dict[int, str],
 ) -> str:
-    """Generate the text after the name, forcing the skeleton.
+    """Generate the parameters, forcing the skeleton.
 
     Returns the full JSON text of the record.
+
+    Judgment: this function builds the head ``{"prompt": ..., "name": "...``
+    itself and adds the rest from the skeleton and the generated values.
+    Open: should the skeleton include the head?
     """
     raise NotImplementedError
 
@@ -36,7 +40,7 @@ def validate_call(text: str, fn: FunctionDef) -> FunctionCall:
 def process_prompt(
     user_prompt: str,
     functions: list[FunctionDef],
-    model: ModelPort,
+    model: Model,
     trie: NameTrie,
     vocab: dict[int, str],
 ) -> FunctionCall:

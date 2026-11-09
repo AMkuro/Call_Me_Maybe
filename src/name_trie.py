@@ -6,7 +6,13 @@ from pydantic import BaseModel
 
 
 class NameTrie(BaseModel):
-    """A node. ``name`` is set on a leaf: the function this path spells."""
+    """A node. ``name`` is set on a leaf: the function this path spells.
+
+    Judgment: a leaf (a node with no children) carries the name, and
+    leaf_name tells whether a path reached a leaf. It is a pydantic model
+    because it holds data and the Subject says classes use pydantic for
+    validation.
+    """
 
     children: dict[int, "NameTrie"] = {}
     name: str | None = None
@@ -15,11 +21,12 @@ class NameTrie(BaseModel):
 def build_name_trie(
     names: Sequence[str], encode: Callable[[str], list[int]]
 ) -> NameTrie:
-    """Build the tree from the token ids of each name.
+    """Build the tree from the token ids of each name plus a terminator.
 
-    Raises StartupError when one name's tokens are a prefix of another's,
-    or when a name's tokens are not a prefix of the tokens of the name
-    followed by the closing quote and comma.
+    The terminator ends every path, so a name that is a prefix of another
+    name is not a collision: the model chooses to end or to continue.
+    Names are unique and non-empty (checked by the loader).
+    Open: which terminator to use (ADR-0011).
     """
     raise NotImplementedError
 

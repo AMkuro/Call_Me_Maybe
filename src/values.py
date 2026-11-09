@@ -6,7 +6,12 @@ from .schema import ParamType
 def allowed_value_tokens(
     vocab: dict[int, str], param_type: ParamType, written: str
 ) -> list[int]:
-    """Return the token ids that keep ``written`` a valid value prefix."""
+    """Return the token ids that keep ``written`` a valid value prefix.
+
+    Judgment: takes the text written so far (``written``), because the
+    next token of a number depends on the digits already written. The
+    details for strings are open (ADR-0003).
+    """
     raise NotImplementedError
 
 

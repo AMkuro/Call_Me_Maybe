@@ -66,9 +66,11 @@ Do not start implementing from a vague request. Design first.
    decision, and what to revisit. The human decides. The agent proposes options
    with a recommendation and never marks a decision as made.
 3. Start implementing only after the human approves the design.
-4. Write tests first. Put the model behind a small port so tests can use a
-   fake model with fixed logits, and check the constraint properties (every
-   output parses and matches the schema) without loading Qwen3.
+4. Write tests first. Test the pure parts (name tree, masks, skeleton,
+   validation) directly with data, the decode loop with a function that
+   returns fixed logits, and the end-to-end properties (every output parses
+   and matches the schema) on the real model. Do not add an abstraction
+   only to make tests possible.
 5. Implement the approved design in one batch, not unit by unit: this keeps
    the AI's context whole and avoids reworking changes that were already
    audited. Run the checks (lint, tests) and a reviewer once at the end and
