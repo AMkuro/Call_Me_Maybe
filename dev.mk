@@ -12,7 +12,7 @@ ROCM_INDEX ?= https://download.pytorch.org/whl/rocm7.2
 
 GPU_UV = UV_PROJECT_ENVIRONMENT=$(GPU_ENV) $(UV)
 
-.PHONY: dev-help gpu-install gpu-run gpu-debug subject subject-audit
+.PHONY: dev-help gpu-install check-gpu-env gpu-run gpu-debug subject subject-audit
 
 dev-help:
 	@echo "Development targets (dev.mk):"
@@ -34,12 +34,14 @@ gpu-install:
 	$(UV) pip install --python $(GPU_ENV)/bin/python accelerate; \
 	echo "Install to virtualenv $(GPU_ENV) Successful."
 
-gpu-run:
-	$(call require_env,$(GPU_ENV),gpu-install)
+check-gpu-env:
+	@test -x $(GPU_ENV)/bin/python && $(GPU_ENV)/bin/python -c 'import numpy, pydantic, torch' 2>/dev/null \
+		|| { echo "Error: no valid virtualenv found ($(GPU_ENV)). Run 'make gpu-install' first." >&2; exit 1; }
+
+gpu-run: check-gpu-env
 	$(GPU_UV) run --no-sync python -m src $(FLAGS)
 
-gpu-debug:
-	$(call require_env,$(GPU_ENV),gpu-install)
+gpu-debug: check-gpu-env
 	$(GPU_UV) run --no-sync python -m pdb -m src $(FLAGS)
 
 subject:
