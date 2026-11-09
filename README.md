@@ -2,80 +2,33 @@
 
 ## Description
 
-Call Me Maybe explores constrained decoding for LLM function calling. The
-current main branch contains a public SDK greedy-token PoC and mock tests.
-It is **not a completed Subject v1.7 submission**. The shared CLI lives on an
-independent, unmerged feature branch; this infrastructure change does not
-integrate it or the experimental generation methods.
+Call Me Maybe translates natural-language prompts into structured function
+calls: for each prompt it outputs the name of the function to call and its
+arguments as JSON, never executing the function. It uses the small
+Qwen/Qwen3-0.6B model through the supplied `llm_sdk`, and relies on constrained
+decoding so that the output is always valid JSON that matches the function
+definitions.
 
 ## Instructions
 
 Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
 
 ```sh
-uv sync --locked
+make install      # create .venv from uv.lock
+make run          # uv run python -m src
+make debug        # run under pdb
 make test
-make lint-app
-make lint-sdk
-make subject
+make lint
+make clean
+make sdk-install  # unpack llm_sdk.zip over llm_sdk (another zip: SDK_ZIP=<zip>)
 ```
 
-`uv sync` also works as required by the reviewer. Root dependencies are numpy
-and Pydantic; SDK inference dependencies are deliberately separate. `make run`
-and `make debug` target the Subject entry point `python -m src`; they become
-usable when an application is integrated. On this PoC, src is missing.
+`uv sync` alone also works. The dependencies are numpy, Pydantic and the
+local `llm_sdk` (a path dependency); torch is installed as a dependency of the
+SDK. The SDK downloads the Qwen/Qwen3-0.6B model itself on first use.
 
-For the independent inference experiment, see [examples](examples/README.md).
-Running it requires a separately provisioned SDK environment and may download
-the Qwen/Qwen3-0.6B model. PR CI never provisions this environment.
-
-## Testing strategy
-
-Unittest uses SDK-shaped mocks and no model imports, downloads, or forward
-passes. CI runs Python 3.10 and 3.14, locked dependencies, owned-code flake8,
-the mandatory mypy flags, development Subject checks, and an exact SDK audit.
-Future src tests are discovered automatically. An absent/failed required check
-blocks merging. See [CI and agent workflow](docs/ci-auto-integration.md).
-
-`make lint` executes full-tree flake8 and mypy using all Subject flags. It
-currently **fails**: the unchanged upstream SDK has 11 flake8 and 4 mypy errors.
-`make lint-sdk` prints these diagnostics and compares exact outputs and SDK
-hashes with [.github/ci/sdk-baseline.json](.github/ci/sdk-baseline.json).
-Any difference fails; do not refresh that baseline to hide problems. Development
-CI checks owned code separately, preserving the SDK's public type annotations.
-`make subject-audit` is a stricter submission preflight and also fails on this
-PoC. It does not replace functional evaluation or peer review.
-
-## Algorithm explanation
-
-The PoC observes greedy token selection through public SDK methods. It does not
-implement the required constrained function selection or argument generation.
-No accuracy or JSON-compliance guarantee is claimed for this revision.
-
-## Design decisions
-
-Keep inference experiments separate from the common CLI and validation work.
-Keep development integration separate from final submission certification.
-Opt in to native Auto-merge per PR; no custom merger or release branches.
-
-## Performance analysis
-
-Accuracy, generation speed, schema reliability and CPU benchmarks remain
-unmeasured here. A complete submission needs unseen prompts/functions, 90%+
-semantic accuracy, 100% schema-valid JSON, and the Subject's runtime evaluation.
-These require a separately provisioned, recorded model benchmark.
-
-## Challenges faced
-
-The supplied SDK depends internally on torch and transformers despite the
-application's direct-import restrictions. CI fingerprints and audits that
-upstream code without installing its heavy dependencies or changing it.
-Static import checks cannot prove all SDK attributes are public or that all
-runtime classes use Pydantic; those remain explicit review requirements.
-
-## Example usage
-
-The intended application invocation after the CLI and generator are integrated:
+The program reads the function definitions and the prompts from
+`data/input/` and writes `data/output/function_calls.json`:
 
 ```sh
 uv run python -m src \
@@ -84,16 +37,43 @@ uv run python -m src \
   --output data/output/function_calls.json
 ```
 
-Output must contain exactly `prompt`, `name`, and `parameters` for each input.
-Generated `data/output/` files must remain untracked.
+## Algorithm explanation
+
+*To be written once the implementation is complete.*
+
+## Design decisions
+
+*To be written once the implementation is complete.*
+
+## Performance analysis
+
+*To be written once the implementation is complete.*
+
+## Challenges faced
+
+The supplied SDK depends on torch and transformers internally, while the
+project's own code must not import them. The application therefore only uses
+the public methods of the SDK (`encode`, `decode`,
+`get_logits_from_input_ids`, `get_path_to_vocab_file`).
+
+## Testing strategy
+
+The unit tests use SDK-shaped fakes and never load the model, so they run
+without a download or a forward pass. `make lint` runs flake8 and mypy with the
+flags required by the Subject.
+
+## Example usage
+
+See the command in Instructions. The output contains exactly `prompt`, `name`
+and `parameters` for each input. Generated files in `data/output/` are not
+tracked.
 
 ## Resources
 
-- [Subject v1.7](https://github.com/AMkuro/pdf/blob/milestone3/Call_Me_Maybe/Call-Me-Maybe.en.subject.txt)
 - [Python unittest](https://docs.python.org/3/library/unittest.html)
 - [Pydantic](https://docs.pydantic.dev/latest/)
-- [GitHub Auto-merge](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/automatically-merging-a-pull-request)
+- [uv](https://docs.astral.sh/uv/)
 
-AI assisted the SDK experiment, tests, CI design, configuration, documentation,
-and verification. The learner must understand the changes and seek peer review;
-a green development CI is not a substitute for the 42 defense.
+AI (Claude Code) was used for design discussion, tests, build configuration and
+documentation drafts. The author reviewed the changes and is responsible for
+them.

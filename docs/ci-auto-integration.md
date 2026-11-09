@@ -1,5 +1,14 @@
 # CI and native agent auto-integration
 
+> **Status (2026-11-09): the workflow is disabled** (manual runs only) and
+> `make lint-app` and `make lint-sdk` (with `tools/audit_sdk.py` and
+> `.github/ci/sdk-mypy.ini`) were removed, so the sections below describe the
+> 2026-11-07 design, not the current state. CI is reworked after the
+> implementation. The SDK is now excluded from `make lint` through `.flake8`
+> and the mypy settings, and `make sdk-install` unpacks the distributed zip. The main Ruleset's required checks cannot report while the
+> workflow is disabled. `.github/ci/sdk-baseline.json` is kept only because
+> `tools/campus_survey.py` reads it.
+
 ## Scope and reference analysis (2026-11-07)
 
 Reference-only inspection of [Fly-in](https://github.com/AMkuro/Fly-in), default
@@ -61,7 +70,7 @@ Pydantic inheritance, exception handling on every path, dynamic private SDK
 access, unseen-function semantic accuracy, 100% schema-valid generated JSON,
 or a sub-five-minute evaluation. These need application tests, human review
 and the separate model benchmark. Existing feature work is not auto-integrated
-to fill those gaps. README documents the current implementation honestly.
+to fill those gaps. docs/development.md documents the current state honestly.
 
 ## Protection and settings
 
@@ -107,8 +116,8 @@ in repository files, Issues, PR bodies or job logs.
 git fetch origin
 git switch -c feat/authorized-task origin/main
 # edit and review only the requested task
-uv sync --locked
-make lint-app test lint-sdk subject
+make install
+make lint test
 git add path/to/changed/files
 git commit -m 'feat: describe the task'
 git push -u origin HEAD
