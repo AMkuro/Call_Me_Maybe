@@ -20,7 +20,7 @@ make debug        # run under pdb
 make test
 make lint
 make clean
-make sdk-install  # unpack llm_sdk.zip over llm_sdk (another zip: SDK_ZIP=<zip>)
+make sdk-install  # unpack an SDK zip over llm_sdk (SDK_ZIP=<zip>, default llm_sdk.zip)
 ```
 
 `uv sync` alone also works. The dependencies are numpy, Pydantic and the

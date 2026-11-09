@@ -1,0 +1,23 @@
+Submission checklist (development repository only; not submitted).
+Not automated on purpose: run it by hand before the final export.
+
+1. Restore the distributed SDK (the repository copy carries a local float32
+   change; see docs/development.md):
+
+     make sdk-install
+
+2. Confirm llm_sdk/ equals the zip. Each command must exit 0 and print nothing:
+
+     unzip -p llm_sdk.zip llm_sdk/llm_sdk/__init__.py | diff -q - llm_sdk/llm_sdk/__init__.py
+     unzip -p llm_sdk.zip llm_sdk/pyproject.toml | diff -q - llm_sdk/pyproject.toml
+     unzip -p llm_sdk.zip llm_sdk/uv.lock | diff -q - llm_sdk/uv.lock
+
+   (While the local float32 change is in place, the first command reports a
+   difference: that is expected during development, not at export time.)
+
+3. Commit the restored llm_sdk/, then export that commit:
+
+     .venv/bin/python -m tools.export_submission <directory> --ref <commit>
+
+   The export fails if a line of submission-files.txt matches nothing.
+   llm_sdk.zip is not exported: the Subject lists the llm_sdk/ directory only.

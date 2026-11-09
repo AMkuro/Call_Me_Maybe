@@ -40,7 +40,7 @@
 
 ### 追加要件（IV.3.1）【明文】
 
-- すべてのクラスは pydantic で検証する。
+- すべてのクラスは、検証に pydantic を使う(原文: "All classes must use pydantic for validation.")。【解釈】「pydantic のモデルであれ」とまでは書いていない。
 - 使ってよいパッケージ: `numpy`、`json`。
 - **dspy およびそれに類するパッケージは全面禁止。pytorch、huggingface パッケージ、transformers、outlines も含む。**
 - モデルは `Qwen/Qwen3-0.6B`（既定）。他モデルは「Qwen3-0.6B でも動く」場合に限り可。
