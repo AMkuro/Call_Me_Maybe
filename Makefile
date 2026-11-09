@@ -1,6 +1,5 @@
 UV ?= uv
 FLAGS ?=
-MYPY_FLAGS := --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 VENV ?= .venv
 SDK_ZIP ?= llm_sdk.zip
 
@@ -53,7 +52,7 @@ test: check-env
 
 lint: check-env
 	@result=0; $(UV) run --no-sync flake8 . || result=1; \
-	$(UV) run --no-sync mypy . $(MYPY_FLAGS) || result=1; \
+	$(UV) run --no-sync mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs || result=1; \
 	exit $$result
 
 lint-strict: check-env
