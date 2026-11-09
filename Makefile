@@ -2,7 +2,6 @@ UV ?= uv
 FLAGS ?=
 MYPY_FLAGS := --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 
-# What `uv sync` builds and what the reviewers use.
 VENV ?= .venv
 SDK_ZIP ?= llm_sdk.zip
 
@@ -36,8 +35,6 @@ install:
 	$(UV) sync --locked --reinstall-package llm-sdk; \
 	echo "Install to virtualenv $(VENV) Successful."
 
-# Replace llm_sdk with the contents of a zip (default: the distributed one).
-# Another zip: `make sdk-install SDK_ZIP=path/to/other.zip` (same llm_sdk/ layout).
 sdk-install:
 	test -f $(SDK_ZIP) || { echo "Error: $(SDK_ZIP) not found." >&2; exit 1; }
 	rm -rf llm_sdk
@@ -65,7 +62,8 @@ test:
 	@if test -d tests; then $(UV) run --no-sync python -m unittest discover -s tests -v; \
 	else echo "No tests: this checkout has no tests/ directory (tests are not part of the submission)."; fi
 
-# Subject IV.2 commands, verbatim. llm_sdk is excluded by .flake8 and pyproject.toml.
+# Subject IV.2 commands (the mypy flags are kept in MYPY_FLAGS). llm_sdk is excluded
+# by .flake8 and pyproject.toml.
 # Run both even if flake8 fails, and preserve a failure status.
 lint:
 	$(call require_env,$(VENV),install)
@@ -79,5 +77,4 @@ lint-strict:
 	$(UV) run --no-sync mypy . --strict || result=1; \
 	exit $$result
 
-# Development-only targets live in dev.mk, which the submission does not contain.
 -include dev.mk
