@@ -8,7 +8,9 @@ from .schema import FunctionCall
 def save_results(path: Path, calls: list[FunctionCall]) -> None:
     """Write ``calls`` as a JSON array, replacing the file atomically.
 
-    Called after every prompt with all results so far.
+    Called after every successful prompt with all results so far, or with
+    an empty list when the run produces no results. Raises OSError on a
+    failed write; main reports it and stops (ADR-0012).
 
     Effect: writes a file.
 

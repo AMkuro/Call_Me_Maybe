@@ -35,15 +35,23 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     calls: list[FunctionCall] = []
     skipped = False
-    for user_prompt in prompts:
-        try:
-            call = process_prompt(user_prompt, functions, model, trie, vocab)
-        except PromptError as e:
-            print(f"skipped: {e}", file=sys.stderr)
-            skipped = True
-            continue
-        calls.append(call)
-        save_results(args.output, calls)
+    try:
+        for user_prompt in prompts:
+            try:
+                call = process_prompt(
+                    user_prompt, functions, model, trie, vocab,
+                )
+            except PromptError as e:
+                print(f"skipped: {e}", file=sys.stderr)
+                skipped = True
+                continue
+            calls.append(call)
+            save_results(args.output, calls)
+        if not calls:
+            save_results(args.output, calls)
+    except OSError as e:
+        print(f"cannot save output to {args.output}: {e}", file=sys.stderr)
+        return 1
     return 1 if skipped else 0
 
 

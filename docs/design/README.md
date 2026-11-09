@@ -27,6 +27,7 @@
 | [0009](adr/0009-environment-and-config.md) | 環境と設定 | 決定(未確定の細部あり) |
 | [0010](adr/0010-measurement-policy.md) | 測定の方針 | 決定 |
 | [0011](adr/0011-name-trie-and-output-path.md) | 関数名の木、出力先、モデルのラッパーの形 | 決定(サンプル 5 名のみ確認) |
+| [0012](adr/0012-skeleton-review-corrections.md) | 値の終了、JSON の組み立て、結果の保存 | 修正方針をユーザー承認済み(2026-11-09) |
 
 ## 未解決の一覧
 1. 関数が増えたときの関数選択の精度(ADR-0001)。関数セットを変えたテストで測る。

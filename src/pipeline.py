@@ -46,16 +46,16 @@ def generate_value(
     model: Model,
     vocab: dict[int, str],
 ) -> list[int]:
-    """Generate the tokens of one parameter value.
+    """Generate one parameter value and its following JSON delimiter.
 
     Effect: uses the model.
     """
 
     def allowed_next(generated: list[int]) -> list[int] | None:
         written = model.decode(generated)
-        if is_value_complete(written, slot.type):
+        if is_value_complete(written, slot.type, slot.terminator):
             return None
-        return allowed_value_tokens(vocab, slot.type, written)
+        return allowed_value_tokens(vocab, slot.type, written, slot.terminator)
 
     return generate(model.logits, ids, allowed_next, MAX_VALUE_STEPS)
 
@@ -72,12 +72,15 @@ def generate_parameters(
 
     Effect: uses the model.
 
-    Judgment: this function builds the head ``{"prompt": ..., "name": "...``
+    Judgment: this function builds the head ``{"prompt": ..., "name": "..."``
     itself and adds the rest from the skeleton and the generated values.
     Open: should the skeleton include the head?
     """
     ids = model.encode(build_parameters_prompt(user_prompt, fn))
-    text = f'{{"prompt": {json.dumps(user_prompt)}, "name": "{fn.name}'
+    text = (
+        f'{{"prompt": {json.dumps(user_prompt)}, '
+        f'"name": {json.dumps(fn.name)}'
+    )
     ids = ids + model.encode(text)
     for part in build_skeleton(fn):
         if isinstance(part, Forced):
@@ -94,10 +97,12 @@ def validate_call(text: str, fn: FunctionDef) -> FunctionCall:
     """Parse ``text`` as JSON and check it with the dynamic model."""
     try:
         call = FunctionCall.model_validate(json.loads(text))
-        build_parameters_model(fn).model_validate(call.parameters)
+        parameters = build_parameters_model(fn).model_validate(call.parameters)
     except ValueError as e:  # JSON errors and pydantic's are ValueErrors
         raise PromptError(f"invalid output: {e}") from e
-    return call
+    return FunctionCall(
+        prompt=call.prompt, name=call.name, parameters=parameters.model_dump(),
+    )
 
 
 def process_prompt(
