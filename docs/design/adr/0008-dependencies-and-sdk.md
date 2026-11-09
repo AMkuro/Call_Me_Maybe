@@ -1,6 +1,7 @@
 # ADR-0008: 依存関係と配布 SDK
 
-状態: 決定(ユーザー、2026-11-08)。リスクあり。
+状態: 決定(ユーザー、2026-11-08)。リスクあり。**2026-11-09 に更新あり(末尾の「2026-11-09 の更新」。
+置き換わった記述は、その節が優先する)。**
 
 ## 背景
 - 【明文】レビュアーと moulinette は `uv sync` だけを実行する(IV.3.1)。
@@ -29,7 +30,7 @@
   - `llm_sdk/pyproject.toml`: `5eaf932b8c808b2626cd375c3191d44c97b7b49ea8cb846099eafd763f9356a1`
   - `llm_sdk/uv.lock`: `571e86020172c9c2e6e9c9ed7bffa0c396593c654acbedd3e6bbdecce0d8980c`
 - 【設計判断】`make sdk-install` で zip を展開し、sha256 を照合して、評価用に入れ直せるようにする。
-  このターゲットで入れた SDK のパスのときだけ、読み込む。
+  このターゲットで入れた SDK のパスのときだけ、読み込む。**(2026-11-09: sha256 の照合はやめた。更新節を参照)**
 - 【設計判断】SDK は外部のものとして、flake8 と mypy の対象から外す。外部のものなので、その違反は
   このプロジェクトの違反にならない、と決める。
 - 【解釈】Subject は、配布 SDK が flake8/mypy を通る必要があるとは書いていない。除外してよいとも書いていない。
@@ -47,3 +48,27 @@
 - 評価が、SDK を含めた lint を求めるとき。
 - クリーンな環境で、`uv sync` の後に `llm_sdk` を import できないと分かったとき
   (リポジトリ直下の `llm_sdk/` ディレクトリが、内側のパッケージより先に拾われる疑い。未検証)。
+
+## 2026-11-09 の更新(ユーザーの決定。#41 で実施)
+- 【設計判断】**依存の書き方**: `dependencies = numpy, pydantic, llm-sdk`(パス依存)。torch は
+  `project.dependencies` に書かず、依存グループ `cpu`(既定のグループ)に書き、`tool.uv.sources` で
+  PyTorch の CPU 専用インデックス(`explicit`)に向ける。`uv sync` の既定が CPU 版になる。背景の
+  「依存は `numpy` と `pydantic` だけ」は、当時の測定。
+- 【設計判断】**sha256 の照合をやめた。** `make sdk-install` は、zip を展開するだけ(`SDK_ZIP=<zip>` で別の
+  zip も渡せる。既定は `llm_sdk.zip`)。展開した結果を、その場で作ったハッシュと照合しても何も確かめられない。
+  zip の破損は `unzip` が検出し、改ざんは git の差分に出る。`llm_sdk.sha256` は削除した。
+- 【設計判断】**開発用の局所変更を 1 つ入れた**: リポジトリの `llm_sdk/llm_sdk/__init__.py` で、全デバイスの
+  dtype を float32 にした(元は cuda/mps で float16)。GPU でも CPU(レビュー機)と同じ数値にするため。
+  コメントで明記した。CPU では元から float32 なので、CPU の動作は変わらない。
+- 【設計判断】**最終提出の前に、`make sdk-install` で配布の版へ戻し、コミットしてから書き出す。**
+  Subject VIII は "llm_sdk/ directory (copied from the provided package)" で、zip は提出物の一覧にない。
+  `llm_sdk.zip` は提出しない(`submission-files.txt` に入れない)。戻し忘れを検出する確認は、まだない。
+- 【設計判断】**`make lint-sdk`、`tools/audit_sdk.py`、`.github/ci/sdk-mypy.ini` は削除した。** SDK は無視する
+  (`.flake8` と mypy の設定で除外。決定は変えない)。`.github/ci/sdk-baseline.json` は
+  `tools/campus_survey.py` が読むので残したが、SDK の変更後は一致しない。
+- 【設計判断】AGENTS.md の「Never edit the supplied llm_sdk」は、上の局所変更の例外つきに直した。
+- 【測定】uv は、ローカルの SDK のソース変更を拾わず、古いキャッシュのビルドを使い回す(float16 が残った)。
+  `uv sync --locked --reinstall-package llm-sdk` で回避した(`make install`)。
+- 【測定】`uv.lock` の macOS 用 torch(2.14.1 と 2.15.0)の wheel は `macosx_14_0_arm64` だけ。Intel Mac
+  では `uv sync` が通らない(Codex の指摘、ロックで確認)。ロックは校舎 PC で作り直す方針。手元の Mac の
+  アーキテクチャは未確認。

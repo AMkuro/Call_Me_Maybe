@@ -1,6 +1,7 @@
 # ADR-0009: 環境と設定
 
-状態: 決定(ユーザー、2026-11-08)。未確定の細部あり。
+状態: 決定(ユーザー、2026-11-08)。未確定の細部あり。**2026-11-09 に更新あり(末尾の
+「2026-11-09 の更新」。置き換わった記述は、その節が優先する)。**
 
 ## 背景
 - 開発環境とレビュー環境は違う。モデルの保存場所は、開発機もレビュー機も `~/goinfre` か `~/sgoinfre`
@@ -16,7 +17,7 @@
 - 【設計判断】モデルの保存場所は、環境変数を見て探しに行く。探す順序の案: 明示の指定 → `~/sgoinfre` →
   `~/goinfre` → Hugging Face の既定。
 - 【設計判断】時間の評価は CPU で行う。GPU は後で、既存の SDK 環境に `accelerate` を足して使う。
-  SDK 自体は変えない。
+  SDK 自体は変えない。**(2026-11-09: dtype を float32 にする局所変更を 1 つ入れた。更新節を参照)**
 - CPU 版と GPU 版の選び方(ユーザーの質問、2026-11-08):
   - 【測定】`uv sync` には、CPU/GPU を自動で判定するオプションがない(`uv sync --help` で確認)。
   - 【設計判断】レビュー機は `uv sync` だけを実行するので、`pyproject.toml` の既定は CPU 版にする。
@@ -33,3 +34,30 @@
 
 ## 見直しの条件
 - レビュー機のモデル保存場所が、想定と違うと分かったとき。
+
+## 2026-11-09 の更新(ユーザーの決定。#41 で実施)
+- 【設計判断】**CPU/GPU の選び方は決まった**(上の「案」は採らない)。`uv sync` の既定は、依存グループ
+  `cpu` による CPU 版。GPU は、開発用の別環境 `.venv-gpu`(`make gpu-install`、`make gpu-run`、
+  `make gpu-debug`)だけで使う。`/dev/kfd` があれば ROCm 版の torch を重ね、`accelerate` を入れる。
+  Make での自動判定は、CPU 側には入れない。macOS(MPS)には追加の手順がない。
+- 【測定】cuda で `device_map="auto"` を使うには `accelerate` が要る(入れないと ValueError)。
+  ROCm 版 torch 2.14.1+rocm7.2 で、GPU(Radeon 8060S)での推論が動いた。8 ステップで 0.42〜0.55 秒、
+  CPU は 1.2 秒。参考値で、時間の測定ではない(ADR-0010)。MacBook(MPS)は未確認。
+- 【設計判断】**`make install` は、`.venv` を消して、`uv.lock` どおりに作り直す**(環境が壊れていたら
+  入れ直す)。`run`、`debug`、`test`、`lint` は、環境(torch を含む)を確認し、壊れていたら
+  `make install` を促して止まる。
+- 【設計判断】**`Makefile` は提出物なので、提出に要る物だけにする。** 開発専用のターゲット(`gpu-*`、
+  `subject`、`subject-audit`、`.local.mk` の読み込み)は `dev.mk` に置く。`dev.mk` は提出しない。
+  `.local.mk`(上の設定ファイル)は、`dev.mk` から読み込む(Git 管理外のまま)。
+- 【設計判断】**提出する物は `submission-files.txt`(許可リスト)で決める**(Fly-in の方式)。
+  `tools/export_submission.py` が、固定した 1 コミットから許可リストに合う物だけを書き出す。
+  未一致の項目があると失敗する(今は `src/**/*.py`)。Fly-in のリリース候補の流れ(`prepare_submission.py`
+  とワークフロー)は、まだ導入していない。
+- 【設計判断】**README は提出物。** PoC、CI、GPU 環境、SDK の変更、ブランチ運用などの開発用の内容は
+  README に書かず、`docs/development.md` に置く。提出版では `docs/development.md` を含めない。
+  アルゴリズム、設計判断、性能の節は、実装の完了後に書く。
+- 【設計判断】**CI は無効にした**(手動実行のみ)。CI の再設計は、実装のあと。main の Ruleset の必須
+  チェック 3 つは、ワークフローが走らないので報告されない(設定は触っていない)。
+- 【設計判断】ブランチは、最新の統合ブランチ(今は `origin/develop`)から切り、PR もそこへ向ける。
+- 未確定: 手元の Mac が Intel か。Intel なら、`pyproject.toml` に `sys_platform`・`platform_machine` 付きの
+  制約が要る(ADR-0008 の更新を参照)。校舎 PC のアーキテクチャも未確認。
