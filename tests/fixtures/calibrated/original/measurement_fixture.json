@@ -1,0 +1,224 @@
+{
+  "functions": [
+    {
+      "name": "fn_add_numbers",
+      "description": "Add two numbers together and return their sum.",
+      "parameters": {
+        "a": {
+          "type": "number"
+        },
+        "b": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "fn_greet",
+      "description": "Generate a greeting message for a person by name.",
+      "parameters": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_reverse_string",
+      "description": "Reverse a string and return the reversed result.",
+      "parameters": {
+        "s": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_get_square_root",
+      "description": "Calculate the square root of a number.",
+      "parameters": {
+        "a": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "fn_substitute_string_with_regex",
+      "description": "Replace all occurrences matching a regex pattern in a string.",
+      "parameters": {
+        "source_string": {
+          "type": "string"
+        },
+        "regex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "original-01",
+      "prompt": "What do you get when you add 14 and 9?",
+      "expected_name": "fn_add_numbers",
+      "expected_parameters": {
+        "a": 14,
+        "b": 9
+      },
+      "baseline_slot": 1
+    },
+    {
+      "id": "original-02",
+      "prompt": "Add 120 to 35.",
+      "expected_name": "fn_add_numbers",
+      "expected_parameters": {
+        "a": 120,
+        "b": 35
+      },
+      "baseline_slot": 2
+    },
+    {
+      "id": "original-03",
+      "prompt": "Say hello to Mia.",
+      "expected_name": "fn_greet",
+      "expected_parameters": {
+        "name": "Mia"
+      },
+      "baseline_slot": 3
+    },
+    {
+      "id": "original-04",
+      "prompt": "Greet Marcus, please.",
+      "expected_name": "fn_greet",
+      "expected_parameters": {
+        "name": "Marcus"
+      },
+      "baseline_slot": 4
+    },
+    {
+      "id": "original-05",
+      "prompt": "Reverse the text 'garden'.",
+      "expected_name": "fn_reverse_string",
+      "expected_parameters": {
+        "s": "garden"
+      },
+      "baseline_slot": 5
+    },
+    {
+      "id": "original-06",
+      "prompt": "Write the string 'window' backwards.",
+      "expected_name": "fn_reverse_string",
+      "expected_parameters": {
+        "s": "window"
+      },
+      "baseline_slot": 6
+    },
+    {
+      "id": "original-07",
+      "prompt": "What is the square root of 81?",
+      "expected_name": "fn_get_square_root",
+      "expected_parameters": {
+        "a": 81
+      },
+      "baseline_slot": 7
+    },
+    {
+      "id": "original-08",
+      "prompt": "Find the square root of 225.",
+      "expected_name": "fn_get_square_root",
+      "expected_parameters": {
+        "a": 225
+      },
+      "baseline_slot": 8
+    },
+    {
+      "id": "original-09",
+      "prompt": "Replace every number in 'Apt 12, floor 3' with 'X'.",
+      "expected_name": "fn_substitute_string_with_regex",
+      "expected_parameters": {
+        "source_string": "Apt 12, floor 3",
+        "regex": "\\d+",
+        "replacement": "X"
+      },
+      "regex_checks": [
+        {
+          "input": "Apt 12, floor 3",
+          "output": "Apt X, floor X"
+        },
+        {
+          "input": "B7C40",
+          "output": "BXCX"
+        },
+        {
+          "input": "no digits",
+          "output": "no digits"
+        }
+      ],
+      "baseline_slot": 9
+    },
+    {
+      "id": "original-10",
+      "prompt": "Replace all vowels in 'Open Source' with asterisks.",
+      "expected_name": "fn_substitute_string_with_regex",
+      "expected_parameters": {
+        "source_string": "Open Source",
+        "regex": "[aeiouAEIOU]",
+        "replacement": "*"
+      },
+      "regex_checks": [
+        {
+          "input": "Open Source",
+          "output": "*p*n S**rc*"
+        },
+        {
+          "input": "AEIOU",
+          "output": "*****"
+        },
+        {
+          "input": "xyz",
+          "output": "xyz"
+        }
+      ],
+      "baseline_slot": 10
+    },
+    {
+      "id": "original-11",
+      "prompt": "Replace every occurrence of 'cat' with 'dog' in 'cat and catfish'.",
+      "expected_name": "fn_substitute_string_with_regex",
+      "expected_parameters": {
+        "source_string": "cat and catfish",
+        "regex": "cat",
+        "replacement": "dog"
+      },
+      "regex_checks": [
+        {
+          "input": "cat and catfish",
+          "output": "dog and dogfish"
+        },
+        {
+          "input": "scatter",
+          "output": "sdogter"
+        },
+        {
+          "input": "DOG",
+          "output": "DOG"
+        }
+      ],
+      "baseline_slot": 11
+    }
+  ]
+}
