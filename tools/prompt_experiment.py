@@ -163,13 +163,46 @@ def editor_session(
     attempt = Path(tempfile.mkdtemp(prefix='attempt-', dir=folder))
     shutil.copyfile(context, attempt / 'context.json')
     output = attempt / 'editor.json'
+    workspace = Path(tempfile.mkdtemp(prefix='cmm-prompt-', dir='/tmp'))
+    templates = Path('research/prompt-improvement')
+    tool_dir = workspace / '.opencode/tools'
+    tool_dir.mkdir(parents=True)
+    for template in templates.joinpath('tools').glob('*.ts'):
+        shutil.copyfile(template, tool_dir / template.name)
+    write_json(workspace / '.opencode/package.json', {
+        'private': True, 'dependencies': {'@opencode-ai/plugin': '1.15.10'}})
+    config = loads((templates / 'opencode.json').read_text())
+    if config['model'] != 'local/' + optimizer:
+        raise ValueError('OSS configuration and optimizer model differ')
+    config['provider']['local']['options']['baseURL'] = env.get(
+        'CMM_OPTIMIZER_URL', 'http://127.0.0.1:8011/v1')
+    write_json(workspace / 'opencode.json', config)
+    shutil.copyfile(templates / 'improver.txt', workspace / 'improver.txt')
+    provenance = loads(Path(env['CMM_PROMPT_PROVENANCE']).read_text())
+    write_json(workspace / 'tool-config.json', {
+        'store': str(store), 'fixture': str(fixture), 'output': str(output),
+        'provenance': env['CMM_PROMPT_PROVENANCE'], 'fingerprint': stamp,
+        'code_sha': provenance['code_sha'],
+    })
+    cache_home = str(Path('.cache/opencode/cache').resolve())
+    child_env = dict(env, CMM_PYTHON=sys.executable, CMM_REPO=str(Path.cwd()),
+                     OPENCODE_CONFIG=str(workspace / 'opencode.json'),
+                     OPENCODE_CONFIG_DIR=str(workspace / '.opencode'),
+                     OPENCODE_DISABLE_MODELS_FETCH='true',
+                     XDG_CONFIG_HOME=str(workspace / '.state/config'),
+                     XDG_DATA_HOME=str(workspace / '.state/data'),
+                     XDG_STATE_HOME=str(workspace / '.state/state'),
+                     XDG_CACHE_HOME=cache_home)
+    for inherited in ('OPENCODE_CONFIG_CONTENT', 'OPENCODE_PERMISSION'):
+        child_env.pop(inherited, None)
+    write_json(attempt / 'workspace.json', {'workspace': str(workspace)})
+    message = ('Improve one prompt candidate using this development context:\n'
+               + json.dumps(context_data, default=validate_number))
     try:
         code = run_logged([
-            sys.executable, '-m', 'tools.prompt_editor', '--context',
-            str(attempt / 'context.json'), '--store', str(store), '--fixture',
-            str(fixture), '--output', str(output), '--optimizer', optimizer,
-            '--fingerprint', stamp,
-        ], attempt / 'editor.log', env)
+            'opencode', '--pure', 'run', '--dir', str(workspace), '--agent',
+            'prompt-improver', '--format', 'json', message,
+        ], attempt / 'editor.log', child_env)
         result = accept_editor_result(output, stamp, code)
     except subprocess.TimeoutExpired:
         result = {'status': 'editor_failed',
@@ -364,9 +397,19 @@ def main() -> int:
             "print(json.dumps({'torch':torch.__version__,"
             "'gpu':torch.cuda.get_device_name(0),'hip':torch.version.hip}))",
         ], env=env, text=True))
+        version_env = dict(env,
+                           XDG_DATA_HOME=str(root / 'opencode/data'),
+                           XDG_CONFIG_HOME=str(root / 'opencode/config'),
+                           XDG_CACHE_HOME=str(root / 'opencode/cache'),
+                           XDG_STATE_HOME=str(root / 'opencode/state'))
+        harness_version = subprocess.check_output(
+            ['opencode', '--version'], env=version_env, text=True).strip()
         runtime = {'models': models, 'environment': environment_metadata(),
+                   'harness_version': harness_version,
                    'gpu': preflight, 'optimizer': args.optimizer,
                    'optimizer_dtype': 'bfloat16', 'optimizer_max_tokens': 512,
+                   'optimizer_backend': 'opencode+transformers-serve',
+                   'optimizer_use_cache': True,
                    'target_dtype': 'float32', 'target_decoding': 'greedy',
                    'value_token_limit': MAX_VALUE_STEPS}
         fixture = Path('tests/fixtures/prompt_development.json').resolve()
@@ -431,8 +474,11 @@ def main() -> int:
                 def edit(task: tuple[Path, Path]) -> dict[str, Any]:
                     """Keep one immutable editor attempt per proposal slot."""
                     folder, context = task
-                    return editor_session(folder, context, store, fixture,
-                                          args.optimizer, env)
+                    return editor_session(
+                        folder, context, store, fixture, args.optimizer,
+                        dict(env, CMM_OPTIMIZER_URL=(
+                            'http://127.0.0.1:' + str(8011 + int(
+                                folder.name.rsplit('-', 1)[1])) + '/v1')))
 
                 edits = parallel(edit, tasks, args.workers)
                 for worker_index, edited in enumerate(edits):
@@ -520,6 +566,11 @@ def main() -> int:
         summary = {'manifest': manifest, 'baseline': base['score'],
                    'selected_candidate': state['candidate_id'],
                    'status': 'cpu_failed'}
+        units = os.environ.get('CMM_OPTIMIZER_UNITS', '').split()
+        if units:
+            subprocess.run(['systemctl', '--user', 'stop', *units], check=True)
+        elif not os.environ.get('CMM_SERVERS_ALREADY_STOPPED'):
+            raise ValueError('stop owned GPU model servers before CPU timing')
         cpu_path = epoch / 'cpu-result.json'
         if cpu_path.exists():
             cpu = loads(cpu_path.read_text())

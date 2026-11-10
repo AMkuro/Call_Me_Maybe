@@ -8,12 +8,10 @@ import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
-from typing import Annotated, Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
-from src.json_io import loads
 from src.schema import (
     FunctionCall, FunctionDef, build_parameters_model, validate_number,
 )
@@ -35,26 +33,6 @@ class Candidate(BaseModel):
                 or re.search(r"</?think>", value)):
             raise ValueError("instructions must be nonblank plain text")
         return value
-
-
-class WritePrompt(BaseModel):
-    """One permitted request to save instruction data."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-    tool: Literal["write_prompt"]
-    prompt: Candidate
-
-
-class RunPrompt(BaseModel):
-    """One permitted request to evaluate an already saved candidate."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-    tool: Literal["run"]
-    candidate_id: str = Field(pattern=r"^[a-f0-9]{64}$")
-
-
-_ACTION = TypeAdapter(Annotated[WritePrompt | RunPrompt,
-                                Field(discriminator="tool")])
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -91,24 +69,6 @@ def save_candidate(root: Path, candidate: Candidate) -> str:
     finally:
         temporary.unlink(missing_ok=True)
     return candidate_id
-
-
-def dispatch(
-    root: Path, text: str, evaluate: Callable[[Path], dict[str, Any]],
-) -> dict[str, Any]:
-    """Dispatch exactly two tools; model data never becomes a command."""
-    action = _ACTION.validate_python(loads(text))
-    if isinstance(action, WritePrompt):
-        return {"candidate_id": save_candidate(root, action.prompt)}
-    path = root / f"{action.candidate_id}.json"
-    if not path.is_file() or path.is_symlink():
-        raise ValueError("run requires an existing saved candidate")
-    candidate = Candidate.model_validate(loads(path.read_text()))
-    canonical = json.dumps(candidate.model_dump(), sort_keys=True,
-                           ensure_ascii=False, separators=(",", ":")) + "\n"
-    if hashlib.sha256(canonical.encode()).hexdigest() != action.candidate_id:
-        raise ValueError("candidate storage integrity mismatch")
-    return evaluate(path)
 
 
 def regex_agrees(case: dict[str, Any], call: FunctionCall) -> bool:

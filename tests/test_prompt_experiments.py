@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from tools.prompt_candidates import (
-    Candidate, dispatch, eligible, score_records, select_candidate, write_json,
+    Candidate, eligible, score_records, select_candidate, write_json,
 )
 from tools.prompt_experiment import choose_update, load_cached, estimate_cpu
 
@@ -39,42 +39,6 @@ class PromptExperimentTests(unittest.TestCase):
         candidate = Candidate(name_instructions=" x ",
                               parameter_instructions=" y ")
         self.assertEqual(candidate.name_instructions, " x ")
-
-    def test_dispatch_stores_data_and_runs_only_saved_candidate(self) -> None:
-        """Unknown tools and forged IDs cannot execute arbitrary paths."""
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            calls: list[Path] = []
-
-            def evaluate(path: Path) -> dict[str, object]:
-                """Record the actual candidate file selected by dispatch."""
-                calls.append(path)
-                return {"done": True}
-
-            action = {"tool": "write_prompt",
-                      "prompt": self.candidate().model_dump()}
-            result = dispatch(root, json.dumps(action), evaluate)
-            repeated = dispatch(root, json.dumps(action), evaluate)
-            self.assertEqual(result, repeated)
-            candidate_id = result["candidate_id"]
-            self.assertEqual(len(list(root.glob("*.json"))), 1)
-            self.assertEqual(dispatch(root, json.dumps({
-                "tool": "run", "candidate_id": candidate_id,
-            }), evaluate), {"done": True})
-            self.assertEqual(len(calls), 1)
-            self.assertEqual(calls[0].parent, root)
-            self.assertEqual(json.loads(calls[0].read_text()),
-                             self.candidate().model_dump())
-            for bad in ({"tool": "shell", "command": "touch bad"},
-                        {"tool": "run", "candidate_id": "../../elsewhere"},
-                        {"tool": "run", "candidate_id": "0" * 64},
-                        {"tool": "run", "candidate_id": candidate_id,
-                         "cases": "held-out.json"}):
-                with self.subTest(bad=bad), self.assertRaises(ValueError):
-                    dispatch(root, json.dumps(bad), evaluate)
-            self.assertEqual(len(calls), 1)
-            with self.assertRaises(ValueError):
-                dispatch(root, '{"tool":"run","tool":"shell"}', evaluate)
 
     def test_missing_results_and_typed_regex_scoring(self) -> None:
         """Do not drop failed inputs or equate true and one."""

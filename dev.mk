@@ -56,4 +56,8 @@ subject-audit:
 # Prompt search is isolated development tooling; target inference remains 0.6B.
 .PHONY: prompt-improve
 prompt-improve: check-gpu-env
-	$(GPU_UV) run --no-sync python -m tools.prompt_experiment $(FLAGS)
+	bash research/prompt-improvement/run.sh "$(GPU_ENV)" $(FLAGS)
+
+.PHONY: prompt-server-install
+prompt-server-install: check-gpu-env
+	$(UV) pip install --python "$(GPU_ENV)/bin/python" --index $(ROCM_INDEX) -r research/prompt-improvement/requirements-server.txt

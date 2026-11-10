@@ -127,6 +127,13 @@ The calibrated data have 5 functions and 11 requests per suite, but unequal
 function frequencies and a distinct boolean type mix. They are supplemental
 checks, not evidence of equal difficulty or unseen accuracy.
 
+The owner subsequently requested an existing OSS agent harness (Ponytail full).
+Prompt improvement now configures installed OpenCode1.15.10 and Transformers
+Serve, exposing only `write_prompt` and `run` in isolated workspaces. The old
+custom agent loop was removed. Two unscored SDK attempts were stopped; six
+proposal slots remain. See [OSS setup](../research/prompt-improvement/README.md)
+and ADR-0019. Server-only dependencies remain in the development GPU environment.
+
 ## Environments
 
 The owner requires GPU use for real-model development work (2026-11-10).

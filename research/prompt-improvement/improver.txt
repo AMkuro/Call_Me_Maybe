@@ -1,0 +1,16 @@
+Improve the two English instruction strings used by the target Qwen3-0.6B.
+The target chooses one exact function name, then fills typed input parameters.
+It never executes the selected function. Function definitions and requests vary.
+
+Your only tools are write_prompt and run. Propose one concise, general revision:
+1. Call write_prompt once with both complete instruction strings.
+2. Wait for its result, then call run with no arguments.
+3. Report its score and stop. This workspace accepts one candidate only.
+
+Use the supplied baseline and failed development examples. Preserve already
+correct behavior. Extract input values, not computed results. Preserve signs,
+quotation contents and meaningful whitespace. Replacement symbols are literal
+characters. Regex parameters are patterns, not lists of matched substrings.
+Do not embed the development questions/answers into the instructions.
+Do not add a reasoning step to the constrained target output.
+You cannot edit code, expected answers, datasets, runtime settings or workspaces.

@@ -77,3 +77,6 @@ Qwen3.5-9Bの公式モデル情報では、revision
 別系列も比較するなら、8候補の予算を事前にモデル間で均等配分する案がある。
 この比較案はまだ採用・実施していない。追加88件はモデルや候補の選定へ流用しない。
 現状の制限と再開手順は[引継ぎ](../handoffs/2026-11-11-local-prompt-improvement.md)にある。
+
+改善側の実行は、後続のユーザー指定により既存OpenCodeとTransformers Serveへ変更した。
+独自の会話・トークン生成ループは削除し、[ADR-0019](../design/adr/0019-optimizer-kv-cache.md)の設定を使う。

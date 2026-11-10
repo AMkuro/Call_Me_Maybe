@@ -72,3 +72,12 @@ E501 only. Optimizer download and GPU/BF16 short JSON smoke passed. Calibrated d
 grew to8suites88cases and were statically audited at8d63548, without exposing them
 to the optimizer. Next: commit this verified code, run the bounded GPU search,
 and execute the CPU/heldout gates only if development correctness improves.
+
+## Owner-directed OSS harness change
+
+Use installed OpenCode for agent execution and native Transformers Serve for
+KV-cached optimizer inference. Remove the custom prompt_editor loop; configure
+only tools, prompts, workspaces and the existing trusted evaluation workflow.
+Two SDK attempts were stopped unscored and recorded; the next three parallel
+rounds use the remaining six slots. Native two-tool permissions and serving
+function-call parsing have been checked. See ADR-0019 and research/prompt-improvement.

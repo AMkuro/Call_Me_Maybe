@@ -122,7 +122,8 @@ def environment_metadata() -> dict[str, Any]:
     """Record installed code versions, including the SDK actually imported."""
     packages = {}
     for name in ('torch', 'transformers', 'tokenizers', 'huggingface-hub',
-                 'numpy', 'pydantic', 'llm-sdk', 'accelerate'):
+                 'numpy', 'pydantic', 'llm-sdk', 'accelerate', 'fastapi',
+                 'uvicorn', 'openai', 'torchvision', 'pillow'):
         try:
             packages[name] = metadata.version(name)
         except metadata.PackageNotFoundError:
