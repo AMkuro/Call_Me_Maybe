@@ -17,7 +17,7 @@ The owner approved the application skeleton, merged into `develop` in PR #43.
 Implementation on `feat/implementation` includes all skeleton leaves, byte-level
 value masks, the EOS trie, atomic output and token-level terminal diagnostics.
 The provisional value cap is 256 tokens, with parameter-specific errors when
-generation fails to end. The current tests pass (132 tests), and independent
+generation fails to end. The current tests pass (146 tests), and independent
 review findings have regression fixes. The independent PoC stays in `examples/`.
 
 PR #44 reviews the implementation foundation: component boundaries, decoding
@@ -74,12 +74,20 @@ change application behavior.
 
 The Qwen3-0.6B cache used for the terminator probe is under the ignored
 `.cache/huggingface/`; set `HF_HOME="$PWD/.cache/huggingface"` to reuse it.
+This is an existing development-machine cache, not a campus download location.
+Campus timing instructions reuse an existing cache offline and stop when it
+is missing; they do not download model weights into the repository.
 The cache-detection unit test now isolates its repository path as well as its
 home directory, so a real downloaded cache cannot affect its fixture.
 
 `make run` and `make debug` target the Subject entry point `python -m src`;
 they work once `src` exists. For the independent inference experiment, see
 [examples](../examples/README.md).
+
+[Hardware comparison probe](research/hardware-probe.md) investigates CPU and
+memory workloads without loading or downloading models. It compares installed
+NumPy/BLAS kernels across machines and thread settings; it does not certify
+campus performance reproduction or predict the application's runtime.
 
 ## Environments
 

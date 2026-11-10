@@ -54,7 +54,7 @@ bash research/evo-x3/run_calibration.sh      # 6 条件 x 3 回
 
 ### PoC の実行時間測定
 
-```sh
+```text
 bash research/evo-x3/measure.sh <repo か worktree> <label> [src への引数]
 ```
 
@@ -65,29 +65,53 @@ bash research/evo-x3/measure.sh <repo か worktree> <label> [src への引数]
 [原記録](measurements/cpu-phys16-t8-ta_kry5i-post-review.txt)と[条件・限界](../../docs/implementation-verification.md#時間)を参照する。
 この回はリポジトリのCPU用`.venv`とモデルキャッシュを使用した。校舎実機のアプリ実測は未実施である。
 
-### 校舎PCでのアプリ実測
+### 再現可能性を調べるCPU・メモリ調査（モデル不要）
 
-push後の`feat/implementation`を取得し、リポジトリ直下で実行する。
-モデルと語彙の取得は計測前に済ませる。実機では再現用のaffinity・容量制限を掛けず、
-スレッド数も既定値にする。結果は既存の出力を上書きしない専用ディレクトリに保存する。
+アプリ実測と環境調査は別である。校舎と開発機で下記を実行し、JSONを比較する。
+モデル・SDK・torchの取得や実行は行わない。既存のNumPy/Pydantic環境を使う。
+
+```sh
+.venv/bin/python -m tools.hardware_probe measure --label campus > /tmp/campus-hardware.json
+```
+
+開発機側の測定・比較と、測る負荷・制限は[調査スクリプトの説明](../../docs/research/hardware-probe.md)を参照する。
+結果はCPU計算・メモリ処理・スレッド数による差であり、環境の完全再現を自動判定するものではない。
+
+### 参考: 校舎PCでのアプリ実測
+
+測るのは配布11件のアプリ起動からモデル読込・関数選択・引数生成・検証・JSON保存までの壁時間と最大RSS。
+モデル単体のforward、メモリ帯域、開発機との性能一致度を測るコマンドではない。
+セットアップ済みのCPU環境で、既存のモデル・語彙キャッシュだけを使う。
+校舎PCの容量を圧迫するため、リポジトリ配下へのモデル取得は案内しない。
+キャッシュが見つからなければ停止し、ダウンロードは行わない。実機では再現用のaffinity・容量制限を掛けず、
+スレッド数も既定値にする。結果は`/tmp`の専用ディレクトリに保存する。
 
 ```sh
 git switch feat/implementation
 git pull --ff-only
 uv sync --locked
-export HF_HOME="$PWD/.cache/huggingface"
-uv run --no-sync python -c 'from llm_sdk import Small_LLM_Model; m = Small_LLM_Model(device="cpu", trust_remote_code=False); print(m.get_path_to_vocab_file())'
 
-cmm_run_dir=$(mktemp -d .cache/campus-run-XXXXXX)
-env -u OMP_NUM_THREADS -u MKL_NUM_THREADS -u OPENBLAS_NUM_THREADS \
-  CUDA_VISIBLE_DEVICES= HIP_VISIBLE_DEVICES= HF_HUB_OFFLINE=1 \
-  /usr/bin/time -f 'wall_s=%e max_rss_kib=%M exit_code=%x' \
-  -o "$cmm_run_dir/time.txt" \
-  uv run --no-sync python -m src \
-  --output "$cmm_run_dir/function_calls.json" \
-  >"$cmm_run_dir/stdout.log" 2>"$cmm_run_dir/stderr.log"
-cat "$cmm_run_dir/time.txt"
-printf 'results: %s\n' "$cmm_run_dir"
+cmm_hub=$(
+  uv run --no-sync python - <<'PY'
+from tools.campus_survey import find_model
+found = find_model(None)
+if found is None or not (found[2] / 'vocab.json').is_file():
+    raise SystemExit('既存のモデル・語彙が見つからないため測定しません')
+print(found[1])
+PY
+) && {
+  cmm_run_dir=$(mktemp -d /tmp/cmm-campus-run-XXXXXX) &&
+  env -u OMP_NUM_THREADS -u MKL_NUM_THREADS -u OPENBLAS_NUM_THREADS \
+    CUDA_VISIBLE_DEVICES= HIP_VISIBLE_DEVICES= HF_HUB_CACHE="$cmm_hub" \
+    HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+    /usr/bin/time -f 'wall_s=%e max_rss_kib=%M exit_code=%x' \
+    -o "$cmm_run_dir/time.txt" \
+    uv run --no-sync python -m src \
+    --output "$cmm_run_dir/function_calls.json" \
+    >"$cmm_run_dir/stdout.log" 2>"$cmm_run_dir/stderr.log"
+  cat "$cmm_run_dir/time.txt"
+  printf 'results: %s\n' "$cmm_run_dir"
+}
 ```
 
 ## 2. GPU 精度探索（別 venv・CPU 時間評価には使わない）

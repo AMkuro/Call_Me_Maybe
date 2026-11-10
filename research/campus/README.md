@@ -1,5 +1,10 @@
 # 校舎PC調査（Call Me Maybe 実行環境）
 
+CPUとメモリの負荷特性を開発機と比較する調査には、モデル不要の
+[hardware_probe](../../docs/research/hardware-probe.md)を使う。
+下記の環境一覧・SDK benchmark・アプリ全体の実行時間とは、測る対象が異なる。
+
+
 42 校舎の複数PCで実行環境を同じ方法で調べて比較し、レビュー基準PCの選定と、
 「CPU で 5 分以内」という実行時間要件の実現可能性の評価に使う。
 スクリプト: [`tools/campus_survey.py`](../../tools/campus_survey.py)（標準ライブラリのみ、Python 3.10+）。
