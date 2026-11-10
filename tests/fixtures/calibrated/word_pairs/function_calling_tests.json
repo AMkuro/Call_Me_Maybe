@@ -1,0 +1,35 @@
+[
+  {
+    "prompt": "Join the words 'open' and 'source'."
+  },
+  {
+    "prompt": "Combine 'sun' with 'rise'."
+  },
+  {
+    "prompt": "Greet Leo."
+  },
+  {
+    "prompt": "Say hello to Emma."
+  },
+  {
+    "prompt": "Send a greeting to Max."
+  },
+  {
+    "prompt": "Reverse the string 'piano'."
+  },
+  {
+    "prompt": "What is the square root of 49?"
+  },
+  {
+    "prompt": "Find the square root of 169."
+  },
+  {
+    "prompt": "Replace all digits in 'Seat 4 has 32 tickets' with 'N'."
+  },
+  {
+    "prompt": "Replace every vowel in 'Ocean Route' with '*'."
+  },
+  {
+    "prompt": "Replace all occurrences of 'fox' with 'dog' in 'fox and foxes'."
+  }
+]
