@@ -117,7 +117,7 @@ float32. The tooling now passes 174 unit tests and lint after the resumed review
 The 9B GPU/BF16 loader and a short JSON generation passed; prompt-search
 outcomes are recorded separately.
 See the [model research](research/local-prompt-editor-models.md) and
-[handoff](handoffs/2026-11-11-local-prompt-improvement.md) before running it.
+local handoff (untracked, under `.cache/handoff/`) before running it.
 The inherited line-length error in `src/display.py` was fixed by wrapping
 its signature only; application behavior is unchanged. Model snapshots and
 actual installed package/SDK versions are bound to the evidence fingerprint.

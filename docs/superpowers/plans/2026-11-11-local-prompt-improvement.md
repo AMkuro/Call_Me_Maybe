@@ -61,7 +61,7 @@ Files: `tools/prompt_editor.py`, `tools/prompt_experiment.py`, `research/evo-x3/
 - Task 3: make install and make test pass (159); mypy45files passes; full make lint fails on inherited src/display.py:52 E501. Independent draft review is recorded in handoff.
 - No optimizer/target inference, parallel GPU pilot, CPU candidate trial or calibrated model test has run.
 - Initial optimizer0.6B was rejected; agent research selects Qwen3.5-9B BF16 for the first pilot. Download interrupted; cache retained.
-- Resume from docs/handoffs/2026-11-11-local-prompt-improvement.md, fixing the documented review gaps before executing the draft.
+- Resume from the untracked local handoff under .cache/handoff/, fixing the documented review gaps before executing the draft.
 
 ## Resumed implementation
 
