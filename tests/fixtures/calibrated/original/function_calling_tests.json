@@ -6,16 +6,16 @@
     "prompt": "Add 120 to 35."
   },
   {
+    "prompt": "What is 47 plus 18?"
+  },
+  {
+    "prompt": "Add 5 and 29."
+  },
+  {
     "prompt": "Say hello to Mia."
   },
   {
-    "prompt": "Greet Marcus, please."
-  },
-  {
     "prompt": "Reverse the text 'garden'."
-  },
-  {
-    "prompt": "Write the string 'window' backwards."
   },
   {
     "prompt": "What is the square root of 81?"
