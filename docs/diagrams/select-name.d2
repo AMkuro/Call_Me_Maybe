@@ -4,7 +4,7 @@ direction: down
 select_name: "select_name (pipeline): 関数名を選ぶ" {
   label.near: top-center
   style.fill: "#E4E9FE"
-  prompt: "build_name_prompt (prompt)\n入力: user_prompt と全関数の functions\n全関数の説明と引数の型を列挙する\n名前だけを応答するように指示する"
+  prompt: "build_name_prompt (prompt)\n入力: user_prompt と関数名をキーにした辞書\nvalues() で説明と引数の型を入力順に列挙する\n名前だけを応答するように指示する"
   encode: "model.encode\nプロンプト文字列を prompt_ids にする"
 
   generate: "generate (decoder)\n名前を1トークンずつ生成" {
@@ -37,7 +37,7 @@ select_name: "select_name (pipeline): 関数名を選ぶ" {
   }
 
   name: "leaf_name (name_trie)\n生成 ID 列の葉にある関数名を取得する"
-  result: "functions の名前と照合し\n対応する FunctionDef を返す"
+  result: "functions[name] で直接参照し\n対応する FunctionDef を返す"
 }
 
 select_name.prompt -> select_name.encode -> select_name.generate.init -> select_name.generate.allowed_next.leaf

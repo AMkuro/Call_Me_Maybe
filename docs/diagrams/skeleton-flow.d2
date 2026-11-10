@@ -3,11 +3,11 @@ direction: down
 
 main: "main (__main__)"
 parse_args: "parse_args (cli)"
-load_inputs: "load_functions, load_prompts (loader)"
+load_inputs: "load_functions, load_prompts (loader)\nindex_functions で関数名をキーにする"
 prepare_output: "prepare_output (writer)\n保存先の準備・一時ファイルの書き込み確認"
 load_model: "Model() (model_port)"
 load_vocab: "load_vocab (vocab)"
-build_trie: "build_name_trie (name_trie)"
+build_trie: "build_name_trie (name_trie)\n関数辞書のキーから名前の木を作る"
 
 next_prompt: 次の入力はあるか {
   shape: diamond

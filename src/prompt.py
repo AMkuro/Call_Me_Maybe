@@ -32,13 +32,13 @@ def _chat(instructions: str, content: str) -> str:
 
 
 def build_name_prompt(
-    user_prompt: str, functions: list[FunctionDef]
+    user_prompt: str, functions: dict[str, FunctionDef]
 ) -> str:
     """Prompt for choosing the function name."""
     definitions = "\n".join(
         f"{fn.name}: {fn.description} Arguments: " + ", ".join(
             f"{name} ({spec.type})" for name, spec in fn.parameters.items()
-        ) for fn in functions
+        ) for fn in functions.values()
     )
     return _chat(
         NAME_INSTRUCTIONS,

@@ -1,5 +1,6 @@
 """Read and validate the two input files."""
 
+from collections.abc import Iterable
 from pathlib import Path
 
 from pydantic import TypeAdapter
@@ -8,8 +9,24 @@ from .errors import StartupError
 from .schema import FunctionDef
 
 
-def load_functions(path: Path) -> list[FunctionDef]:
-    """Read function definitions.
+def index_functions(
+    functions: Iterable[FunctionDef],
+) -> dict[str, FunctionDef]:
+    """Index validated definitions by unique, nonblank names in input order."""
+    indexed: dict[str, FunctionDef] = {}
+    for fn in functions:
+        if not fn.name.strip():
+            raise ValueError("function names must not be empty")
+        if fn.name in indexed:
+            raise ValueError("duplicate function names")
+        indexed[fn.name] = fn
+    if not indexed:
+        raise ValueError("function definitions must not be empty")
+    return indexed
+
+
+def load_functions(path: Path) -> dict[str, FunctionDef]:
+    """Read function definitions into a name-keyed dictionary in input order.
 
     Raises StartupError on a missing or invalid file, an empty list,
     duplicate names, or an unsupported parameter type.
@@ -17,17 +34,11 @@ def load_functions(path: Path) -> list[FunctionDef]:
     Effect: reads a file.
     """
     try:
-        functions = TypeAdapter(list[FunctionDef]).validate_json(
-            path.read_text(encoding="utf-8")
+        return index_functions(
+            TypeAdapter(list[FunctionDef]).validate_json(
+                path.read_text(encoding="utf-8")
+            )
         )
-        if not functions:
-            raise ValueError("function definitions must not be empty")
-        names = [fn.name for fn in functions]
-        if any(not name.strip() for name in names):
-            raise ValueError("function names must not be empty")
-        if len(set(names)) != len(names):
-            raise ValueError("duplicate function names")
-        return functions
     except (OSError, ValueError) as e:
         raise StartupError(f"cannot load functions from {path}: {e}") from e
 

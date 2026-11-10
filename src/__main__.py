@@ -31,7 +31,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         prepare_output(args.output)
         model = Model()
         vocab = load_vocab(Path(model.vocab_path()))
-        trie = build_name_trie([fn.name for fn in functions], model.encode)
+        trie = build_name_trie(list(functions), model.encode)
     except StartupError as e:
         print(e, file=sys.stderr)
         return 1

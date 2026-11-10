@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from src.errors import PromptError, StartupError
+from src.loader import index_functions
 from src.model_port import Model
 from src.name_trie import build_name_trie
 from src.pipeline import MAX_VALUE_STEPS, process_prompt
@@ -46,11 +47,11 @@ def main() -> int:
         parser.error("--repeat must be positive")
     try:
         fixture = json.loads(args.cases.read_text(encoding="utf-8"))
-        functions = [FunctionDef.model_validate(fn)
-                     for fn in fixture["functions"]]
+        functions = index_functions(FunctionDef.model_validate(fn)
+                                    for fn in fixture["functions"])
         model = Model()
         vocab = load_vocab(Path(model.vocab_path()))
-        trie = build_name_trie([fn.name for fn in functions], model.encode)
+        trie = build_name_trie(list(functions), model.encode)
         results: list[dict[str, Any]] = []
         report: dict[str, Any] = {
             "measurement": "accuracy/stress; no timing measurements",

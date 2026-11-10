@@ -192,7 +192,7 @@ class MainTests(unittest.TestCase):
         model = object.__new__(Model)
         fixtures = {
             'parse_args': Args(output=self.output),
-            'load_functions': [definition()], 'Model': model,
+            'load_functions': {'f': definition()}, 'Model': model,
             'load_vocab': {}, 'build_name_trie': NameTrie(),
         }
         for name, result in fixtures.items():

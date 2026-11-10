@@ -17,7 +17,7 @@ The owner approved the application skeleton, merged into `develop` in PR #43.
 Implementation on `feat/implementation` includes all skeleton leaves, byte-level
 value masks, the EOS trie, atomic output and token-level terminal diagnostics.
 The provisional value cap is 256 tokens, with parameter-specific errors when
-generation fails to end. The current tests pass (101 tests), and independent
+generation fails to end. The current tests pass (105 tests), and independent
 review findings have regression fixes. The independent PoC stays in `examples/`.
 
 PR #44 reviews the implementation foundation: component boundaries, decoding
@@ -38,6 +38,14 @@ and opens/writes/flushes/removes a sibling temporary file using the same naming
 limits as the atomic writer. It preserves existing output and does not create
 the final file. Preparation failures stop startup with the path and reason;
 save-time errors remain handled because a probe cannot guarantee later writes.
+
+Function sets now use `dict[str, FunctionDef]`, indexed once by exact name after
+the input JSON array is validated. Application loading and measurement fixtures
+share `index_functions`, which rejects blank/duplicate names and keeps input
+order. Name prompts enumerate `values()` and the trie uses keys; selection
+retrieves the original definition directly. This removes the final linear
+lookup, without changing forward calls or claiming a measured runtime gain
+(ADR-0016).
 
 Real-model samples produced valid typed JSON in 11/11 cases and correct calls
 in 10/11. Changed definitions produced valid typed JSON in 5/5 and correct calls

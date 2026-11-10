@@ -56,7 +56,7 @@ def _report_choice(
 
 def select_name(
     user_prompt: str,
-    functions: list[FunctionDef],
+    functions: dict[str, FunctionDef],
     model: Model,
     trie: NameTrie,
     report: Callable[[str, str], None] | None = None,
@@ -83,9 +83,11 @@ def select_name(
         on_token=observed if report is not None else None,
     )
     name = leaf_name(trie, generated)
+    if name is None:
+        raise PromptError("name generation ended without a function name")
     if report is not None:
-        report("function", str(name))
-    return next(fn for fn in functions if fn.name == name)
+        report("function", name)
+    return functions[name]
 
 
 def generate_value(
@@ -178,7 +180,7 @@ def validate_call(text: str, fn: FunctionDef) -> FunctionCall:
 
 def process_prompt(
     user_prompt: str,
-    functions: list[FunctionDef],
+    functions: dict[str, FunctionDef],
     model: Model,
     trie: NameTrie,
     vocab: dict[int, bytes],

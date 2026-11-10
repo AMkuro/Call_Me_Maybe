@@ -65,10 +65,11 @@ class ObservationTests(unittest.TestCase):
         with patch.object(Model, 'encode', return_value=[9]), \
                 patch.object(Model, 'decode',
                              side_effect=PromptError('diagnostic decode')):
-            plain = pipeline.select_name('request', [fn], model, trie)
+            plain = pipeline.select_name('request', {fn.name: fn}, model,
+                                         trie)
             events: list[tuple[str, str]] = []
             observed = pipeline.select_name(
-                'request', [fn], model, trie,
+                'request', {fn.name: fn}, model, trie,
                 lambda label, text: events.append((label, text)),
             )
         self.assertEqual(observed, plain)

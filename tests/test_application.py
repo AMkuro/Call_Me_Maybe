@@ -59,7 +59,7 @@ class InputTests(unittest.TestCase):
             path = Path(directory) / 'input.json'
             fn = definition(flag='boolean', text='string', count='number')
             path.write_text(json.dumps([fn.model_dump()]), encoding='utf-8')
-            self.assertEqual(load_functions(path), [fn])
+            self.assertEqual(load_functions(path), {fn.name: fn})
             path.write_text('[{"prompt": "日本語"}, {"prompt": ""}]',
                             encoding='utf-8')
             self.assertEqual(load_prompts(path), ['日本語', ''])

@@ -168,7 +168,7 @@ class PromptTests(unittest.TestCase):
     def test_name_prompt_lists_functions_and_requests_only_name(self) -> None:
         """The name stage is a non-thinking assistant completion."""
         fn = definition(a='number')
-        prompt = build_name_prompt('Add 2 and 3', [fn])
+        prompt = build_name_prompt('Add 2 and 3', {fn.name: fn})
         self.assertIn(fn.description, prompt)
         self.assertIn(fn.name, prompt)
         self.assertIn('Add 2 and 3', prompt)
