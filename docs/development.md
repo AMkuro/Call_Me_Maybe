@@ -101,7 +101,7 @@ memory workloads without loading or downloading models. It compares installed
 NumPy/BLAS kernels across machines and thread settings; it does not certify
 campus performance reproduction or predict the application's runtime.
 
-## Isolated prompt-improvement proposal (2026-11-11)
+## Isolated prompt-improvement checkpoint (2026-11-11)
 
 A separate `exp/local-prompt-improvement` worktree now holds a
 [workflow design proposal](superpowers/specs/2026-11-11-local-prompt-improvement-design.md)
@@ -110,8 +110,15 @@ The proposed local model has only prompt-saving and fixed-evaluation tools;
 GPU improvements would be checked serially on phys16-t6 (raw total time plus
 8 seconds as a separate estimate), then on the fixed calibrated fixtures.
 Updates from `feat/implementation` would be merged between rounds and the
-baseline and candidate re-evaluated on the same code. Design approval,
-workflow implementation and real-model experiments are still pending.
+baseline and candidate re-evaluated on the same code. The owner approved the
+design, then requested a stronger optimizer and agent-based model research.
+The selected first pilot is Qwen3.5-9B BF16, while the target stays Qwen3-0.6B
+float32. The tooling is an unfinished draft; no real-model experiment has run.
+See the [model research](research/local-prompt-editor-models.md) and
+[handoff](handoffs/2026-11-11-local-prompt-improvement.md) before running it.
+At this checkpoint 159 unit tests and mypy (45 files) pass. Full `make lint`
+still fails on the inherited line length in `src/display.py:52`; no source
+application files were modified for this experiment.
 The calibrated data have 5 functions and 11 requests per suite, but unequal
 function frequencies and a distinct boolean type mix. They are supplemental
 checks, not evidence of equal difficulty or unseen accuracy.

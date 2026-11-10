@@ -52,3 +52,8 @@ subject:
 subject-audit:
 	$(UV) run --no-sync python -m tools.check_subject --submission
 	$(MAKE) lint
+
+# Prompt search is isolated development tooling; target inference remains 0.6B.
+.PHONY: prompt-improve
+prompt-improve: check-gpu-env
+	$(GPU_UV) run --no-sync python -m tools.prompt_experiment $(FLAGS)

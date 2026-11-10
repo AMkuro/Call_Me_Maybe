@@ -12,6 +12,11 @@ if [[ ! $THREADS =~ ^([1-9]|1[0-6])$ ]]; then
   echo 'CMM_OMP_THREADS must be an integer from 1 to 16.' >&2
   exit 2
 fi
+MODULE=${CMM_MODULE:-src}
+case "$MODULE" in
+  src|tools.prompt_trial) ;;
+  *) echo 'CMM_MODULE must be src or tools.prompt_trial.' >&2; exit 2 ;;
+esac
 REPO=${1:?repo path}
 LABEL=${2:?label}
 shift 2
@@ -27,13 +32,13 @@ temp() { cat /sys/class/hwmon/hwmon*/temp*_input 2>/dev/null | sort -n | tail -1
 T0=$(temp)
 systemd-run --user --scope --quiet -p MemoryMax=16G -p MemorySwapMax=0 \
   taskset -c 0-15 /usr/bin/time -f 'wall_s=%e max_rss_kib=%M' -o "$OUT/$LABEL.time" \
-  uv run python -m src "$@"
+  uv run python -m "$MODULE" "$@"
 RC=$?
 {
   cat "$OUT/$LABEL.time"
   echo "exit_code=$RC"
   echo "temp_start_mc=${T0:-unavailable} temp_end_mc=$(temp)"
-  echo "profile=phys16-t$THREADS mem_max=16G swap=0 cpus=0-15 omp=$THREADS"
+  echo "profile=phys16-t$THREADS mem_max=16G swap=0 cpus=0-15 omp=$THREADS module=$MODULE"
 } > "$OUT/$LABEL.txt"
 rm -f "$OUT/$LABEL.time"
 cat "$OUT/$LABEL.txt"

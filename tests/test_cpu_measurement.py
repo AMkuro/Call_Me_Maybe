@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from typing import Any
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'research/evo-x3/measure.sh'
 
@@ -17,7 +18,8 @@ class CPUThreadProfileTests(unittest.TestCase):
 
     def run_profile(
         self, threads: str | None, exit_code: int = 0,
-    ) -> tuple[subprocess.CompletedProcess[str], dict[str, str], str]:
+        module: str | None = None,
+    ) -> tuple[subprocess.CompletedProcess[str], dict[str, Any], str]:
         """Run a copied harness, substituting only host launch dependencies."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -30,7 +32,7 @@ class CPUThreadProfileTests(unittest.TestCase):
                 'while [ "$1" != taskset ]; do shift; done\nexec "$@"\n',
                 'taskset': '#!/bin/sh\nshift 2\nexec "$@"\n',
                 'uv': f'#!/bin/sh\nexec "{sys.executable}" '
-                '"$CMM_TEST_APP"\n',
+                '"$CMM_TEST_APP" "$@"\n',
             }
             for name, content in fixtures.items():
                 path = tools / name
@@ -41,11 +43,15 @@ class CPUThreadProfileTests(unittest.TestCase):
             app.write_text(
                 'import json, os, pathlib, sys\n'
                 'pathlib.Path(os.environ["CMM_TEST_CAPTURE"]).write_text('
-                'json.dumps({"threads": os.environ["OMP_NUM_THREADS"]}))\n'
+                'json.dumps({"threads": os.environ["OMP_NUM_THREADS"], '
+                '"argv": sys.argv[1:]}))\n'
                 f'sys.exit({exit_code})\n',
             )
             env = os.environ.copy()
             env.pop('CMM_OMP_THREADS', None)
+            env.pop('CMM_MODULE', None)
+            if module is not None:
+                env['CMM_MODULE'] = module
             if threads is not None:
                 env['CMM_OMP_THREADS'] = threads
             env.update(PATH=str(tools) + os.pathsep + env['PATH'],
@@ -91,3 +97,17 @@ class CPUThreadProfileTests(unittest.TestCase):
         result, _, report = self.run_profile('6', 7)
         self.assertEqual(result.returncode, 7)
         self.assertIn('exit_code=7', report)
+
+    def test_module_is_limited_to_native_or_prompt_trial(self) -> None:
+        """A controlled entrypoint cannot become an arbitrary Python module."""
+        result, process, _ = self.run_profile('6', module='tools.prompt_trial')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(process['threads'], '6')
+        self.assertEqual(process['argv'],
+                         ['run', 'python', '-m', 'tools.prompt_trial'])
+        for module in ['os', 'tools.bad', 'src; echo bad']:
+            with self.subTest(module=module):
+                result, process, report = self.run_profile('6', module=module)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse(process)
+                self.assertFalse(report)
