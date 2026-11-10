@@ -1,83 +1,58 @@
 # Calibrated function-calling test suites
 
-Three supplementary test suites for the 42 Call Me Maybe project, based on
-the distributed examples in `data/input/` (11 prompts, 5 functions).
-The purpose is to test unseen requests and changed function definitions
-without silently raising every difficulty dimension at once.
+Eight additional evaluation suites, each with 5 functions and 11 English
+prompts. They are based on the difficulty and input structure of the
+distributed Call Me Maybe example. The goal is to evaluate **unseen input**
+and **unseen function definitions**, not to maximize adversarial difficulty.
 
-These are **candidate difficulty-matched suites**, not empirical proof of
-equal model difficulty. All expected calls are supplied independently of
-model predictions.
+These are *structurally calibrated candidates*: identical counts, arities
+and task categories do not guarantee identical semantic difficulty.
+No real-model accuracy or runtime is claimed.
 
-## Structural comparison
+## Coverage matrix
 
-| Property | Distributed | `original/` | `transfer/` | `boolean/` |
-| --- | --- | --- | --- | --- |
-| Function definitions | 5 | 5 | 5 | 5 |
-| Prompts | 11 | 11 | 11 | 11 |
-| Cases per function (definition order) | 2/2/2/2/3 | 4/1/1/2/3 | 1/3/2/2/3 | 2/1/1/4/3 |
-| Argument counts (definition order) | 2/1/1/1/3 | Same | Same | Same |
-| Supported parameter types | number, string | Same | Same | number, string, boolean |
-| Natural language | Short English requests | Short English requests | Short English requests | Short English requests |
-| Regex tasks | 3 | 3 | 3 | 3 |
+| Suite | Cases per function (in definition order) | Parameter variation | Notes |
+| --- | --- | --- | --- |
+| `original/` | 4/1/1/2/3 | Baseline number/string | Same function definitions; new prompts |
+| `transfer/` | 1/3/2/2/3 | Baseline number/string | Changed function definitions; one negative number |
+| `boolean/` | 2/1/1/4/3 | number+boolean and boolean | Boolean extension |
+| `difference/` | 3/1/2/2/3 | Baseline number/string | Subtraction order |
+| `magnitude/` | 1/2/3/2/3 | Baseline number/string | Maximum and length selection |
+| `word_pairs/` | 2/3/1/2/3 | string+string | Two-string argument extraction |
+| `timer_flags/` | 2/1/2/3/3 | number+boolean and boolean | Timer repeat and audio enable |
+| `feature_flags/` | 3/2/1/2/3 | number+boolean and boolean | Light enable and autosave |
 
-The cases per function are deliberately **uneven** within every suite.
-The total (11) and the share of regex cases (3/11) remain constant to
-reduce difficulty drift. The function-frequency difference is intentional:
-do not assume the resulting *aggregate* accuracy is strictly comparable
-without reporting accuracy by function and task type.
+All suites retain the distributed example's function count (5), case count
+(11), function arities (2/1/1/1/3), and regex-case count (3). Their
+per-function case distribution is intentionally **uneven**. Short,
+single-action commands, small numeric values, ordinary short strings and
+natural-language regex descriptions match the overall sample style.
 
-- `original/`: exact distributed function definitions with unseen
-  requests/values. Tests generalization to natural-language paraphrases.
-- `transfer/`: different functions with matching parameter arities/types,
-  analogous actions and new request wording. Tests unseen function definitions.
-- `boolean/`: analogous basic arithmetic-like, greeting, text and regex
-  requests, but replaces part of the parameter schema with `boolean`.
-  The `fn_set_alarm` cases combine one number and one boolean; the
-  `fn_set_notifications` cases extract a boolean from short positive and
-  negative commands. Both `true` and `false` are represented.
+The original distributed data contains no boolean parameters. Therefore,
+`boolean/`, `timer_flags/` and `feature_flags/` form a separate
+**boolean extension** tier. `word_pairs/` also changes the first function
+from two numbers to two strings. These are deliberate variations and should
+not be presented as perfectly identical difficulty.
 
-## Difficulty boundaries
+No suite requires executing a function to obtain its output: the expected
+`parameters` always represent the **original input arguments**.
 
-The first two suites do not add booleans. The third is an **explicit
-type-extension comparison**, not an equal-type baseline. This added feature
-may increase or decrease model difficulty; its accuracy should be reported
-separately and not used to claim a calibrated baseline score. The original
-distributed sample has no boolean parameters.
-
-Keep out-of-scope stressors (very long strings, missing required arguments,
-unknown actions, multiple calls per prompt, adversarial instructions,
-non-finite numbers and deeply nested JSON) in independent stress suites.
-`transfer-07` includes a negative number that was absent from the
-distributed sample; disclose it when discussing comparability.
-
-The prompts provide the argument values; do **not** compute the numerical
-result of a function. For the alarm, `hour` is explicitly specified as an
-integer and `repeat` is explicitly indicated (no time-zone interpretation).
-
-## Files and score semantics
-
-Each suite contains three files:
+## Files per suite
 
 - `functions_definition.json`: native CLI function definitions.
-- `function_calling_tests.json`: native CLI input (array with `prompt`).
-- `measurement_fixture.json`: both definitions and prompts plus gold
-  `expected_name` and `expected_parameters`.
+- `function_calling_tests.json`: native CLI prompt-only input.
+- `measurement_fixture.json`: combined definitions and gold labels.
+- `README.md` is also provided in the five newly added suites.
 
-The `regex_checks` array contains sample inputs/outputs for grading
-functionally equivalent regular expressions. The existing runner
-`tools.measure_application.assess_call` compares regex **text** directly.
-A differently written but functionally correct pattern may be marked
-incorrect by that runner. For semantic assessment, compare the function,
-keys, typed arguments, the exact `source_string` and `replacement`, and
-apply the candidate regex using global substitution to all the
-`regex_checks` inputs. Passing finitely many checks does not establish
-regex equivalence for every possible string.
+Keep the gold labels separate from the model's input. Do not inject expected
+answers into the model's prompt.
 
-## Run from repository root
+## Run
+
+From repository root, run each suite independently:
 
 ```sh
-for suite in original transfer boolean; do
+for suite in original transfer boolean difference magnitude word_pairs timer_flags feature_flags; do
   uv run python -m tools.measure_application \
     --cases "tests/fixtures/calibrated/$suite/measurement_fixture.json" \
     --output "/tmp/calibrated-$suite-results.json" \
@@ -85,26 +60,47 @@ for suite in original transfer boolean; do
 done
 ```
 
-For native CLI input, for example:
+Or pass the native files to the application:
 
 ```sh
 uv run python -m src \
-  --functions_definition tests/fixtures/calibrated/boolean/functions_definition.json \
-  --input tests/fixtures/calibrated/boolean/function_calling_tests.json \
-  --output /tmp/calibrated-boolean-calls.json
+  --functions_definition tests/fixtures/calibrated/feature_flags/functions_definition.json \
+  --input tests/fixtures/calibrated/feature_flags/function_calling_tests.json \
+  --output /tmp/calibrated-feature_flags-calls.json
 ```
 
-Measure and report selection accuracy, per-function full-call accuracy,
-argument type/value accuracy, regex exact and semantic accuracy, completion
-rate and errors separately. Note the small sample sizes: one error changes
-an 11-case suite accuracy by about 9.1 percentage points. Compare timings
-per suite rather than judging all 33 prompts against the distributed
-11-prompt runtime. Hold model, SDK, machine and inference settings fixed.
+## Scoring
 
-Static fixture checks can be run without the model via:
+Report separately: function-selection accuracy, argument extraction and type
+accuracy, full-call accuracy, output completion/error counts, and runtime.
+Because the distribution of functions differs, include **per-function**
+scores, not only aggregate accuracy.
+
+The existing `tools.measure_application.assess_call` evaluates regex
+strings by **exact text**. Equivalent regex patterns can have different
+spelling; each fixture therefore includes `regex_checks` containing
+input/output substitution pairs to aid independent semantic evaluation.
+Verify the exact source text and replacement text, then apply the proposed
+regex to all test inputs. Finite examples do not prove equivalence for all
+possible strings. Review borderline cases manually.
+
+Keep stressors (very long strings, malformed input files, missing arguments,
+no matching function, multiple calls or adversarial content) in separate
+tests; they are not difficulty-calibrated to the distributed sample.
+
+An 11-case suite changes accuracy by about 9.1 percentage points for a
+single error. Compare all suites using the same model, SDK, hardware,
+inference settings, and scoring rules, and do not conflate runtime over 88
+test requests with the Subject's five-minute performance target for an
+individual evaluation workload.
+
+## Static checks
 
 ```sh
 uv run python -m unittest discover -s tests -p test_calibrated_fixtures.py
 ```
 
-No real-model correctness or performance measurements are claimed here.
+Static tests ensure files and labels align, types are correct, regex checks
+agree with the gold patterns, boolean true/false coverage exists in each
+boolean-extension suite, and each documented case distribution is retained.
+They do **not** measure model accuracy.

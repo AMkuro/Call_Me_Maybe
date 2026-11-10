@@ -1,0 +1,35 @@
+[
+  {
+    "prompt": "Set the light brightness to 40 and turn it on."
+  },
+  {
+    "prompt": "Set brightness to 15 and turn the light off."
+  },
+  {
+    "prompt": "Turn on the light with brightness 80."
+  },
+  {
+    "prompt": "Greet Iris."
+  },
+  {
+    "prompt": "Say hello to Theo."
+  },
+  {
+    "prompt": "Change the text 'science' to uppercase."
+  },
+  {
+    "prompt": "Enable autosave."
+  },
+  {
+    "prompt": "Turn autosave off."
+  },
+  {
+    "prompt": "Replace all numbers in 'Book 2, page 15' with '#'."
+  },
+  {
+    "prompt": "Replace every vowel in 'Morning Light' with '*'."
+  },
+  {
+    "prompt": "Replace every 'pen' with 'pencil' in 'pen and penbox'."
+  }
+]

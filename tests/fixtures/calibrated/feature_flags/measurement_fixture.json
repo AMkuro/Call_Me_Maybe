@@ -1,0 +1,214 @@
+{
+  "functions": [
+    {
+      "name": "fn_set_light",
+      "description": "Set a light's brightness and whether it is enabled.",
+      "parameters": {
+        "brightness": {
+          "type": "number"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "returns": {
+        "type": "boolean"
+      }
+    },
+    {
+      "name": "fn_greet_person",
+      "description": "Generate a greeting message for a person by name.",
+      "parameters": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_uppercase_text",
+      "description": "Convert a string to uppercase letters.",
+      "parameters": {
+        "s": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_set_autosave",
+      "description": "Set whether automatic saving is enabled.",
+      "parameters": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "returns": {
+        "type": "boolean"
+      }
+    },
+    {
+      "name": "fn_regex_replace",
+      "description": "Replace all occurrences matching a regex pattern in a string.",
+      "parameters": {
+        "source_string": {
+          "type": "string"
+        },
+        "regex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "feature-flags-01",
+      "prompt": "Set the light brightness to 40 and turn it on.",
+      "expected_name": "fn_set_light",
+      "expected_parameters": {
+        "brightness": 40,
+        "enabled": true
+      }
+    },
+    {
+      "id": "feature-flags-02",
+      "prompt": "Set brightness to 15 and turn the light off.",
+      "expected_name": "fn_set_light",
+      "expected_parameters": {
+        "brightness": 15,
+        "enabled": false
+      }
+    },
+    {
+      "id": "feature-flags-03",
+      "prompt": "Turn on the light with brightness 80.",
+      "expected_name": "fn_set_light",
+      "expected_parameters": {
+        "brightness": 80,
+        "enabled": true
+      }
+    },
+    {
+      "id": "feature-flags-04",
+      "prompt": "Greet Iris.",
+      "expected_name": "fn_greet_person",
+      "expected_parameters": {
+        "name": "Iris"
+      }
+    },
+    {
+      "id": "feature-flags-05",
+      "prompt": "Say hello to Theo.",
+      "expected_name": "fn_greet_person",
+      "expected_parameters": {
+        "name": "Theo"
+      }
+    },
+    {
+      "id": "feature-flags-06",
+      "prompt": "Change the text 'science' to uppercase.",
+      "expected_name": "fn_uppercase_text",
+      "expected_parameters": {
+        "s": "science"
+      }
+    },
+    {
+      "id": "feature-flags-07",
+      "prompt": "Enable autosave.",
+      "expected_name": "fn_set_autosave",
+      "expected_parameters": {
+        "enabled": true
+      }
+    },
+    {
+      "id": "feature-flags-08",
+      "prompt": "Turn autosave off.",
+      "expected_name": "fn_set_autosave",
+      "expected_parameters": {
+        "enabled": false
+      }
+    },
+    {
+      "id": "feature-flags-09",
+      "prompt": "Replace all numbers in 'Book 2, page 15' with '#'.",
+      "expected_name": "fn_regex_replace",
+      "expected_parameters": {
+        "source_string": "Book 2, page 15",
+        "regex": "\\d+",
+        "replacement": "#"
+      },
+      "regex_checks": [
+        {
+          "input": "Book 2, page 15",
+          "output": "Book #, page #"
+        },
+        {
+          "input": "A9B10",
+          "output": "A#B#"
+        },
+        {
+          "input": "none",
+          "output": "none"
+        }
+      ]
+    },
+    {
+      "id": "feature-flags-10",
+      "prompt": "Replace every vowel in 'Morning Light' with '*'.",
+      "expected_name": "fn_regex_replace",
+      "expected_parameters": {
+        "source_string": "Morning Light",
+        "regex": "[aeiouAEIOU]",
+        "replacement": "*"
+      },
+      "regex_checks": [
+        {
+          "input": "Morning Light",
+          "output": "M*rn*ng L*ght"
+        },
+        {
+          "input": "AEIOU",
+          "output": "*****"
+        },
+        {
+          "input": "sky",
+          "output": "sky"
+        }
+      ]
+    },
+    {
+      "id": "feature-flags-11",
+      "prompt": "Replace every 'pen' with 'pencil' in 'pen and penbox'.",
+      "expected_name": "fn_regex_replace",
+      "expected_parameters": {
+        "source_string": "pen and penbox",
+        "regex": "pen",
+        "replacement": "pencil"
+      },
+      "regex_checks": [
+        {
+          "input": "pen and penbox",
+          "output": "pencil and pencilbox"
+        },
+        {
+          "input": "penpal",
+          "output": "pencilpal"
+        },
+        {
+          "input": "PEN",
+          "output": "PEN"
+        }
+      ]
+    }
+  ]
+}

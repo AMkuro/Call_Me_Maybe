@@ -1,4 +1,4 @@
-"""Validate the held-out JSON fixtures without model inference."""
+"""Validate the calibrated fixtures without loading the LLM or SDK."""
 
 import json
 import re
@@ -7,15 +7,25 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent / "fixtures" / "calibrated"
-SUITES = ("original", "transfer", "boolean")
+FREQUENCIES = {
+    "original": (4, 1, 1, 2, 3),
+    "transfer": (1, 3, 2, 2, 3),
+    "boolean": (2, 1, 1, 4, 3),
+    "difference": (3, 1, 2, 2, 3),
+    "magnitude": (1, 2, 3, 2, 3),
+    "word_pairs": (2, 3, 1, 2, 3),
+    "timer_flags": (2, 1, 2, 3, 3),
+    "feature_flags": (3, 2, 1, 2, 3),
+}
+BOOLEAN_SUITES = {"boolean", "timer_flags", "feature_flags"}
 
 
 class CalibratedFixtureTests(unittest.TestCase):
-    """Check the native inputs against the separately labeled cases."""
+    """Check schema shape, reference labels and test-set coverage."""
 
     def test_fixture_consistency(self) -> None:
-        """Verify shape, distribution, argument values and regex examples."""
-        for suite in SUITES:
+        """Verify every input against its function definition and gold label."""
+        for suite, distribution in FREQUENCIES.items():
             with self.subTest(suite=suite):
                 root = ROOT / suite
                 functions = json.loads(
@@ -33,8 +43,12 @@ class CalibratedFixtureTests(unittest.TestCase):
                 ])
                 self.assertEqual(len(functions), 5)
                 self.assertEqual(len(prompts), 11)
+                names = [function["name"] for function in functions]
+                self.assertEqual(len(set(names)), 5)
+                self.assertEqual([
+                    len(function["parameters"]) for function in functions
+                ], [2, 1, 1, 1, 3])
                 indexed = {fn["name"]: fn for fn in functions}
-                self.assertEqual(len(indexed), 5)
                 counts = {name: 0 for name in indexed}
                 seen: set[str] = set()
                 regex_count = 0
@@ -46,12 +60,16 @@ class CalibratedFixtureTests(unittest.TestCase):
                     name = case["expected_name"]
                     self.assertIn(name, indexed)
                     counts[name] += 1
-                    params = indexed[name]["parameters"]
+                    parameters = indexed[name]["parameters"]
                     self.assertEqual(
-                        set(params), set(case["expected_parameters"]))
-                    types = {spec["type"] for spec in params.values()}
+                        set(parameters),
+                        set(case["expected_parameters"]),
+                    )
+                    types = {
+                        spec["type"] for spec in parameters.values()
+                    }
                     mixed_types |= types == {"number", "boolean"}
-                    for key, spec in params.items():
+                    for key, spec in parameters.items():
                         value = case["expected_parameters"][key]
                         kind = spec["type"]
                         expected_type = {
@@ -67,14 +85,18 @@ class CalibratedFixtureTests(unittest.TestCase):
                     if "regex_checks" in case:
                         regex_count += 1
                         args = case["expected_parameters"]
-                        for example in case["regex_checks"]:
-                            self.assertEqual(re.sub(
-                                args["regex"], args["replacement"],
-                                example["input"]), example["output"])
-                self.assertEqual(sum(counts.values()), 11)
-                self.assertGreaterEqual(len(set(counts.values())), 3)
+                        for check in case["regex_checks"]:
+                            self.assertEqual(
+                                re.sub(
+                                    args["regex"], args["replacement"],
+                                    check["input"],
+                                ),
+                                check["output"],
+                            )
+                self.assertEqual(
+                    tuple(counts.values()), distribution)
                 self.assertEqual(regex_count, 3)
-                if suite == "boolean":
+                if suite in BOOLEAN_SUITES:
                     self.assertEqual(bool_values, {True, False})
                     self.assertTrue(mixed_types)
                 else:
