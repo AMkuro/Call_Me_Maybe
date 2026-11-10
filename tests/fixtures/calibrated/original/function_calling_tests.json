@@ -1,0 +1,35 @@
+[
+  {
+    "prompt": "What do you get when you add 14 and 9?"
+  },
+  {
+    "prompt": "Add 120 to 35."
+  },
+  {
+    "prompt": "Say hello to Mia."
+  },
+  {
+    "prompt": "Greet Marcus, please."
+  },
+  {
+    "prompt": "Reverse the text 'garden'."
+  },
+  {
+    "prompt": "Write the string 'window' backwards."
+  },
+  {
+    "prompt": "What is the square root of 81?"
+  },
+  {
+    "prompt": "Find the square root of 225."
+  },
+  {
+    "prompt": "Replace every number in 'Apt 12, floor 3' with 'X'."
+  },
+  {
+    "prompt": "Replace all vowels in 'Open Source' with asterisks."
+  },
+  {
+    "prompt": "Replace every occurrence of 'cat' with 'dog' in 'cat and catfish'."
+  }
+]
