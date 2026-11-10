@@ -5,7 +5,7 @@ import os
 import sys
 import time
 import unicodedata
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 
 _ROWS = (
@@ -49,7 +49,7 @@ def render_progress(fields: dict[str, str], width: int, height: int) -> str:
 
 
 @contextmanager
-def terminal_progress(total: int) -> Iterator[Callable[[str, str], None]]:
+def terminal_progress(total: int) -> Generator[Callable[[str, str], None], None, None]:
     """Yield a reporter and restore the terminal even after an exception.
 
     Effect: writes stderr; reads its terminal size and the terminal type.
