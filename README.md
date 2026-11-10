@@ -101,6 +101,10 @@ exit status. A generated precision/type error also skips that prompt; invalid
 input files stop startup before loading the model. Successful results are
 saved after each prompt by atomic replacement of the output file.
 
+If the final component of the output path is a symbolic link, saving
+replaces the link itself with the new regular output file. This is
+intentional and permitted; the link target's contents remain unchanged.
+
 Durability across power loss or an OS crash is not implemented, and there
 are no plans to add it. Atomic replacement alone does not guarantee that
 saved results survive either event.
