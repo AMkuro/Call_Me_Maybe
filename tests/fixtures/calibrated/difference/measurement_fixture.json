@@ -1,0 +1,214 @@
+{
+  "functions": [
+    {
+      "name": "fn_subtract_numbers",
+      "description": "Subtract the second number from the first and return the difference.",
+      "parameters": {
+        "a": {
+          "type": "number"
+        },
+        "b": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "fn_greet_guest",
+      "description": "Generate a greeting for a guest by name.",
+      "parameters": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_lowercase_text",
+      "description": "Convert a string to lowercase letters.",
+      "parameters": {
+        "s": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_get_cube",
+      "description": "Calculate the cube of a number.",
+      "parameters": {
+        "a": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "fn_replace_matches",
+      "description": "Replace all occurrences matching a regex pattern in a string.",
+      "parameters": {
+        "source_string": {
+          "type": "string"
+        },
+        "regex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "difference-01",
+      "prompt": "What is 19 minus 4?",
+      "expected_name": "fn_subtract_numbers",
+      "expected_parameters": {
+        "a": 19,
+        "b": 4
+      }
+    },
+    {
+      "id": "difference-02",
+      "prompt": "Subtract 15 from 60.",
+      "expected_name": "fn_subtract_numbers",
+      "expected_parameters": {
+        "a": 60,
+        "b": 15
+      }
+    },
+    {
+      "id": "difference-03",
+      "prompt": "Calculate 92 minus 27.",
+      "expected_name": "fn_subtract_numbers",
+      "expected_parameters": {
+        "a": 92,
+        "b": 27
+      }
+    },
+    {
+      "id": "difference-04",
+      "prompt": "Greet Olivia.",
+      "expected_name": "fn_greet_guest",
+      "expected_parameters": {
+        "name": "Olivia"
+      }
+    },
+    {
+      "id": "difference-05",
+      "prompt": "Convert 'Hello World' to lowercase.",
+      "expected_name": "fn_lowercase_text",
+      "expected_parameters": {
+        "s": "Hello World"
+      }
+    },
+    {
+      "id": "difference-06",
+      "prompt": "Write 'MIXED Case' in lowercase letters.",
+      "expected_name": "fn_lowercase_text",
+      "expected_parameters": {
+        "s": "MIXED Case"
+      }
+    },
+    {
+      "id": "difference-07",
+      "prompt": "What is the cube of 3?",
+      "expected_name": "fn_get_cube",
+      "expected_parameters": {
+        "a": 3
+      }
+    },
+    {
+      "id": "difference-08",
+      "prompt": "Find the cube of 8.",
+      "expected_name": "fn_get_cube",
+      "expected_parameters": {
+        "a": 8
+      }
+    },
+    {
+      "id": "difference-09",
+      "prompt": "Replace all numbers in 'Unit 5, row 21' with '#'.",
+      "expected_name": "fn_replace_matches",
+      "expected_parameters": {
+        "source_string": "Unit 5, row 21",
+        "regex": "\\d+",
+        "replacement": "#"
+      },
+      "regex_checks": [
+        {
+          "input": "Unit 5, row 21",
+          "output": "Unit #, row #"
+        },
+        {
+          "input": "A2B17",
+          "output": "A#B#"
+        },
+        {
+          "input": "plain",
+          "output": "plain"
+        }
+      ]
+    },
+    {
+      "id": "difference-10",
+      "prompt": "Replace all vowels in 'Music Room' with '*'.",
+      "expected_name": "fn_replace_matches",
+      "expected_parameters": {
+        "source_string": "Music Room",
+        "regex": "[aeiouAEIOU]",
+        "replacement": "*"
+      },
+      "regex_checks": [
+        {
+          "input": "Music Room",
+          "output": "M*s*c R**m"
+        },
+        {
+          "input": "AEIOU",
+          "output": "*****"
+        },
+        {
+          "input": "sky",
+          "output": "sky"
+        }
+      ]
+    },
+    {
+      "id": "difference-11",
+      "prompt": "Replace every 'sun' with 'moon' in 'sun at sunset'.",
+      "expected_name": "fn_replace_matches",
+      "expected_parameters": {
+        "source_string": "sun at sunset",
+        "regex": "sun",
+        "replacement": "moon"
+      },
+      "regex_checks": [
+        {
+          "input": "sun at sunset",
+          "output": "moon at moonset"
+        },
+        {
+          "input": "sunglasses",
+          "output": "moonglasses"
+        },
+        {
+          "input": "SUN",
+          "output": "SUN"
+        }
+      ]
+    }
+  ]
+}

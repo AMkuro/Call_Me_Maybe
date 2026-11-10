@@ -1,0 +1,35 @@
+[
+  {
+    "prompt": "What is 19 minus 4?"
+  },
+  {
+    "prompt": "Subtract 15 from 60."
+  },
+  {
+    "prompt": "Calculate 92 minus 27."
+  },
+  {
+    "prompt": "Greet Olivia."
+  },
+  {
+    "prompt": "Convert 'Hello World' to lowercase."
+  },
+  {
+    "prompt": "Write 'MIXED Case' in lowercase letters."
+  },
+  {
+    "prompt": "What is the cube of 3?"
+  },
+  {
+    "prompt": "Find the cube of 8."
+  },
+  {
+    "prompt": "Replace all numbers in 'Unit 5, row 21' with '#'."
+  },
+  {
+    "prompt": "Replace all vowels in 'Music Room' with '*'."
+  },
+  {
+    "prompt": "Replace every 'sun' with 'moon' in 'sun at sunset'."
+  }
+]
