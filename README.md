@@ -105,6 +105,11 @@ Durability across power loss or an OS crash is not implemented, and there
 are no plans to add it. Atomic replacement alone does not guarantee that
 saved results survive either event.
 
+Time-of-check to time-of-use (TOCTOU) races are not fully eliminated.
+Filesystem paths or permissions can change between startup checks and a
+later save. A successful preflight does not guarantee that saving will
+succeed; save-time I/O errors are still reported.
+
 ## Performance analysis
 
 The SDK recomputes the whole input prefix at each forward pass, so both input
