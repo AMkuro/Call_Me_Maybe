@@ -1,4 +1,4 @@
-# EVO-X3 検証環境（校舎 i7-14700 相当）
+# EVO-X3 検証環境（校舎 i7-14700 のSDK負荷に合わせた近似）
 
 このディレクトリは実験用。`develop` から切った `exp/cpu-calibration` に置き、`main` には統合しない。
 2 系統を**混ぜない**: CPU 時間評価（元の配布 SDK）と GPU 精度探索（別 venv）。
@@ -33,7 +33,10 @@
 
 - 候補は 6 条件の粗い格子。1 点に合わせ込んだ調整はしていないが、入力16 の差は残る。
 - アーキテクチャが違う（Zen 5 / AVX-512 対 Raptor Lake / AVX2）。**VM/cgroup による時間予測を実機性能と
-  同一視しない。** 300 秒以内は未測定で、達成済みとは言えない。
+  同一視しない。** 課題の全評価データで300秒以内かは未確認で、達成済みとは言えない。
+- メモリ容量を16GiBに制限しても、帯域・キャッシュ・命令実装は変わらない。短いSDK負荷の校正から、
+  実アプリの入力長・生成回数での一致は保証しない。同じベンチの反復はばらつきを調べるもので、
+  異なる負荷への代表性を増やすものではない。
 - 校舎測定は最高 97°C・スロットリング 7788 回。EVO-X3 は最高 85°C（phys16-t8）で、スロットリングの
   検出手段がない（AMD は `throttle_events` が `not_supported`）。実機はこれより遅い可能性がある。
 - 校舎 benchmark は SDK 呼び出しのみで、Constrained Decoding を含まない。
@@ -58,7 +61,34 @@ bash research/evo-x3/measure.sh <repo か worktree> <label> [src への引数]
 `uv run python -m src` の壁時間・ピーク RSS・終了コード・温度を `measurements/<label>.txt` に残す
 （方式の実装には何も要求しない）。注意: `uv run` は対象リポジトリの `uv.lock`（レビュー時と同じ版）を使う。
 校舎 benchmark の版（上記固定）とは異なる可能性があり、版の差による時間の違いは未評価。
-`measure.sh` は未実行（PoC がまだない）。
+2026-11-10に実アプリの配布11件を`measure.sh`で実行し、55.59秒・最大RSS約4.66GiB・終了コード0を確認した。
+[原記録](measurements/cpu-phys16-t8-ta_kry5i-post-review.txt)と[条件・限界](../../docs/implementation-verification.md#時間)を参照する。
+この回はリポジトリのCPU用`.venv`とモデルキャッシュを使用した。校舎実機のアプリ実測は未実施である。
+
+### 校舎PCでのアプリ実測
+
+push後の`feat/implementation`を取得し、リポジトリ直下で実行する。
+モデルと語彙の取得は計測前に済ませる。実機では再現用のaffinity・容量制限を掛けず、
+スレッド数も既定値にする。結果は既存の出力を上書きしない専用ディレクトリに保存する。
+
+```sh
+git switch feat/implementation
+git pull --ff-only
+uv sync --locked
+export HF_HOME="$PWD/.cache/huggingface"
+uv run --no-sync python -c 'from llm_sdk import Small_LLM_Model; m = Small_LLM_Model(device="cpu", trust_remote_code=False); print(m.get_path_to_vocab_file())'
+
+cmm_run_dir=$(mktemp -d .cache/campus-run-XXXXXX)
+env -u OMP_NUM_THREADS -u MKL_NUM_THREADS -u OPENBLAS_NUM_THREADS \
+  CUDA_VISIBLE_DEVICES= HIP_VISIBLE_DEVICES= HF_HUB_OFFLINE=1 \
+  /usr/bin/time -f 'wall_s=%e max_rss_kib=%M exit_code=%x' \
+  -o "$cmm_run_dir/time.txt" \
+  uv run --no-sync python -m src \
+  --output "$cmm_run_dir/function_calls.json" \
+  >"$cmm_run_dir/stdout.log" 2>"$cmm_run_dir/stderr.log"
+cat "$cmm_run_dir/time.txt"
+printf 'results: %s\n' "$cmm_run_dir"
+```
 
 ## 2. GPU 精度探索（別 venv・CPU 時間評価には使わない）
 

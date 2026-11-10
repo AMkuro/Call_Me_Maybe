@@ -167,6 +167,32 @@ class StructureTests(unittest.TestCase):
         self.assertEqual(call.parameters, parameters)
         self.assertIs(type(call.parameters['_private']), int)
 
+    def test_matching_function_name_and_arguments_are_accepted(self) -> None:
+        """Return a valid record unchanged for the selected definition."""
+        data = {'prompt': 'test', 'name': 'dynamic',
+                'parameters': {'value': 2}}
+        call = validate_call(json.dumps(data), definition(value='number'))
+        self.assertEqual(call.model_dump(), data)
+
+    def test_wrong_name_with_valid_arguments_is_rejected(self) -> None:
+        """A compatible argument shape cannot hide a different function."""
+        for name in ['other', ' dynamic ']:
+            with self.subTest(name=name):
+                text = json.dumps({'prompt': 'test', 'name': name,
+                                   'parameters': {'value': 2}})
+                with self.assertRaisesRegex(PromptError,
+                                            'name mismatch') as error:
+                    validate_call(text, definition(value='number'))
+                self.assertIn(repr('dynamic'), str(error.exception))
+                self.assertIn(repr(name), str(error.exception))
+
+    def test_matching_name_with_wrong_argument_type_is_rejected(self) -> None:
+        """Name agreement does not bypass the selected parameter schema."""
+        text = json.dumps({'prompt': 'test', 'name': 'dynamic',
+                           'parameters': {'value': '2'}})
+        with self.assertRaises(PromptError):
+            validate_call(text, definition(value='number'))
+
     def test_missing_extra_and_nonfinite_values_are_rejected(self) -> None:
         """Generated records cannot omit fields or serialize NaN/Infinity."""
         fn = definition(a='number')

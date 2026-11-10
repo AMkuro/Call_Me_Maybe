@@ -4,7 +4,7 @@
 
 ## 背景と選択肢
 
-入力JSONは関数の配列で、既存コードは検証後も`list[FunctionDef]`を保持する。
+入力JSONは関数の配列で、辞書導入前のコードは検証後も`list[FunctionDef]`を保持していた。
 モデルが名前を選んだ後、同名の定義を毎回先頭から探すため、関数数Fに対して最悪O(F)となる。
 
 - 配列のまま検索する: 保持方法は単純だが、既知の名前を使って再走査する。
@@ -15,8 +15,9 @@
 
 ## 処理と受け渡し
 
-1. `load_functions`は従来どおりJSON配列をPydanticで検証する。
-2. `index_functions`が空・空白だけの名前と重複を拒否し、`dict[str, FunctionDef]`を作る。
+1. `load_functions`はJSON配列をPydanticで検証する。
+   各定義のフィールド検証を`FunctionDef`が担当し、空・空白だけの名前は`require_name`で拒否する（ADR-0017）。
+2. `index_functions`は検証済みの定義を受け取り、空の一覧と名前の重複を拒否して`dict[str, FunctionDef]`を作る。
    同名の値を上書きして受理しない。測定ツールのfixtureにも同じ対応付け処理を使う。
 3. `main`は辞書のキーから名前の木を作る。`build_name_prompt`は`values()`で定義を列挙し、入力順を保つ。
 4. `select_name`は名前の木とモデルで選択し、選んだ名前をキーに定義を取り出す。

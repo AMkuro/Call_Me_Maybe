@@ -167,9 +167,14 @@ def generate_parameters(
 
 
 def validate_call(text: str, fn: FunctionDef) -> FunctionCall:
-    """Parse ``text`` as JSON and check it with the dynamic model."""
+    """Parse and validate a record against the selected function."""
     try:
         call = FunctionCall.model_validate(loads(text))
+        if call.name != fn.name:
+            raise ValueError(
+                f"function name mismatch: expected {fn.name!r}, "
+                f"got {call.name!r}",
+            )
         parameters = build_parameters_model(fn).model_validate(call.parameters)
     except ValueError as e:  # JSON errors and pydantic's are ValueErrors
         raise PromptError(f"invalid output: {e}") from e

@@ -17,7 +17,7 @@ The owner approved the application skeleton, merged into `develop` in PR #43.
 Implementation on `feat/implementation` includes all skeleton leaves, byte-level
 value masks, the EOS trie, atomic output and token-level terminal diagnostics.
 The provisional value cap is 256 tokens, with parameter-specific errors when
-generation fails to end. The current tests pass (129 tests), and independent
+generation fails to end. The current tests pass (132 tests), and independent
 review findings have regression fixes. The independent PoC stays in `examples/`.
 
 PR #44 reviews the implementation foundation: component boundaries, decoding
@@ -54,9 +54,11 @@ decimals use a float only when JSON serialization retains the source value,
 with exact integral fallback or a clear precision/range error (ADR-0017).
 Blank descriptions/argument names warn on stderr without rewriting input.
 The independent measurement comparison no longer accepts bool/number equality
-or rounded expected numbers. Existing model measurements below predate this
-validation change; no new model accuracy/runtime claim is made. Serial parsing
-costs and test results are in the verification record.
+or rounded expected numbers. The historical model measurements below predate
+this validation change. Subsequent CPU/GPU checks of the same 11 samples
+completed with 11 valid records and 10 correct calls; they do not establish
+unseen accuracy or measure the effect of stricter validation. Serial parsing
+costs, GPU timing and test results are in the verification record.
 
 Real-model samples produced valid typed JSON in 11/11 cases and correct calls
 in 10/11. Changed definitions produced valid typed JSON in 5/5 and correct calls
@@ -80,6 +82,13 @@ they work once `src` exists. For the independent inference experiment, see
 [examples](../examples/README.md).
 
 ## Environments
+
+The owner requires GPU use for real-model development work (2026-11-10).
+Use `make gpu-run` by default, and `make gpu-install` when `.venv-gpu` is
+missing. CPU runs are for explicit CPU measurements or submission checks;
+four CPU threads are not the default development profile. Verify that the
+execution environment exposes the GPU before running: this sandbox hides
+`/dev/kfd` and `/dev/dri`, so GPU runs require host execution.
 
 - `make install` recreates `.venv` from `uv.lock` (CPU torch). `uv sync` alone
   also works, as the reviewers require. torch comes from the default `cpu`

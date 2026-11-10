@@ -21,6 +21,12 @@ settings. The repository copy of llm_sdk has one documented local change
 the distributed version from llm_sdk.zip (or SDK_ZIP=<zip>). Do not
 otherwise edit llm_sdk. Development checks are not a submission certificate.
 
+Use the GPU for real-model development runs through make gpu-run and the
+separate .venv-gpu environment (owner instruction, 2026-11-10). Reserve CPU
+runs for explicit CPU measurements or submission checks; do not default to
+four CPU threads for development inference. Verify GPU availability in the
+actual execution environment, since the sandbox can hide GPU device nodes.
+
 Remote publication is separate from local edits, verification and commits.
 A request to fix something does not authorize a push or a PR mutation: obtain
 a separate explicit instruction before pushing, creating/updating a PR, or
@@ -63,12 +69,18 @@ otherwise equal options.
 
 # Design and implementation process
 
-Complete corrections in one pass within the requested kind of artifact.
-For feedback on a document, inspect and fix the related documentation together;
-do not automatically expand it into code changes or tests. An explicit code-fix
-request includes the necessary tests and verification. Once the authorized
-local work and its relevant checks are complete, make a local commit without
-waiting for another instruction, unless the owner explicitly asks not to.
+Apply the owner's three scope rules:
+
+- For documentation edits, update the related documents together and resolve
+  contradictions between them. Do not automatically expand into code changes.
+- For code edits, include the necessary tests and verification in that request.
+- The owner normally handles push and PR operations. Perform them only when
+  explicitly requested; local edits and commits do not authorize publication.
+
+For each request that changes files, complete the authorized work and checks, then
+make a local commit before the final response that ends that request. Do not
+wait for another commit instruction or for the whole project to finish, unless
+the owner explicitly requests otherwise for that request.
 Local commits and remote publication are separate: do not infer permission to
 push or mutate PRs from a correction or local commit.
 Ask only when a material decision is missing, and preserve the owner's

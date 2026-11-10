@@ -162,6 +162,7 @@ booleanも単語が完成した後のLFで終了する。
 
 生成後の検証は、構文制約と骨組みの実装に不整合があった場合の確認境界となる。
 `validate_call` は全文を `json_io.loads` で読み、strictな`FunctionCall`で記録のキーと型を検証する。
+`call.name`が選択済みの`fn.name`と完全一致することも確認し、不一致なら期待した名前と実際の名前を含むPromptErrorにする。
 続いて `build_parameters_model` が選択済みの定義から作ったstrictなモデルで、必須引数、余分なキー、型を確認する。
 内部のフィールド名とは別に元の引数名を保持し、`_private` や `model_dump` のような名前も出力に戻す。
 numberはJSON整数・小数の両方を受け付けるが、bool・数値文字列・全角数字からの変換はしない。
