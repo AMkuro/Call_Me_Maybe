@@ -8,7 +8,7 @@ before changing CI, the build environment or the SDK.
 ## Status (2026-11-10)
 
 The design now describes LF-terminated typed value records, quoted newlines and
-grouped-number normalization (ADR-0015). This is a documentation update only:
+grouped-number normalization (ADR-0015). That protocol is a documentation update only:
 the application and tests still use the existing JSON-delimiter protocol. The
 measurements below do not validate the new design. Publication is a separate
 owner instruction from local edits and commits (see AGENTS.md).
@@ -17,7 +17,7 @@ The owner approved the application skeleton, merged into `develop` in PR #43.
 Implementation on `feat/implementation` includes all skeleton leaves, byte-level
 value masks, the EOS trie, atomic output and token-level terminal diagnostics.
 The provisional value cap is 256 tokens, with parameter-specific errors when
-generation fails to end. The current tests pass (105 tests), and independent
+generation fails to end. The current tests pass (129 tests), and independent
 review findings have regression fixes. The independent PoC stays in `examples/`.
 
 PR #44 reviews the implementation foundation: component boundaries, decoding
@@ -41,11 +41,22 @@ save-time errors remain handled because a probe cannot guarantee later writes.
 
 Function sets now use `dict[str, FunctionDef]`, indexed once by exact name after
 the input JSON array is validated. Application loading and measurement fixtures
-share `index_functions`, which rejects blank/duplicate names and keeps input
-order. Name prompts enumerate `values()` and the trie uses keys; selection
+share `index_functions`, which rejects duplicate names and keeps input order.
+`FunctionDef` rejects blank names through Pydantic validation. Name prompts enumerate `values()` and the trie uses keys; selection
 retrieves the original definition directly. This removes the final linear
 lookup, without changing forward calls or claiming a measured runtime gain
 (ADR-0016).
+
+JSON readers now share stdlib hooks that reject duplicate keys before overwrite,
+reject NaN/Infinity and retain Decimal source values. Pydantic owns strict
+shape/type validation and metadata warnings. Integers remain exact ints;
+decimals use a float only when JSON serialization retains the source value,
+with exact integral fallback or a clear precision/range error (ADR-0017).
+Blank descriptions/argument names warn on stderr without rewriting input.
+The independent measurement comparison no longer accepts bool/number equality
+or rounded expected numbers. Existing model measurements below predate this
+validation change; no new model accuracy/runtime claim is made. Serial parsing
+costs and test results are in the verification record.
 
 Real-model samples produced valid typed JSON in 11/11 cases and correct calls
 in 10/11. Changed definitions produced valid typed JSON in 5/5 and correct calls

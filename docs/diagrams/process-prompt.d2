@@ -11,9 +11,9 @@ process_prompt: "process_prompt (pipeline): 最新設計（値生成はコード
   validate_call: "3. validate_call (pipeline)" {
     label.near: top-center
     style.fill: "#E4E9FE"
-    parse: "json.loads\n生成した JSON 全文をパースする"
+    parse: "json_io.loads\n重複・非標準数値を拒否し正確にパース"
     record: "FunctionCall.model_validate (schema)\nprompt・name・parameters を検証する"
-    arguments: "build_parameters_model (schema)\n選んだ関数の引数を検証・型変換する"
+    arguments: "build_parameters_model (schema)\n選んだ関数の引数を strict 検証\n数値の値を保ち、丸めはエラー"
     result: "検証後の parameters を持つ\n新しい FunctionCall を作る"
     invalid: "ValueError を PromptError にして\n呼び出し元へ送出する"
   }

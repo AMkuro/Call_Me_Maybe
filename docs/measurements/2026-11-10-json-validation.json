@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-10",
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "pydantic": "2.14.3",
+  "platform": "Linux-7.0.0-42-generic-x86_64-with-glibc2.39",
+  "model_loaded": false,
+  "method": "Serial, no other test/model jobs; warm adapters; excludes file I/O and adapter construction",
+  "repetitions": 5,
+  "iterations_per_sample": 200,
+  "units": "milliseconds per parse+validation",
+  "outlier_rule": "No exclusions; report all samples and min/median/max",
+  "workloads": {
+    "definitions_100": {
+      "input_bytes": 20390,
+      "data_recipe": "[dict(name=f'function_{i}', description='A benchmark definition', parameters={'amount': {'type': 'number'}, 'label': {'type': 'string'}, 'enabled': {'type': 'boolean'}}, returns={'type': 'number'}) for i in range(100)]; payload=json.dumps(data)",
+      "timings": {
+        "pydantic_json_without_duplicate_check": {
+          "samples_ms": [
+            0.23615271493326873,
+            0.17431849031709135,
+            0.17097770527470857,
+            0.17017857520841062,
+            0.16927103977650404
+          ],
+          "median_ms": 0.17097770527470857,
+          "min_ms": 0.16927103977650404,
+          "max_ms": 0.23615271493326873
+        },
+        "single_parse_hooks_and_pydantic": {
+          "samples_ms": [
+            0.4136652301531285,
+            0.30236770980991423,
+            0.3020611498504877,
+            0.30237811035476625,
+            0.3009198053041473
+          ],
+          "median_ms": 0.30236770980991423,
+          "min_ms": 0.3009198053041473,
+          "max_ms": 0.4136652301531285
+        },
+        "hooks_prepass_then_pydantic_json": {
+          "samples_ms": [
+            0.4061776847811416,
+            0.30240991502068937,
+            0.30157297966070473,
+            0.30031263537239283,
+            0.29983001470100135
+          ],
+          "median_ms": 0.30157297966070473,
+          "min_ms": 0.29983001470100135,
+          "max_ms": 0.4061776847811416
+        }
+      }
+    },
+    "numeric_arguments_100": {
+      "input_bytes": 2246,
+      "data_recipe": "dict(prompt='Benchmark only', name='function_0', parameters={f'parameter_{i}': i + 0.1 for i in range(100)}); payload=json.dumps(data)",
+      "timings": {
+        "pydantic_json_without_duplicate_check": {
+          "samples_ms": [
+            0.025407199864275753,
+            0.0252536399057135,
+            0.02532704034820199,
+            0.02571475983131677,
+            0.025295039522461593
+          ],
+          "median_ms": 0.02532704034820199,
+          "min_ms": 0.0252536399057135,
+          "max_ms": 0.02571475983131677
+        },
+        "single_parse_hooks_and_pydantic": {
+          "samples_ms": [
+            0.17905612476170063,
+            0.17892777046654373,
+            0.17879277002066374,
+            0.17887586494907737,
+            0.1784833549754694
+          ],
+          "median_ms": 0.17887586494907737,
+          "min_ms": 0.1784833549754694,
+          "max_ms": 0.17905612476170063
+        },
+        "hooks_prepass_then_pydantic_json": {
+          "samples_ms": [
+            0.04343385517131537,
+            0.04336524987593293,
+            0.04338350030593574,
+            0.04349545459263027,
+            0.04333725024480373
+          ],
+          "median_ms": 0.04338350030593574,
+          "min_ms": 0.04333725024480373,
+          "max_ms": 0.04349545459263027
+        }
+      }
+    }
+  },
+  "api_calls": {
+    "pydantic_json_without_duplicate_check": "adapter.validate_json(payload, strict=True)",
+    "single_parse_hooks_and_pydantic": "adapter.validate_python(loads(payload), strict=True)",
+    "hooks_prepass_then_pydantic_json": "loads(payload); adapter.validate_json(payload, strict=True)"
+  },
+  "timer": "timeit.timeit(operation, number=200) * 1000 / 200",
+  "sample_order": "Warm each operation once, then repeat 5 rounds in the listed method order"
+}

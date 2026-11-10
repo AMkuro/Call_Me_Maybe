@@ -6,6 +6,7 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 from .errors import StartupError
+from .json_io import loads
 from .schema import FunctionDef
 
 
@@ -15,8 +16,6 @@ def index_functions(
     """Index validated definitions by unique, nonblank names in input order."""
     indexed: dict[str, FunctionDef] = {}
     for fn in functions:
-        if not fn.name.strip():
-            raise ValueError("function names must not be empty")
         if fn.name in indexed:
             raise ValueError("duplicate function names")
         indexed[fn.name] = fn
@@ -35,8 +34,8 @@ def load_functions(path: Path) -> dict[str, FunctionDef]:
     """
     try:
         return index_functions(
-            TypeAdapter(list[FunctionDef]).validate_json(
-                path.read_text(encoding="utf-8")
+            TypeAdapter(list[FunctionDef]).validate_python(
+                loads(path.read_text(encoding="utf-8")), strict=True,
             )
         )
     except (OSError, ValueError) as e:
@@ -51,8 +50,8 @@ def load_prompts(path: Path) -> list[str]:
     Effect: reads a file.
     """
     try:
-        entries = TypeAdapter(list[dict[str, str]]).validate_json(
-            path.read_text(encoding="utf-8")
+        entries = TypeAdapter(list[dict[str, str]]).validate_python(
+            loads(path.read_text(encoding="utf-8")), strict=True,
         )
         if not entries:
             raise ValueError("insufficient input: no prompts supplied")

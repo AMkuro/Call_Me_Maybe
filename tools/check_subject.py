@@ -2,13 +2,19 @@
 
 import argparse
 import ast
-import json
 from pathlib import Path
 import subprocess
 import sys
 
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
+
+# Preserve direct script invocation as well as python -m tools.<name>.
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.errors import StartupError  # noqa: E402
+from src.loader import load_functions, load_prompts  # noqa: E402
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -76,45 +82,15 @@ def check_source(text: str, filename: str) -> list[str]:
 def check_inputs(root: Path) -> list[str]:
     """Validate demonstration file structure, independent of model output."""
     errors: list[str] = []
-    for filename in ('function_calling_tests.json',
-                     'functions_definition.json'):
+    for filename, loader in (
+        ('function_calling_tests.json', load_prompts),
+        ('functions_definition.json', load_functions),
+    ):
         path = root / 'data/input' / filename
         try:
-            data = json.loads(path.read_text(encoding='utf-8'))
-            if not isinstance(data, list):
-                raise ValueError('expected a JSON array')
-            names: set[str] = set()
-            for record in data:
-                if not isinstance(record, dict):
-                    raise ValueError('expected object records')
-                if filename == 'function_calling_tests.json':
-                    if set(record) != {'prompt'} or not isinstance(
-                        record['prompt'], str
-                    ):
-                        raise ValueError('expected exactly one string prompt')
-                else:
-                    if set(record) != {
-                        'name', 'description', 'parameters', 'returns'
-                    }:
-                        raise ValueError('invalid function definition fields')
-                    name = record['name']
-                    if not isinstance(name, str) or not name:
-                        raise ValueError('expected a nonempty function name')
-                    if name in names:
-                        raise ValueError(f'duplicate function name: {name}')
-                    names.add(name)
-                    if not isinstance(record['description'], str):
-                        raise ValueError('description must be a string')
-                    if not isinstance(record['parameters'], dict):
-                        raise ValueError('parameters must be an object')
-                    for schema in [record['returns'],
-                                   *record['parameters'].values()]:
-                        if not isinstance(schema, dict) or not isinstance(
-                            schema.get('type'), str
-                        ):
-                            raise ValueError('each schema needs a string type')
-        except (OSError, ValueError) as exc:
-            errors.append(f'{path}: {exc}')
+            loader(path)
+        except StartupError as exc:
+            errors.append(str(exc))
     return errors
 
 

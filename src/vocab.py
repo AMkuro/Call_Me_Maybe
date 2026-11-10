@@ -1,11 +1,11 @@
 """Read Qwen's byte-level vocabulary without losing partial UTF-8."""
 
-import json
 from pathlib import Path
 
 from pydantic import TypeAdapter
 
 from .errors import StartupError
+from .json_io import loads
 
 
 def load_vocab(path: Path) -> dict[int, bytes]:
@@ -27,7 +27,7 @@ def load_vocab(path: Path) -> dict[int, bytes]:
     ))
     try:
         raw = TypeAdapter(dict[str, int]).validate_python(
-            json.loads(path.read_text(encoding="utf-8")), strict=True,
+            loads(path.read_text(encoding="utf-8")), strict=True,
         )
         if not raw or any(token < 0 for token in raw.values()):
             raise ValueError("vocabulary must have nonnegative token IDs")

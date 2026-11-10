@@ -36,7 +36,18 @@ The program reads the function definitions and the prompts from
 
 The prompt array must contain at least one entry. An empty array is reported
 as insufficient input before loading the model and leaves existing output
-unchanged.
+unchanged. Function definitions must be a nonempty array with unique,
+nonblank function names, all required fields, no extra fields and supported
+parameter/return types (`number`, `string`, `boolean`). A blank description
+or parameter name produces a warning on stderr and is preserved. Functions
+with no parameters are supported.
+
+All JSON readers reject duplicate keys within an object, including nested
+objects, and nonstandard `NaN`/`Infinity` values. Pydantic validates shapes
+and types strictly: booleans and numbers are distinct, and numeric strings
+such as `"2"` or `"２"` are not automatically converted to numbers. This
+validation of structured JSON is separate from interpreting numbers in the
+user's natural-language request.
 
 Specify paths with:
 
@@ -68,11 +79,26 @@ The input prompt is copied, and function names and parameter keys are escaped
 with `json.dumps`. Parameters follow definition order. The SDK is wrapped by
 one concrete class; application code only receives plain token-ID lists.
 
-Numbers are normalized to Python floats after validation. This can lose
-precision for large integers and long decimals; non-finite results are
-rejected. A value has a provisional limit of 256 tokens. Failure to finish
+JSON integers stay Python integers, including values beyond `2**53`.
+Decimal and exponent literals are first parsed exactly with `Decimal`.
+A float is accepted only if its final JSON decimal value equals the source;
+`0.1` is supported. Integral decimal values may instead be stored as exact
+integers when the float representation would round them. Values that would
+lose precision, underflow to zero or overflow the finite float range are
+rejected with a reason, rather than rounded or converted into JSON strings.
+
+Very large integer literals are subject to Python's runtime integer/string
+conversion limit. Decimal/exponent literals must fit the finite float range;
+a large integer literal can therefore be accepted where its exponent form
+is rejected. Long fractional decimals that cannot survive standard JSON
+float output are unsupported. Generation currently permits signed integers
+and decimal fractions, without exponent notation or grouping commas.
+These are implementation limits, not additional Subject requirements.
+
+A value has a provisional limit of 256 tokens. Failure to finish
 reports the parameter and limit, skips that prompt and returns a nonzero
-exit status. Successful results are saved after each prompt by atomic
+exit status. A generated precision/type error also skips that prompt; invalid
+input files stop startup before loading the model. Successful results are saved after each prompt by atomic
 replacement of the output file.
 
 ## Performance analysis

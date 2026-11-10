@@ -165,7 +165,7 @@ class StructureTests(unittest.TestCase):
             'prompt': 'test', 'name': fn.name, 'parameters': parameters,
         }), fn)
         self.assertEqual(call.parameters, parameters)
-        self.assertIs(type(call.parameters['_private']), float)
+        self.assertIs(type(call.parameters['_private']), int)
 
     def test_missing_extra_and_nonfinite_values_are_rejected(self) -> None:
         """Generated records cannot omit fields or serialize NaN/Infinity."""

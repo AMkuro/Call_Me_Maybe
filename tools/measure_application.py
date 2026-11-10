@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from src.errors import PromptError, StartupError
+from src.json_io import loads
 from src.loader import index_functions
 from src.model_port import Model
 from src.name_trie import build_name_trie
@@ -22,15 +23,31 @@ def assess_call(case: dict[str, Any], call: FunctionCall) -> bool:
     if call.name != case["expected_name"]:
         return False
     if "expected_parameters" in case:
-        return bool(call.parameters == case["expected_parameters"])
+        expected = case["expected_parameters"]
+        if call.parameters.keys() != expected.keys():
+            return False
+        for name, value in call.parameters.items():
+            wanted = expected[name]
+            if isinstance(wanted, (int, float, Decimal)) and not isinstance(
+                wanted, bool
+            ):
+                if (not isinstance(value, (int, float))
+                        or isinstance(value, bool)
+                        or Decimal(str(value)) != Decimal(str(wanted))):
+                    return False
+            elif type(value) is not type(wanted) or value != wanted:
+                return False
+        return True
     requested = Decimal(case["requested_number_literal"])
-    value = call.parameters.get("number")
-    if (not isinstance(value, (int, float)) or isinstance(value, bool)
-            or not math.isfinite(value)):
+    numeric_value = call.parameters.get("number")
+    if (not isinstance(numeric_value, (int, float))
+            or isinstance(numeric_value, bool)
+            or (isinstance(numeric_value, float)
+                and not math.isfinite(numeric_value))):
         return False
     # Compare the number that is actually serialized, independently of
-    # the float conversion used by production validation.
-    return Decimal(str(value)) == requested
+    # any internal numeric conversion used by production validation.
+    return Decimal(str(numeric_value)) == requested
 
 
 def main() -> int:
@@ -46,7 +63,7 @@ def main() -> int:
     if args.repeat < 1:
         parser.error("--repeat must be positive")
     try:
-        fixture = json.loads(args.cases.read_text(encoding="utf-8"))
+        fixture = loads(args.cases.read_text(encoding="utf-8"))
         functions = index_functions(FunctionDef.model_validate(fn)
                                     for fn in fixture["functions"])
         model = Model()
@@ -83,18 +100,13 @@ def main() -> int:
                     result.update(status="completed", call=call.model_dump(),
                                   correct=assess_call(case, call))
                     if "requested_number_literal" in case:
-                        literal = case["requested_number_literal"]
-                        result["requested_number_literal"] = literal
-                        result["normalized_agreement"] = (
-                            call.name == case["expected_name"]
-                            and call.parameters == {"number": float(literal)}
-                        )
                         result["exact_numeric_agreement"] = result["correct"]
                 except PromptError as e:
                     result.update(status="error", error=str(e), correct=False)
                 result["generated_value_tokens"] = counts
                 results.append(result)
-                args.output.write_text(json.dumps(report, indent=2) + "\n",
+                args.output.write_text(json.dumps(report, indent=2,
+                                                  allow_nan=False) + "\n",
                                        encoding="utf-8")
                 print(json.dumps({key: value for key, value in result.items()
                                   if key != "call"}), flush=True)
