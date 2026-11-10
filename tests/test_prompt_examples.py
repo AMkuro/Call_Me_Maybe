@@ -119,8 +119,11 @@ class ImproverBoundaryTests(unittest.TestCase):
                         self.assertRaises(ValueError):
                     call_tool(root, 'write_prompt', payload)
             self.assertFalse((root / 'editor.json').exists())
+            # A gold-length word inside a parameter name is not a copy.
+            named = dict(EXAMPLE, function=dict(FN.model_dump(),
+                                                name='fn ' + case['prompt']))
             saved = call_tool(root, 'write_prompt', dict(
-                parent, parameter_examples=[EXAMPLE]))
+                parent, parameter_examples=[EXAMPLE, named]))
             self.assertIn('candidate_id', saved)
 
     def test_context_has_no_gold_values(self) -> None:

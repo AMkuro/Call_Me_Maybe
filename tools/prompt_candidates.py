@@ -71,10 +71,14 @@ def copies_evaluation_data(candidate: Candidate, fixtures: list[Path]) -> bool:
     """True if the candidate contains an evaluation prompt or gold string.
 
     Gold strings shorter than 4 characters ("a", "_") occur in ordinary
-    instructions, so only longer values count.
+    instructions, so only longer values count. Function and parameter
+    names are definitions, not evaluation data ("source" in source_string).
     """
-    text = json.dumps(candidate.model_dump(), ensure_ascii=False,
-                      default=validate_number)
+    parts = [candidate.name_instructions, candidate.parameter_instructions]
+    for example in candidate.parameter_examples:
+        parts += [example.prompt, example.function.description] + [
+            v for v in example.parameters.values() if isinstance(v, str)]
+    text = json.dumps(parts, ensure_ascii=False)
     for fixture in fixtures:
         for case in json.loads(fixture.read_text(encoding="utf-8"))["cases"]:
             values = [case["prompt"]] + [
