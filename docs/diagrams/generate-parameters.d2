@@ -1,11 +1,11 @@
 ...@workflow-style
 direction: down
 
-parameters: "generate_parameters (pipeline): 選んだ関数の引数を生成する" {
+parameters: "generate_parameters (pipeline): 最新設計（コード未反映）" {
   label.near: top-center
   style.fill: "#E4E9FE"
-  prompt: "build_parameters_prompt (prompt)\n入力: user_prompt と選んだ関数 fn\nmodel.encode で入力 IDs にする"
-  head: "prompt と関数名を json.dumps でエスケープ\nJSON の先頭を text に書き、IDs にも追加する"
+  prompt: "build_parameters_prompt (prompt)\n依頼・関数・引数の順序を提示する\n入力 IDs は一度だけ encode する"
+  head: "prompt と関数名を json.dumps でエスケープ\nJSON の先頭は text だけに書く"
   skeleton: "build_skeleton (skeleton)\n強制する Forced と値の ValueSlot を順に作る"
   next: 次の部分はあるか {
     shape: diamond
@@ -13,22 +13,22 @@ parameters: "generate_parameters (pipeline): 選んだ関数の引数を生成�
   kind: 部分の種類は何か {
     shape: diamond
   }
-  force: "Forced.text を text に追加する\nmodel.encode した IDs も追加する"
+  force: "Forced.text を最終 JSON に追加する\nモデルの IDs には追加しない"
 
   value: "generate_value (pipeline)" {
     label.near: top-center
     style.fill: "#E4E9FE"
     begin: "generate (decoder)\n生成列 generated を空リストで始める"
     decode: "allowed_next (generate_value 内)\nvocab から生成済みのバイト列を連結する"
-    complete: "is_value_complete (values)\n値と slot.terminator が揃ったか" {
+    complete: "is_value_complete (values)\n型が成立し、引用符外の LF に達したか" {
       shape: diamond
     }
-    allowed: "allowed_value_tokens (values)\n型・生成済みバイト列・終端から\n許可 ID のリストを得る"
+    allowed: "allowed_value_tokens (values)\n型別の中間表現と LF を制約する\n引用符内の実改行は文字列として保持する"
     step: "generate (decoder) で上限を確認する\n1候補は強制、複数なら logits と choose_token\n選んだ ID を生成列へ追加する"
-    result: "allowed_next が None を返す\n区切りを含む生成 ID 列を返す"
+    result: "allowed_next が None を返す\n中間表現と LF の ID 列を返す"
     error: "PromptError を送出する\n終端に達する前に\n上限を超えた"
   }
-  append: "生成した値と区切りを text に追加する\n生成 IDs も入力列へ追加する"
+  append: "normalize_value (values): 型別に正規化\njson.dumps した値を最終 JSON に追加する\n生の生成 IDs は次の引数へ継続する"
   result: 組み立てた JSON 全文を返す
 }
 

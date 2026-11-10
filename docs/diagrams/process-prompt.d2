@@ -1,12 +1,12 @@
 ...@workflow-style
 direction: down
 
-process_prompt: "process_prompt (pipeline)" {
+process_prompt: "process_prompt (pipeline): 最新設計（値生成はコード未反映）" {
   label.near: top-center
   style.fill: "#E4E9FE"
   input: "user_prompt・functions・model・trie・vocab を受け取る"
   select_name: "1. select_name (pipeline)\n全関数から呼び出す関数を選ぶ\n詳細: 関数名の選択図"
-  generate_parameters: "2. generate_parameters (pipeline)\n選んだ関数の引数を生成する\n詳細: 引数生成図"
+  generate_parameters: "2. generate_parameters (pipeline)\nLF で値を区切り、正規化して JSON を組み立てる\n詳細: 引数生成図"
 
   validate_call: "3. validate_call (pipeline)" {
     label.near: top-center

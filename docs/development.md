@@ -7,6 +7,12 @@ before changing CI, the build environment or the SDK.
 
 ## Status (2026-11-10)
 
+The design now describes LF-terminated typed value records, quoted newlines and
+grouped-number normalization (ADR-0015). This is a documentation update only:
+the application and tests still use the existing JSON-delimiter protocol. The
+measurements below do not validate the new design. Publication is a separate
+owner instruction from local edits and commits (see AGENTS.md).
+
 The owner approved the application skeleton, merged into `develop` in PR #43.
 Implementation on `feat/implementation` includes all skeleton leaves, byte-level
 value masks, the EOS trie, atomic output and token-level terminal diagnostics.

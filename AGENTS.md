@@ -21,8 +21,15 @@ settings. The repository copy of llm_sdk has one documented local change
 the distributed version from llm_sdk.zip (or SDK_ZIP=<zip>). Do not
 otherwise edit llm_sdk. Development checks are not a submission certificate.
 
-Create or update a PR with only the authorized task's changes. After inspecting
-its diff and required checks, opt in ONLY that intended integration PR using:
+Remote publication is separate from local edits, verification and commits.
+A request to fix something does not authorize a push or a PR mutation: obtain
+a separate explicit instruction before pushing, creating/updating a PR, or
+enabling its merge. Remote history persists and is costly to revise; do not
+publish intermediate local work automatically.
+
+When publication and integration are explicitly authorized, create or update
+a PR with only the authorized task's changes. After inspecting its diff and
+required checks, opt in ONLY that intended integration PR using:
 
     gh pr merge NUMBER --repo AMkuro/Call_Me_Maybe --auto --squash --match-head-commit SHA
 
@@ -55,6 +62,17 @@ otherwise equal options.
    mechanisms or checks that nothing needs.
 
 # Design and implementation process
+
+Complete corrections in one pass within the requested kind of artifact.
+For feedback on a document, inspect and fix the related documentation together;
+do not automatically expand it into code changes or tests. An explicit code-fix
+request includes the necessary tests and verification. Once the authorized
+local work and its relevant checks are complete, make a local commit without
+waiting for another instruction, unless the owner explicitly asks not to.
+Local commits and remote publication are separate: do not infer permission to
+push or mutate PRs from a correction or local commit.
+Ask only when a material decision is missing, and preserve the owner's
+design-approval rules.
 
 Do not start implementing from a vague request. Design first.
 
