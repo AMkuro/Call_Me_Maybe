@@ -1,0 +1,35 @@
+[
+  {
+    "prompt": "Set an alarm for hour 7 and make it repeat."
+  },
+  {
+    "prompt": "Set an alarm for hour 21 without repeating."
+  },
+  {
+    "prompt": "Greet Ada."
+  },
+  {
+    "prompt": "Reverse the string 'evening'."
+  },
+  {
+    "prompt": "Enable notifications."
+  },
+  {
+    "prompt": "Disable notifications."
+  },
+  {
+    "prompt": "Turn notifications on."
+  },
+  {
+    "prompt": "Switch notifications off."
+  },
+  {
+    "prompt": "Replace all numbers in 'Order 6 has 12 items' with 'X'."
+  },
+  {
+    "prompt": "Replace every vowel in 'Bright Morning' with '*'."
+  },
+  {
+    "prompt": "Replace every 'sun' with 'moon' in 'sun and sunshine'."
+  }
+]
