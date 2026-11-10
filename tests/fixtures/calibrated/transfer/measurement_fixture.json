@@ -78,18 +78,7 @@
       "expected_parameters": {
         "a": 6,
         "b": 7
-      },
-      "baseline_slot": 1
-    },
-    {
-      "id": "transfer-02",
-      "prompt": "What is the product of 13 and 24?",
-      "expected_name": "fn_multiply_numbers",
-      "expected_parameters": {
-        "a": 13,
-        "b": 24
-      },
-      "baseline_slot": 2
+      }
     },
     {
       "id": "transfer-03",
@@ -97,8 +86,7 @@
       "expected_name": "fn_welcome",
       "expected_parameters": {
         "name": "Nina"
-      },
-      "baseline_slot": 3
+      }
     },
     {
       "id": "transfer-04",
@@ -106,8 +94,15 @@
       "expected_name": "fn_welcome",
       "expected_parameters": {
         "name": "Omar"
-      },
-      "baseline_slot": 4
+      }
+    },
+    {
+      "id": "transfer-12",
+      "prompt": "Welcome Sofia.",
+      "expected_name": "fn_welcome",
+      "expected_parameters": {
+        "name": "Sofia"
+      }
     },
     {
       "id": "transfer-05",
@@ -115,8 +110,7 @@
       "expected_name": "fn_to_uppercase",
       "expected_parameters": {
         "s": "hello"
-      },
-      "baseline_slot": 5
+      }
     },
     {
       "id": "transfer-06",
@@ -124,8 +118,7 @@
       "expected_name": "fn_to_uppercase",
       "expected_parameters": {
         "s": "little world"
-      },
-      "baseline_slot": 6
+      }
     },
     {
       "id": "transfer-07",
@@ -133,8 +126,7 @@
       "expected_name": "fn_get_absolute_value",
       "expected_parameters": {
         "a": -14
-      },
-      "baseline_slot": 7
+      }
     },
     {
       "id": "transfer-08",
@@ -142,8 +134,7 @@
       "expected_name": "fn_get_absolute_value",
       "expected_parameters": {
         "a": 36
-      },
-      "baseline_slot": 8
+      }
     },
     {
       "id": "transfer-09",
@@ -167,8 +158,7 @@
           "input": "no digits",
           "output": "no digits"
         }
-      ],
-      "baseline_slot": 9
+      ]
     },
     {
       "id": "transfer-10",
@@ -192,8 +182,7 @@
           "input": "xyz",
           "output": "xyz"
         }
-      ],
-      "baseline_slot": 10
+      ]
     },
     {
       "id": "transfer-11",
@@ -217,8 +206,7 @@
           "input": "RED",
           "output": "RED"
         }
-      ],
-      "baseline_slot": 11
+      ]
     }
   ]
 }
