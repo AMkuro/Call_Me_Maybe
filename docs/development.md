@@ -5,13 +5,26 @@ submission artifact and must not carry any of it: this file is removed or kept
 out of the submitted version. Read it (and `docs/ci-auto-integration.md`)
 before changing CI, the build environment or the SDK.
 
-## Status (2026-11-09)
+## Status (2026-11-10)
 
-The application (`src`) is not implemented yet. The branch holds a
-public-SDK greedy-token PoC (`examples/`), mock tests and the build
-environment. The experimental generation methods are not integrated and no
-accuracy or JSON-compliance claim is made for this revision. The design is in
-`docs/architecture.md` and `docs/design/`.
+The owner approved the application skeleton, merged into `develop` in PR #43.
+Implementation on `feat/implementation` includes all skeleton leaves, byte-level
+value masks, the EOS trie, atomic output and token-level terminal diagnostics.
+The provisional value cap is 256 tokens, with parameter-specific errors when
+generation fails to end. The current tests pass (89 tests), and independent
+review findings have regression fixes. The independent PoC stays in `examples/`.
+
+Real-model samples produced valid typed JSON in 11/11 cases and correct calls
+in 10/11. Changed definitions produced valid typed JSON in 5/5 and correct calls
+in 3/5, so semantic accuracy is below the Subject target. Separate serial CPU
+timing took 98.94 seconds for the 11 samples (cached model, four threads).
+See [verification record](implementation-verification.md) for the actual cases,
+prompt changes, repeated limit tests, interrupted measurements and limitations.
+
+The Qwen3-0.6B cache used for the terminator probe is under the ignored
+`.cache/huggingface/`; set `HF_HOME="$PWD/.cache/huggingface"` to reuse it.
+The cache-detection unit test now isolates its repository path as well as its
+home directory, so a real downloaded cache cannot affect its fixture.
 
 `make run` and `make debug` target the Subject entry point `python -m src`;
 they work once `src` exists. For the independent inference experiment, see

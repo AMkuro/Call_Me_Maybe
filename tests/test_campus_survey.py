@@ -284,6 +284,7 @@ class InspectRobustnessTests(unittest.TestCase):
             snapshot.mkdir(parents=True)
             (snapshot / 'config.json').write_text('{}')
             with patch.dict('os.environ', {}, clear=True), \
+                    patch.object(survey, 'REPO_ROOT', hf_home / 'repo'), \
                     patch.object(Path, 'home',
                                  return_value=hf_home / 'nohome'):
                 report = survey.model_cache(hf_home)

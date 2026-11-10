@@ -1,10 +1,12 @@
 """Entry point: ``uv run python -m src``."""
 
+import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from .cli import parse_args
+from .display import terminal_progress
 from .errors import PromptError, StartupError
 from .loader import load_functions, load_prompts
 from .model_port import Model
@@ -36,19 +38,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     calls: list[FunctionCall] = []
     skipped = False
     try:
-        for user_prompt in prompts:
-            try:
-                call = process_prompt(
-                    user_prompt, functions, model, trie, vocab,
-                )
-            except PromptError as e:
-                print(f"skipped: {e}", file=sys.stderr)
-                skipped = True
-                continue
-            calls.append(call)
-            save_results(args.output, calls)
-        if not calls:
-            save_results(args.output, calls)
+        with terminal_progress(len(prompts)) as report:
+            for index, user_prompt in enumerate(prompts, 1):
+                report("input", f"{index}/{len(prompts)}")
+                report("prompt", user_prompt)
+                try:
+                    call = process_prompt(
+                        user_prompt, functions, model, trie, vocab, report,
+                    )
+                except PromptError as e:
+                    report("error", f"skipped: {e}")
+                    skipped = True
+                    continue
+                calls.append(call)
+                save_results(args.output, calls)
+                report("result", f"{call.name} " + json.dumps(call.parameters))
+            if not calls:
+                save_results(args.output, calls)
     except OSError as e:
         print(f"cannot save output to {args.output}: {e}", file=sys.stderr)
         return 1

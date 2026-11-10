@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+from pydantic import TypeAdapter
+
+from .errors import StartupError
 from .schema import FunctionDef
 
 
@@ -13,7 +16,20 @@ def load_functions(path: Path) -> list[FunctionDef]:
 
     Effect: reads a file.
     """
-    raise NotImplementedError
+    try:
+        functions = TypeAdapter(list[FunctionDef]).validate_json(
+            path.read_text(encoding="utf-8")
+        )
+        if not functions:
+            raise ValueError("function definitions must not be empty")
+        names = [fn.name for fn in functions]
+        if any(not name.strip() for name in names):
+            raise ValueError("function names must not be empty")
+        if len(set(names)) != len(names):
+            raise ValueError("duplicate function names")
+        return functions
+    except (OSError, ValueError) as e:
+        raise StartupError(f"cannot load functions from {path}: {e}") from e
 
 
 def load_prompts(path: Path) -> list[str]:
@@ -21,4 +37,12 @@ def load_prompts(path: Path) -> list[str]:
 
     Effect: reads a file.
     """
-    raise NotImplementedError
+    try:
+        entries = TypeAdapter(list[dict[str, str]]).validate_json(
+            path.read_text(encoding="utf-8")
+        )
+        if any(set(entry) != {"prompt"} for entry in entries):
+            raise ValueError('each input entry must contain only "prompt"')
+        return [entry["prompt"] for entry in entries]
+    except (OSError, ValueError) as e:
+        raise StartupError(f"cannot load prompts from {path}: {e}") from e

@@ -19,11 +19,11 @@ parameters: "generate_parameters (pipeline): 選んだ関数の引数を生成�
     label.near: top-center
     style.fill: "#E4E9FE"
     begin: "generate (decoder)\n生成列 generated を空リストで始める"
-    decode: "allowed_next (generate_value 内)\nmodel.decode で生成済みの文字列を得る"
+    decode: "allowed_next (generate_value 内)\nvocab から生成済みのバイト列を連結する"
     complete: "is_value_complete (values)\n値と slot.terminator が揃ったか" {
       shape: diamond
     }
-    allowed: "allowed_value_tokens (values)\n型・生成済み文字列・終端から\n許可 ID のリストを得る"
+    allowed: "allowed_value_tokens (values)\n型・生成済みバイト列・終端から\n許可 ID のリストを得る"
     step: "generate (decoder) で上限を確認する\n1候補は強制、複数なら logits と choose_token\n選んだ ID を生成列へ追加する"
     result: "allowed_next が None を返す\n区切りを含む生成 ID 列を返す"
     error: "PromptError を送出する\n終端に達する前に\n上限を超えた"

@@ -1,5 +1,7 @@
 """The model wrapper. Only this file imports llm_sdk."""
 
+from .errors import PromptError, StartupError
+
 
 class Model:
     """The model: a thin wrapper around the llm_sdk model.
@@ -24,20 +26,44 @@ class Model:
         Judgment: takes no arguments (the model name is the SDK default).
         How to hold settings is open.
         """
-        raise NotImplementedError
+        try:
+            from llm_sdk import Small_LLM_Model
+
+            self._sdk = Small_LLM_Model(trust_remote_code=False)
+        except Exception as e:
+            raise StartupError(
+                f"cannot load model: {type(e).__name__}: {e}"
+            ) from e
 
     def encode(self, text: str) -> list[int]:
         """Return the token ids of ``text``."""
-        raise NotImplementedError
+        try:
+            encoded: list[list[int]] = self._sdk.encode(text).tolist()
+            return encoded[0]
+        except Exception as e:
+            raise PromptError(f"cannot encode: {type(e).__name__}: {e}") from e
 
     def decode(self, ids: list[int]) -> str:
         """Return the text of ``ids``."""
-        raise NotImplementedError
+        try:
+            return self._sdk.decode(ids)
+        except Exception as e:
+            raise PromptError(f"cannot decode: {type(e).__name__}: {e}") from e
 
     def logits(self, ids: list[int]) -> list[float]:
         """Return the next-token logits after ``ids`` (one per token)."""
-        raise NotImplementedError
+        try:
+            return self._sdk.get_logits_from_input_ids(ids)
+        except Exception as e:
+            raise PromptError(
+                f"model inference failed: {type(e).__name__}: {e}"
+            ) from e
 
     def vocab_path(self) -> str:
         """Return the path of the vocabulary file."""
-        raise NotImplementedError
+        try:
+            return self._sdk.get_path_to_vocab_file()
+        except Exception as e:
+            raise StartupError(
+                f"cannot locate vocabulary: {type(e).__name__}: {e}"
+            ) from e

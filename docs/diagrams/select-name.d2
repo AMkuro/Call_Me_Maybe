@@ -4,7 +4,7 @@ direction: down
 select_name: "select_name (pipeline): 関数名を選ぶ" {
   label.near: top-center
   style.fill: "#E4E9FE"
-  prompt: "build_name_prompt (prompt)\n入力: user_prompt と全関数の functions\n出力: 関数選択用のプロンプト文字列\n本文の組み立ては未実装"
+  prompt: "build_name_prompt (prompt)\n入力: user_prompt と全関数の functions\n全関数の説明と引数の型を列挙する\n名前だけを応答するように指示する"
   encode: "model.encode\nプロンプト文字列を prompt_ids にする"
 
   generate: "generate (decoder)\n名前を1トークンずつ生成" {
@@ -22,7 +22,7 @@ select_name: "select_name (pipeline): 関数名を選ぶ" {
       children: "next_tokens (name_trie)\n現在の接頭辞から進める\n子のトークン ID だけを許可する"
     }
 
-    limit: "生成上限に達したか\nmax_steps" {
+    limit: "生成上限に達したか\nmax_name_steps\n(木の最長経路)" {
       shape: diamond
     }
     single: 許可 ID は1個か {
@@ -72,17 +72,17 @@ select_name.generate.limit.top: 652
 select_name.generate.limit.left: 44
 select_name.generate.error.top: 652
 select_name.generate.error.left: 577
-select_name.generate.single.top: 824
+select_name.generate.single.top: 864
 select_name.generate.single.left: 100
-select_name.generate.logits.top: 960
+select_name.generate.logits.top: 1000
 select_name.generate.logits.left: 0
-select_name.generate.choose.top: 1086
+select_name.generate.choose.top: 1126
 select_name.generate.choose.left: 0
-select_name.generate.force.top: 960
+select_name.generate.force.top: 1000
 select_name.generate.force.left: 491
-select_name.generate.append.top: 1230
+select_name.generate.append.top: 1270
 select_name.generate.append.left: 82
-select_name.generate.result.top: 1338
+select_name.generate.result.top: 1378
 select_name.generate.result.left: 112
 select_name.prompt.top: 0
 select_name.prompt.left: 114
@@ -90,9 +90,9 @@ select_name.encode.top: 162
 select_name.encode.left: 114
 select_name.generate.top: 288
 select_name.generate.left: 0
-select_name.name.top: 1872
+select_name.name.top: 1912
 select_name.name.left: 106
-select_name.result.top: 1998
+select_name.result.top: 2038
 select_name.result.left: 169
 vars: {
   d2-config: {
