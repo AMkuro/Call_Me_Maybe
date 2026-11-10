@@ -89,8 +89,11 @@ CMM_LAB=/path/to/existing/lab CMM_OMP_THREADS=6 \
 
 labの`hf`は既存のHugging Faceキャッシュで、今回の測定は新規ダウンロードを行わない。
 CPU0–15・16GiB・swap禁止は変えず、各条件を3回連続・単独で測り、全結果を残す。
-`temp_start_mc`・`temp_end_mc`は利用可能なhwmonセンサーの最大値を開始・終了時に読んだもので、
-CPU限定でも実行中の最高温度でもない。校舎で報告された100℃と直接比較しない。
+開始前に、CPUパッケージ温度（k10tempのTctl）が`CMM_COOL_TARGET_C`（既定50℃）以下になるまで待つ。
+`CMM_COOL_STALL_S`（既定60秒）のあいだ1℃も下がらなければ、終了コード3で測定せずに止める。
+記録の`tctl_start_mc`・`tctl_end_mc`・`tctl_max_mc`はCPUセンサーの開始・終了・実行中の最高値で、
+`thermal_limit=reached`は100℃（Tjmax）に達したことを示す（[ADR-0010](../../docs/design/adr/0010-measurement-policy.md)）。
+以前の記録の`temp_start_mc`・`temp_end_mc`は全hwmonセンサーの最大値で、CPUの温度ではない。
 
 [今回の条件・集計](../../docs/measurements/2026-11-11-application-time-calibration.json):
 

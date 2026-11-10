@@ -48,6 +48,8 @@ class CPUThreadProfileTests(unittest.TestCase):
             env.pop('CMM_OMP_THREADS', None)
             if threads is not None:
                 env['CMM_OMP_THREADS'] = threads
+            # A target above any real reading skips the cooling wait.
+            env['CMM_COOL_TARGET_C'] = '200'
             env.update(PATH=str(tools) + os.pathsep + env['PATH'],
                        CMM_LAB=str(root / 'lab'), CMM_TEST_APP=str(app),
                        CMM_TEST_CAPTURE=str(capture))
