@@ -10,12 +10,44 @@ import sys
 import tempfile
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import (
+    BaseModel, ConfigDict, ValidationError, field_validator, model_validator,
+)
 
 from src.schema import (
-    FunctionCall, FunctionDef, build_parameters_model, validate_number,
+    FunctionCall, FunctionDef, Scalar, build_parameters_model,
+    validate_number,
 )
 from tools.measure_application import assess_call
+
+
+def plain_text(value: str) -> bool:
+    """Text cannot open a chat role or a think block."""
+    return "<|" not in value and not re.search(r"</?think>", value)
+
+
+class Example(BaseModel):
+    """One worked parameter example shown to the target before the request."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    function: FunctionDef
+    prompt: str
+    parameters: dict[str, Scalar]
+
+    @model_validator(mode="after")
+    def match_function(self) -> "Example":
+        """Values follow the function's order and types, as the skeleton."""
+        if list(self.parameters) != list(self.function.parameters):
+            raise ValueError("example parameters must follow the function")
+        try:
+            build_parameters_model(self.function).model_validate(
+                self.parameters)
+        except ValidationError as error:
+            raise ValueError(str(error)) from error
+        if not plain_text(json.dumps(self.model_dump(),
+                                     default=validate_number)):
+            raise ValueError("examples must be plain text")
+        return self
 
 
 class Candidate(BaseModel):
@@ -24,15 +56,35 @@ class Candidate(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     name_instructions: str
     parameter_instructions: str
+    parameter_examples: list[Example] = []
 
     @field_validator("name_instructions", "parameter_instructions")
     @classmethod
     def require_plain_instruction(cls, value: str) -> str:
         """Preserve text but forbid empty instructions and role delimiters."""
-        if (not value.strip() or "<|" in value
-                or re.search(r"</?think>", value)):
+        if not value.strip() or not plain_text(value):
             raise ValueError("instructions must be nonblank plain text")
         return value
+
+
+def copies_evaluation_data(candidate: Candidate, fixtures: list[Path]) -> bool:
+    """True if the candidate contains an evaluation prompt or gold string.
+
+    Gold strings shorter than 4 characters ("a", "_") occur in ordinary
+    instructions, so only longer values count.
+    """
+    text = json.dumps(candidate.model_dump(), ensure_ascii=False,
+                      default=validate_number)
+    for fixture in fixtures:
+        for case in json.loads(fixture.read_text(encoding="utf-8"))["cases"]:
+            values = [case["prompt"]] + [
+                v for v in case["expected_parameters"].values()
+                if isinstance(v, str) and len(v) >= 4]
+            # Compare JSON-escaped forms, as the candidate text is JSON.
+            if any(json.dumps(v, ensure_ascii=False)[1:-1] in text
+                   for v in values):
+                return True
+    return False
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -52,8 +104,10 @@ def write_json(path: Path, value: Any) -> None:
 def save_candidate(root: Path, candidate: Candidate) -> str:
     """Save immutable content-addressed data, deduplicating parallel writes."""
     root.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(candidate.model_dump(), sort_keys=True,
-                      ensure_ascii=False, separators=(",", ":")) + "\n"
+    # Omitting empty examples keeps instruction-only IDs from pilot-1 stable.
+    text = json.dumps(candidate.model_dump(exclude_defaults=True),
+                      sort_keys=True, ensure_ascii=False,
+                      separators=(",", ":"), default=validate_number) + "\n"
     candidate_id = hashlib.sha256(text.encode()).hexdigest()
     path = root / f"{candidate_id}.json"
     with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=root,

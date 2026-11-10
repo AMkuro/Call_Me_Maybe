@@ -1,10 +1,18 @@
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Save this workspace's single candidate: two instruction strings.",
+  description: "Save this workspace's single candidate: two instruction strings and optional parameter examples.",
   args: {
     name_instructions: tool.schema.string(),
     parameter_instructions: tool.schema.string(),
+    // Python validates each example strictly against its function.
+    parameter_examples: tool.schema.array(tool.schema.object({
+      function: tool.schema.any(),
+      prompt: tool.schema.string(),
+      parameters: tool.schema.record(tool.schema.string(), tool.schema.any()),
+    })).optional().describe(
+      "Worked examples: a function definition, a new request, and its exact parameter values in definition order.",
+    ),
   },
   async execute(args, context) {
     const child = Bun.spawn([

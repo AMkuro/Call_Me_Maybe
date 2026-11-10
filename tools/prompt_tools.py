@@ -14,7 +14,9 @@ from pydantic import BaseModel, ConfigDict
 from src.errors import StartupError
 from src.json_io import loads
 from src.schema import validate_number
-from tools.prompt_candidates import Candidate, save_candidate, write_json
+from tools.prompt_candidates import (
+    Candidate, copies_evaluation_data, save_candidate, write_json,
+)
 from tools.prompt_runtime import evidence_fingerprint
 from tools.prompt_trial import apply_candidate, evaluate
 
@@ -29,6 +31,8 @@ class ToolConfig(BaseModel):
     provenance: str
     fingerprint: str
     code_sha: str
+    parent_id: str = ''
+    guard: list[str] = []
 
 
 def call_tool(workspace: Path, action: str, payload: dict[str, Any]
@@ -49,6 +53,13 @@ def call_tool(workspace: Path, action: str, payload: dict[str, Any]
     store = Path(config.store)
     if action == 'write_prompt':
         candidate = Candidate.model_validate(payload)
+        # Rejected before saving, so the workspace still accepts a candidate.
+        if config.parent_id and candidate == Candidate.model_validate(loads(
+                (store / (config.parent_id + '.json')).read_text())):
+            raise ValueError('candidate equals current_prompt; revise it')
+        if copies_evaluation_data(candidate, [Path(p) for p in config.guard]):
+            raise ValueError('candidate copies evaluation data; '
+                             'write general instructions and new examples')
         if 'candidate_id' in record:
             existing = Candidate.model_validate(loads((store / (
                 record['candidate_id'] + '.json')).read_text()))

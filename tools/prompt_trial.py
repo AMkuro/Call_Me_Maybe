@@ -21,10 +21,12 @@ from tools.prompt_runtime import environment_metadata, has_oom
 
 
 def apply_candidate(path: Path) -> Candidate:
-    """Change only the two instruction globals for this worker process."""
+    """Change only the instruction and example globals for this process."""
     candidate = Candidate.model_validate(loads(path.read_text()))
     prompt.NAME_INSTRUCTIONS = candidate.name_instructions
     prompt.PARAMETER_INSTRUCTIONS = candidate.parameter_instructions
+    prompt.PARAMETER_EXAMPLES = [(e.function, e.prompt, dict(e.parameters))
+                                 for e in candidate.parameter_examples]
     return candidate
 
 

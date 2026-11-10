@@ -12,6 +12,9 @@ correct behavior. Extract input values, not computed results. Preserve signs,
 quotation contents and meaningful whitespace. Replacement symbols are literal
 characters. Regex parameters are patterns, not lists of matched substrings.
 Do not embed the development questions/answers into the instructions.
+parameter_examples are shown to the target before each request. Write new,
+invented requests and values; write_prompt rejects copies of evaluation data.
+Follow the goal given in the context; it comes from the reviewing engineer.
 Do not add a reasoning step to the constrained target output.
 You cannot edit code, expected answers, datasets, runtime settings or workspaces.
 Previous attempts include actual evaluator scores. Do not repeat those prompts;

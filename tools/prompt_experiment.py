@@ -34,6 +34,8 @@ from tools.prompt_runtime import (
 )
 
 DATA_REF = "8d63548988a37bd1862b7192076fea3b1e946154"
+# Held-out regex set (ADR-0020), untracked and written by an isolated agent.
+HELDOUT_REGEX = Path(".cache/heldout-regex/regex_heldout.json")
 TARGET_REVISION = "c1899de289a04d12100db370d81485cdf75e47ca"
 OPTIMIZER_REVISION = "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
 
@@ -147,6 +149,7 @@ def fingerprint(candidate: Path, fixture: Path, env: dict[str, str]) -> str:
 def editor_session(
     folder: Path, context: Path, store: Path, fixture: Path,
     optimizer: str, env: dict[str, str], serial_retry: bool = False,
+    guard: list[Path] | None = None,
 ) -> dict[str, Any]:
     """Keep immutable attempts; reject stale or failed results."""
     context_data = loads(context.read_text())
@@ -163,7 +166,7 @@ def editor_session(
     attempt = Path(tempfile.mkdtemp(prefix='attempt-', dir=folder))
     shutil.copyfile(context, attempt / 'context.json')
     output = attempt / 'editor.json'
-    workspace = Path(tempfile.mkdtemp(prefix='cmm-prompt-', dir='/tmp'))
+    workspace = Path(tempfile.mkdtemp(prefix='cmm-prompt-'))
     templates = Path('research/prompt-improvement')
     tool_dir = workspace / '.opencode/tools'
     tool_dir.mkdir(parents=True)
@@ -188,6 +191,8 @@ def editor_session(
         'store': str(store), 'fixture': str(fixture), 'output': str(output),
         'provenance': env['CMM_PROMPT_PROVENANCE'], 'fingerprint': stamp,
         'code_sha': provenance['code_sha'],
+        'parent_id': context_data['parent_id'],
+        'guard': [str(p) for p in [fixture, *(guard or [])]],
     })
     cache_home = str(Path('.cache/opencode/cache').resolve())
     child_env = dict(env, CMM_PYTHON=sys.executable, CMM_REPO=str(Path.cwd()),
@@ -334,21 +339,22 @@ def cpu_check(
 
 def editor_context(
     base: dict[str, Any], fixture: Path, candidate: Path, role: int,
-    previous: list[dict[str, Any]],
+    previous: list[dict[str, Any]], direction: str | None = None,
 ) -> dict[str, Any]:
-    """Expose only development failures and a specific generic editing goal."""
+    """Expose failed requests and observed outputs, never gold values."""
     data = loads(fixture.read_text())
     observed = {r["id"]: r for r in base["records"]}
     return {
         "current_prompt": loads(candidate.read_text()),
         "previous_attempts": previous,
         "development_functions": data["functions"],
-        "failures": [dict(case, observed={k: v for k, v in observed.get(
-                         case["id"], {}).items() if k in {"call", "error"}})
+        "failures": [{"id": case["id"], "prompt": case["prompt"],
+                      "observed": {k: v for k, v in observed.get(
+                          case["id"], {}).items() if k in {"call", "error"}}}
                      for case in data["cases"]
                      if case["id"] not in base["score"]["correct_ids"]],
         "parent_id": candidate.stem,
-        "goal": (
+        "goal": direction or (
             "Clarify input argument roles; do not execute functions or return "
             "their results. Keep instructions concise and general."
             if role == 0 else
@@ -367,7 +373,11 @@ def main() -> int:
     parser.add_argument('--optimizer-revision', default=OPTIMIZER_REVISION)
     parser.add_argument('--rounds', type=int, choices=range(1, 5), default=4)
     parser.add_argument('--workers', type=int, choices=(1, 2), default=2)
+    parser.add_argument('--direction', type=Path,
+                        help='relay memo from Claude Code; replaces the goal')
     args = parser.parse_args()
+    direction = (args.direction.read_text(encoding='utf-8')
+                 if args.direction else None)
     root, cache = args.output.resolve(), args.cache.resolve()
     root.mkdir(parents=True, exist_ok=True)
     state_path = root / 'state.json'
@@ -424,6 +434,7 @@ def main() -> int:
             'code_sha': code_sha, 'runtime': runtime, 'data_ref': DATA_REF,
             'dev_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
             'workers': args.workers, 'rounds': args.rounds,
+            'direction': direction,
         }, sort_keys=True).encode()).hexdigest()
         state = read_state(state_path, identity)
         epoch = root / identity
@@ -434,8 +445,11 @@ def main() -> int:
         manifest = {'code_sha': code_sha, 'runtime': runtime,
                     'data_ref': DATA_REF,
                     'workers': args.workers, 'rounds': args.rounds,
-                    'identity': identity}
+                    'direction': direction, 'identity': identity}
         write_json(epoch / 'manifest.json', manifest)
+        # Candidates may not copy any evaluation set, including held-out ones.
+        guard = copy_calibrated(epoch) + [
+            p.resolve() for p in [HELDOUT_REGEX] if p.exists()]
         store = root / 'candidates'
         baseline_id = save_candidate(store, Candidate(
             name_instructions=prompt.NAME_INSTRUCTIONS,
@@ -478,7 +492,8 @@ def main() -> int:
                         best, fixture, best_path, worker, [
                             {'prompt': loads((store / (cid + '.json'))
                                              .read_text()), 'score': score}
-                            for cid, score in dict(trials).items()]))
+                            for cid, score in dict(trials).items()],
+                        direction))
                     tasks.append((folder, context))
 
                 def edit(task: tuple[Path, Path]) -> dict[str, Any]:
@@ -488,7 +503,8 @@ def main() -> int:
                         folder, context, store, fixture, args.optimizer,
                         dict(env, CMM_OPTIMIZER_URL=(
                             'http://127.0.0.1:' + str(8011 + int(
-                                folder.name.rsplit('-', 1)[1])) + '/v1')))
+                                folder.name.rsplit('-', 1)[1])) + '/v1')),
+                        guard=guard)
 
                 edits = parallel(edit, tasks, args.workers)
                 for worker_index, edited in enumerate(edits):
@@ -518,7 +534,8 @@ def main() -> int:
                             prior = str(artifact)
                             edited = editor_session(
                                 folder, context, store, fixture,
-                                args.optimizer, env, serial_retry=True)
+                                args.optimizer, env, serial_retry=True,
+                                guard=guard)
                             edited['retry_of'] = prior
                             artifact = Path(edited['artifact'])
                             write_json(artifact / 'result.json', edited)
