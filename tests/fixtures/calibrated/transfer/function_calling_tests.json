@@ -3,13 +3,13 @@
     "prompt": "Multiply 6 by 7."
   },
   {
-    "prompt": "What is the product of 13 and 24?"
-  },
-  {
     "prompt": "Welcome Nina."
   },
   {
     "prompt": "Say a welcome greeting to Omar."
+  },
+  {
+    "prompt": "Welcome Sofia."
   },
   {
     "prompt": "Convert 'hello' to uppercase."
