@@ -1,0 +1,35 @@
+[
+  {
+    "prompt": "Multiply 6 by 7."
+  },
+  {
+    "prompt": "What is the product of 13 and 24?"
+  },
+  {
+    "prompt": "Welcome Nina."
+  },
+  {
+    "prompt": "Say a welcome greeting to Omar."
+  },
+  {
+    "prompt": "Convert 'hello' to uppercase."
+  },
+  {
+    "prompt": "Write 'little world' in uppercase letters."
+  },
+  {
+    "prompt": "What is the absolute value of -14?"
+  },
+  {
+    "prompt": "Find the absolute value of 36."
+  },
+  {
+    "prompt": "Replace each sequence of digits in 'Box 8 has 25 pens' with '#'."
+  },
+  {
+    "prompt": "Change all vowels in 'Data Science' to '*'."
+  },
+  {
+    "prompt": "In 'red bed red', replace every occurrence of 'red' with 'blue'."
+  }
+]
