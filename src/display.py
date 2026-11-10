@@ -49,7 +49,9 @@ def render_progress(fields: dict[str, str], width: int, height: int) -> str:
 
 
 @contextmanager
-def terminal_progress(total: int) -> Generator[Callable[[str, str], None], None, None]:
+def terminal_progress(
+    total: int,
+) -> Generator[Callable[[str, str], None], None, None]:
     """Yield a reporter and restore the terminal even after an exception.
 
     Effect: writes stderr; reads its terminal size and the terminal type.

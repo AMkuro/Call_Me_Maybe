@@ -62,3 +62,13 @@ Files: `tools/prompt_editor.py`, `tools/prompt_experiment.py`, `research/evo-x3/
 - No optimizer/target inference, parallel GPU pilot, CPU candidate trial or calibrated model test has run.
 - Initial optimizer0.6B was rejected; agent research selects Qwen3.5-9B BF16 for the first pilot. Download interrupted; cache retained.
 - Resume from docs/handoffs/2026-11-11-local-prompt-improvement.md, fixing the documented review gaps before executing the draft.
+
+## Resumed implementation
+
+Owner resumed the task. The seven checkpoint issues and three further independent
+review findings have regression coverage and fixes. Full install/lint/test pass:
+174 tests, mypy47files. The source display signature was wrapped to fix the inherited
+E501 only. Optimizer download and GPU/BF16 short JSON smoke passed. Calibrated data
+grew to8suites88cases and were statically audited at8d63548, without exposing them
+to the optimizer. Next: commit this verified code, run the bounded GPU search,
+and execute the CPU/heldout gates only if development correctness improves.

@@ -1,0 +1,73 @@
+{
+  "pinned": {
+    "Qwen/Qwen3.5-9B": {
+      "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+      "files": [
+        {
+          "name": "config.json",
+          "bytes": 3126,
+          "blob": "273ce437e01baf96a07cd9eb3d5f48bac8d7c657"
+        },
+        {
+          "name": "model.safetensors-00001-of-00004.safetensors",
+          "bytes": 5276436216,
+          "blob": "7bcbd85ef394b0b8b10a242bb175c4b4e672a83fb3fc46da8319460de3edacce"
+        },
+        {
+          "name": "model.safetensors-00002-of-00004.safetensors",
+          "bytes": 5335161512,
+          "blob": "7b709e3cdec6630a3c7b151efa17f03183489d03287bf9cb97454153f4ecb873"
+        },
+        {
+          "name": "model.safetensors-00003-of-00004.safetensors",
+          "bytes": 5368717440,
+          "blob": "b56057d566829843f8688c32899ae599053cfb7766c2a94b3b6b2b805ad338b8"
+        },
+        {
+          "name": "model.safetensors-00004-of-00004.safetensors",
+          "bytes": 3325995712,
+          "blob": "69e03ef8ea69638c0ef6360da111c81b8701efac19848c687038964a4b6ac250"
+        },
+        {
+          "name": "model.safetensors.index.json",
+          "bytes": 79657,
+          "blob": "e4c1cb7dba5096b43b9d92bc781aba5e3aa8acd8"
+        },
+        {
+          "name": "tokenizer.json",
+          "bytes": 12807982,
+          "blob": "8f06040c24d0d6efc263cf398806debbf20d732031ba128349d086f6a7b8bab2"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "bytes": 16710,
+          "blob": "eda48d3e75a8e59a8479ee4ec8b37f76e711d9c1"
+        },
+        {
+          "name": "vocab.json",
+          "bytes": 6722759,
+          "blob": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+        }
+      ]
+    }
+  },
+  "torch": "2.14.1+rocm7.2",
+  "gpu": "Radeon 8060S Graphics",
+  "load_wall_s": 4.584783354890533,
+  "status": "completed",
+  "text": "{\"ok\":true}",
+  "tokens": [
+    4754,
+    547,
+    763,
+    1802,
+    92
+  ],
+  "peak_allocated_bytes": 18015556096,
+  "total_wall_s": 8.266215535928495,
+  "kind": "optimizer_load_and_short_json_smoke",
+  "target_model_loaded": false,
+  "source_base_commit": "28bcad0",
+  "uncommitted_runtime_sha256": "040f0681ce1ad5f71d8b300c8e52ec31555a99aa836440927f3bddf87280bc07",
+  "download_wall_s": 721.2077366719022
+}

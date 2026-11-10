@@ -113,12 +113,16 @@ Updates from `feat/implementation` would be merged between rounds and the
 baseline and candidate re-evaluated on the same code. The owner approved the
 design, then requested a stronger optimizer and agent-based model research.
 The selected first pilot is Qwen3.5-9B BF16, while the target stays Qwen3-0.6B
-float32. The tooling is an unfinished draft; no real-model experiment has run.
+float32. The tooling now passes 174 unit tests and lint after the resumed review fixes.
+The 9B GPU/BF16 loader and a short JSON generation passed; prompt-search
+outcomes are recorded separately.
 See the [model research](research/local-prompt-editor-models.md) and
 [handoff](handoffs/2026-11-11-local-prompt-improvement.md) before running it.
-At this checkpoint 159 unit tests and mypy (45 files) pass. Full `make lint`
-still fails on the inherited line length in `src/display.py:52`; no source
-application files were modified for this experiment.
+The inherited line-length error in `src/display.py` was fixed by wrapping
+its signature only; application behavior is unchanged. Model snapshots and
+actual installed package/SDK versions are bound to the evidence fingerprint.
+The calibrated branch has now been statically checked at eight suites (88
+cases), pinned to commit `8d63548988a37bd1862b7192076fea3b1e946154`.
 The calibrated data have 5 functions and 11 requests per suite, but unequal
 function frequencies and a distinct boolean type mix. They are supplemental
 checks, not evidence of equal difficulty or unseen accuracy.

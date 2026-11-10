@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -9,7 +10,9 @@ import time
 from typing import Any
 
 from src.json_io import loads
+from src.schema import validate_number
 from tools.prompt_candidates import dispatch, write_json
+from tools.prompt_runtime import evidence_fingerprint
 
 
 SYSTEM = (
@@ -75,10 +78,19 @@ def main() -> int:
         model = Small_LLM_Model(args.optimizer, device="cuda",
                                 dtype=torch.bfloat16, trust_remote_code=False)
         context = loads(args.context.read_text())
+        provenance = loads(Path(os.environ[
+            'CMM_PROMPT_PROVENANCE']).read_text())
+        result['optimizer'] = args.optimizer
+        result['input_context_tokens'] = int(model.encode(
+            json.dumps(context, default=validate_number)).shape[-1])
+        result['optimizer_peak_metric'] = 'torch max_memory_allocated bytes'
+        torch.cuda.reset_peak_memory_stats()
         # Observations are data inside a user turn, not instructions or tools.
         conversation = (
             f"<|im_start|>system\n{SYSTEM}<|im_end|>\n"
-            f"<|im_start|>user\n{json.dumps(context, default=str)}\n"
+            "<|im_start|>user\n"
+            + json.dumps(context, default=validate_number) + "\n"
+            +
             "Propose one revised pair of instructions now.<|im_end|>\n"
             "<|im_start|>assistant\n<think>\n\n</think>\n\n"
         )
@@ -90,13 +102,17 @@ def main() -> int:
             command = [sys.executable, "-m", "tools.prompt_trial",
                        "--candidate", str(path),
                        "--fixture", str(args.fixture), "--report", str(trial),
-                       "--fingerprint", args.fingerprint]
+                       "--fingerprint", evidence_fingerprint(
+                           provenance['code_sha'], path, args.fixture,
+                           provenance['runtime'])]
             code = subprocess.run(command, timeout=900).returncode
             if not trial.exists():
                 raise ValueError(f"evaluation failed: exit {code}")
             report = loads(trial.read_text())
+            result['trial_attempt'] = report
             if code or not report.get("finished"):
-                raise ValueError(f"evaluation incomplete: exit {code}")
+                raise ValueError(f"evaluation incomplete: exit {code}; "
+                                 + str(report.get('error', '')))
             result["trial"] = report
             return {"score": report["score"]}
 
@@ -104,15 +120,20 @@ def main() -> int:
             prefix = ('{"tool":"write_prompt","prompt":' if tool ==
                       "write_prompt" else '{"tool":"run","candidate_id":')
             for attempt in range(2):
+                input_tokens = int(model.encode(
+                    conversation + prefix).shape[-1])
                 action_text, token_count = generate_action(model, conversation,
                                                            prefix)
                 observation: dict[str, Any] = {
                     "tool": tool, "attempt": attempt, "text": action_text,
                     "generated_tokens": token_count,
+                    "input_tokens": input_tokens,
                 }
                 result["actions"].append(observation)
                 try:
                     action = loads(action_text)
+                    if not isinstance(action, dict):
+                        raise ValueError('tool call must be a JSON object')
                     if action.get("tool") != tool:
                         raise ValueError(f"expected {tool}")
                     if tool == "run" and action.get("candidate_id") != (
@@ -126,7 +147,7 @@ def main() -> int:
                     conversation += (
                         action_text
                         + "<|im_end|>\n<|im_start|>user\nTool result: "
-                        + json.dumps(reply, default=str)
+                        + json.dumps(reply, default=validate_number)
                         + "\nNow call run with that exact candidate_id."
                         "<|im_end|>\n<|im_start|>assistant\n"
                         "<think>\n\n</think>\n\n"
@@ -151,6 +172,9 @@ def main() -> int:
         result["error"] = str(e)
         return 1
     finally:
+        if 'torch' in locals() and torch.cuda.is_available():
+            result['peak_allocated_bytes'] = torch.cuda.max_memory_allocated()
+            result['peak_reserved_bytes'] = torch.cuda.max_memory_reserved()
         result["ended_monotonic_ns"] = time.monotonic_ns()
         write_json(args.output, result)
 

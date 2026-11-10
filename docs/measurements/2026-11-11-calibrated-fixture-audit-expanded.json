@@ -1,0 +1,269 @@
+{
+  "data_ref": "8d63548988a37bd1862b7192076fea3b1e946154",
+  "model_inference": false,
+  "suites": {
+    "original": {
+      "functions": 5,
+      "cases": 11,
+      "frequency_in_definition_order": [
+        4,
+        1,
+        1,
+        2,
+        3
+      ],
+      "prompt_chars": {
+        "min": 13,
+        "median": 28,
+        "max": 66,
+        "mean": 32.09
+      },
+      "name_context_tokens_mean": 174.45,
+      "arity": [
+        2,
+        1,
+        1,
+        1,
+        3
+      ],
+      "types": {
+        "number": 3,
+        "string": 5
+      }
+    },
+    "transfer": {
+      "functions": 5,
+      "cases": 11,
+      "frequency_in_definition_order": [
+        1,
+        3,
+        2,
+        2,
+        3
+      ],
+      "prompt_chars": {
+        "min": 13,
+        "median": 31,
+        "max": 64,
+        "mean": 34.55
+      },
+      "name_context_tokens_mean": 170.36,
+      "arity": [
+        2,
+        1,
+        1,
+        1,
+        3
+      ],
+      "types": {
+        "number": 3,
+        "string": 5
+      }
+    },
+    "boolean": {
+      "functions": 5,
+      "cases": 11,
+      "frequency_in_definition_order": [
+        2,
+        1,
+        1,
+        4,
+        3
+      ],
+      "prompt_chars": {
+        "min": 10,
+        "median": 29,
+        "max": 55,
+        "mean": 33.91
+      },
+      "name_context_tokens_mean": 169.64,
+      "arity": [
+        2,
+        1,
+        1,
+        1,
+        3
+      ],
+      "types": {
+        "number": 1,
+        "boolean": 2,
+        "string": 5
+      }
+    },
+    "difference": {
+      "functions": 5,
+      "cases": 11,
+      "frequency_in_definition_order": [
+        3,
+        1,
+        2,
+        2,
+        3
+      ],
+      "prompt_chars": {
+        "min": 13,
+        "median": 22,
+        "max": 51,
+        "mean": 30.36
+      },
+      "name_context_tokens_mean": 170,
+      "arity": [
+        2,
+        1,
+        1,
+        1,
+        3
+      ],
+      "types": {
+        "number": 3,
+        "string": 5
+      }
+    },
+    "magnitude": {
+      "functions": 5,
+      "cases": 11,
+      "frequency_in_definition_order": [
+        1,
+        2,
+        3,
+        2,
+        3
+      ],
+      "prompt_chars": {
+        "min": 12,
+        "median": 35,
+        "max": 62,
+        "mean": 35.36
+      },
+      "name_context_tokens_mean": 166.55,
+      "arity": [
+        2,
+        1,
+        1,
+        1,
+        3
+      ],
+      "types": {
+        "number": 3,
+        "string": 5
+      }
+    },
+    "word_pairs": {
+      "functions": 5,
+      "cases": 11,
+      "frequency_in_definition_order": [
+        2,
+        3,
+        1,
+        2,
+        3
+      ],
+      "prompt_chars": {
+        "min": 10,
+        "median": 28,
+        "max": 63,
+        "mean": 32.82
+      },
+      "name_context_tokens_mean": 170.18,
+      "arity": [
+        2,
+        1,
+        1,
+        1,
+        3
+      ],
+      "types": {
+        "string": 7,
+        "number": 1
+      }
+    },
+    "timer_flags": {
+      "functions": 5,
+      "cases": 11,
+      "frequency_in_definition_order": [
+        2,
+        1,
+        2,
+        3,
+        3
+      ],
+      "prompt_chars": {
+        "min": 11,
+        "median": 25,
+        "max": 63,
+        "mean": 31.55
+      },
+      "name_context_tokens_mean": 169.09,
+      "arity": [
+        2,
+        1,
+        1,
+        1,
+        3
+      ],
+      "types": {
+        "number": 1,
+        "boolean": 2,
+        "string": 5
+      }
+    },
+    "feature_flags": {
+      "functions": 5,
+      "cases": 11,
+      "frequency_in_definition_order": [
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "prompt_chars": {
+        "min": 11,
+        "median": 39,
+        "max": 54,
+        "mean": 34.64
+      },
+      "name_context_tokens_mean": 171.82,
+      "arity": [
+        2,
+        1,
+        1,
+        1,
+        3
+      ],
+      "types": {
+        "number": 1,
+        "boolean": 2,
+        "string": 5
+      }
+    }
+  },
+  "source_sha256": {
+    "tests/fixtures/calibrated/original/measurement_fixture.json": "fd412f2feb929df1241b5675c808fba84b69e8d3c9e275cda74663c416aa8631",
+    "tests/fixtures/calibrated/original/functions_definition.json": "dc215bb95be6f4d5996cfaeba7284af279db92c53a026495686effdcdb0e91fd",
+    "tests/fixtures/calibrated/original/function_calling_tests.json": "2e935077cfe05e4df886f616a2cd61c6c4951992733db16a3a3ee445f800417f",
+    "tests/fixtures/calibrated/transfer/measurement_fixture.json": "28dee222f1b51c060268a760c620c4b2a78236091068408e4c9494288d6d904b",
+    "tests/fixtures/calibrated/transfer/functions_definition.json": "50a5a5ab24e78e4fae011fdb1994bae6aca5ed545a920e63d18e8331b8d17205",
+    "tests/fixtures/calibrated/transfer/function_calling_tests.json": "15ce1678fa2cf3f45cb7cafbe42cefefc96d23ada273468bfcf119ceebe2373f",
+    "tests/fixtures/calibrated/boolean/measurement_fixture.json": "772853c8f0224d2127a2cba2c89a313fd387b3e4539a4d01aed8d23581b3f45c",
+    "tests/fixtures/calibrated/boolean/functions_definition.json": "4ed6867f27c64c4cc9575e8ab481865359f115002e7ec7d39b3891f328a79e1b",
+    "tests/fixtures/calibrated/boolean/function_calling_tests.json": "4556da72dca4f758925b45764eca8c8c3520c2498be5da0b8783408774d69b67",
+    "tests/fixtures/calibrated/difference/measurement_fixture.json": "f661630695c4753dd0443f4b340caceeac312db6e474ccbbd760b45b4006781a",
+    "tests/fixtures/calibrated/difference/functions_definition.json": "c2b0f6cd0a28409cb8badf800373d49503cbf1b1e00e938ece01a81123435f42",
+    "tests/fixtures/calibrated/difference/function_calling_tests.json": "adac4e744d5186c06efe3999a1f4d2bc65242b7058b9bb84d79df0027ebc84c3",
+    "tests/fixtures/calibrated/magnitude/measurement_fixture.json": "06cd38b4dac41d0f775a1b3f423c95b07b6f7bc51899fabcbd4273433d5b9e90",
+    "tests/fixtures/calibrated/magnitude/functions_definition.json": "92a06ea2f5a9cf97911a38d5834b06a05aaaefef7824edc795b557599285d2b9",
+    "tests/fixtures/calibrated/magnitude/function_calling_tests.json": "2c60c960a534fe35f454396feb18f5724bb224de8bd4d42bb8ffc64b2100cdc9",
+    "tests/fixtures/calibrated/word_pairs/measurement_fixture.json": "90b1be7f09a2c8a5eed06a31e4f4095a115f61b697de3cd7fa7f2c93fda4a193",
+    "tests/fixtures/calibrated/word_pairs/functions_definition.json": "ba34b26d7ee5021199e94fb85d17e688b42fc7b021d7d9a02799afd7d76c4916",
+    "tests/fixtures/calibrated/word_pairs/function_calling_tests.json": "b6c1741def32c767a679ac121c18abf283f130ca60b09e48d1ad7ae111c2f3d7",
+    "tests/fixtures/calibrated/timer_flags/measurement_fixture.json": "71c239f2f09af44975c9796e8e0dffccadfb71af37a0eebe065ff5f8e8a8de72",
+    "tests/fixtures/calibrated/timer_flags/functions_definition.json": "093527881ee0721ac7a1102a6a7449cc532d31e2f06d37a8c0c91d6f02780310",
+    "tests/fixtures/calibrated/timer_flags/function_calling_tests.json": "d8aed0c79c6b1ebb6f608d21fc9fb48f87aceadb3214dbb0e5829c1df3d04bd9",
+    "tests/fixtures/calibrated/feature_flags/measurement_fixture.json": "cb6e2f61b7697b551b126107cd7e19282192e3c5fe4eaf0cb319fd47c1541d08",
+    "tests/fixtures/calibrated/feature_flags/functions_definition.json": "a3e777c18b573063b3d0b5ea92a847a5228169d539253ed0a01748167c636d5d",
+    "tests/fixtures/calibrated/feature_flags/function_calling_tests.json": "da23ed59763c2efec14f0f641558aa9a3c5bd5f5de57c79f465eddd88b5bc711"
+  },
+  "gold_cases_schema_valid": 88,
+  "gold_regex_examples_valid": 72
+}

@@ -1,7 +1,6 @@
 """Bounded GPU prompt search with controlled Git, CPU and held-out gates."""
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 import hashlib
 import json
@@ -10,21 +9,67 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import tempfile
 import subprocess
 import sys
 import time
 from typing import Any
 from collections.abc import Callable
 
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+
 from src import prompt
 from src.json_io import loads
-from src.schema import FunctionCall, FunctionDef
+from src.pipeline import MAX_VALUE_STEPS
+from src.schema import FunctionCall, FunctionDef, validate_number
 from tools.prompt_candidates import (
     Candidate, save_candidate, score_records, select_candidate, write_json,
+    eligible,
+)
+from tools.prompt_runtime import (
+    accept_editor_result, cancel_signal, environment_metadata,
+    evidence_fingerprint, has_oom, parallel, pin_model_cache, run_logged,
+    stop_children,
 )
 
-DATA_REF = "f1b487e247e86aee9ea8503e3ce0902fc303e447"
+DATA_REF = "8d63548988a37bd1862b7192076fea3b1e946154"
 TARGET_REVISION = "c1899de289a04d12100db370d81485cdf75e47ca"
+OPTIMIZER_REVISION = "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+
+
+class SearchState(BaseModel):
+    """Durable phase boundary; selection never returns to an opened holdout."""
+
+    model_config = ConfigDict(strict=True, extra='forbid')
+    identity: str
+    phase: Literal['search', 'selected', 'heldout', 'done'] = 'search'
+    candidate_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
+    next_round: int = Field(default=0, ge=0, le=4)
+    trials: list[dict[str, str]] = []
+
+
+def read_state(path: Path, identity: str) -> dict[str, Any]:
+    """Resume a fixed selection or restart an unused search."""
+    if not path.exists():
+        return SearchState(identity=identity).model_dump()
+    state = SearchState.model_validate(loads(path.read_text())).model_dump()
+    if state['identity'] != identity:
+        if state['phase'] in {'heldout', 'done'}:
+            raise ValueError('selection frozen; conditions changed')
+        if state['phase'] == 'selected':
+            return dict(state, identity=identity)
+        return SearchState(
+            identity=identity, trials=state['trials'],
+            next_round=state['next_round']).model_dump()
+    return state
+
+
+def search_status(edits: list[dict[str, Any]]) -> str:
+    """Separate failed proposals from valid candidates with no improvement."""
+    evaluated = any(e.get('status') == 'evaluated' and not has_oom(e)
+                    for e in edits)
+    return 'no_improvement' if evaluated else 'search_failed'
 
 
 def choose_update(
@@ -92,39 +137,63 @@ def synchronize(log: Path) -> bool:
     return True
 
 
-def fingerprint(candidate: Path, fixture: Path) -> str:
-    """Bind evidence to code, data, prompts and fixed target settings."""
-    pieces = [git("rev-parse", "HEAD"), candidate.read_bytes().hex(),
-              fixture.read_bytes().hex(), TARGET_REVISION,
-              "target=float32;greedy;cap=256;gpu;" + sys.executable]
-    return hashlib.sha256(json.dumps(pieces).encode()).hexdigest()
+def fingerprint(candidate: Path, fixture: Path, env: dict[str, str]) -> str:
+    """Use the actual immutable runtime record passed to every child."""
+    provenance = loads(Path(env['CMM_PROMPT_PROVENANCE']).read_text())
+    return evidence_fingerprint(provenance['code_sha'], candidate, fixture,
+                                provenance['runtime'])
 
 
-def run_logged(
-    command: list[str], log: Path, env: dict[str, str], timeout: int = 1200,
-) -> int:
-    """Launch a fixed command and terminate its whole group on timeout."""
-    with log.open("w", encoding="utf-8") as stream:
-        process = subprocess.Popen(command, env=env, stdout=stream,
-                                   stderr=subprocess.STDOUT,
-                                   start_new_session=True)
-        try:
-            return process.wait(timeout=timeout)
-        except (subprocess.TimeoutExpired, KeyboardInterrupt):
-            os.killpg(process.pid, signal.SIGTERM)
-            try:
-                process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
-            raise
+def editor_session(
+    folder: Path, context: Path, store: Path, fixture: Path,
+    optimizer: str, env: dict[str, str], serial_retry: bool = False,
+) -> dict[str, Any]:
+    """Keep immutable attempts; reject stale or failed results."""
+    context_data = loads(context.read_text())
+    parent = store / f"{context_data['parent_id']}.json"
+    stamp = hashlib.sha256((fingerprint(parent, fixture, env)
+                            + context.read_text()).encode()).hexdigest()
+    if not serial_retry:
+        old_paths = sorted(folder.glob('attempt-*/result.json'),
+                           key=lambda p: p.stat().st_mtime_ns, reverse=True)
+        for old_path in old_paths:
+            old = load_cached(old_path, stamp)
+            if old is not None:
+                return old
+    attempt = Path(tempfile.mkdtemp(prefix='attempt-', dir=folder))
+    shutil.copyfile(context, attempt / 'context.json')
+    output = attempt / 'editor.json'
+    try:
+        code = run_logged([
+            sys.executable, '-m', 'tools.prompt_editor', '--context',
+            str(attempt / 'context.json'), '--store', str(store), '--fixture',
+            str(fixture), '--output', str(output), '--optimizer', optimizer,
+            '--fingerprint', stamp,
+        ], attempt / 'editor.log', env)
+        result = accept_editor_result(output, stamp, code)
+    except subprocess.TimeoutExpired:
+        result = {'status': 'editor_failed',
+                  'error': 'editor deadline reached'}
+    result['fingerprint'] = stamp
+    result['artifact'] = str(attempt)
+    if serial_retry:
+        result['serial_retry'] = True
+    if result['status'] == 'evaluated':
+        candidate = store / f"{result['candidate_id']}.json"
+        expected = fingerprint(candidate, fixture, env)
+        if result['trial'].get('fingerprint') != expected:
+            result = dict(result, status='editor_failed',
+                          error='trial identity mismatch')
+            result.pop('trial', None)
+    write_json(attempt / 'result.json', result)
+    return result
 
 
 def run_trial(
     candidate: Path, fixture: Path, report: Path, env: dict[str, str],
 ) -> dict[str, Any]:
     """Run the fixed pipeline; reject incomplete cached reports."""
-    stamp = fingerprint(candidate, fixture)
+    stamp = fingerprint(candidate, fixture, env)
     cached = load_cached(report, stamp)
     if cached is not None and cached.get("finished"):
         return cached
@@ -132,6 +201,11 @@ def run_trial(
     command = [sys.executable, "-m", "tools.prompt_trial", "--candidate",
                str(candidate), "--fixture", str(fixture), "--report",
                str(report), "--fingerprint", stamp]
+    if report.exists() or report.with_suffix('.log').exists():
+        suffix = f'-previous-{time.time_ns()}'
+        for source in (report, report.with_suffix('.log')):
+            if source.exists():
+                source.rename(source.with_stem(source.stem + suffix))
     code = run_logged(command, report.with_suffix(".log"), env, timeout=900)
     data = loads(fixture.read_text())
     result = load_cached(report, stamp)
@@ -147,7 +221,8 @@ def run_trial(
 def copy_calibrated(root: Path) -> list[Path]:
     """Read fixed fixture blobs without merging their source branch."""
     paths = []
-    for suite in ("original", "transfer", "boolean"):
+    for suite in ("original", "transfer", "boolean", "difference",
+                  "magnitude", "word_pairs", "timer_flags", "feature_flags"):
         path = root / f"calibrated-{suite}.json"
         path.write_bytes(subprocess.check_output([
             "git", "show", f"{DATA_REF}:tests/fixtures/calibrated/{suite}/"
@@ -175,7 +250,9 @@ def cpu_check(
     script = root / "cpu-measure.sh"
     shutil.copyfile("research/evo-x3/measure.sh", script)
     cpu_env = dict(env, CMM_LAB=str(lab), CMM_OMP_THREADS="6",
-                   CMM_MODULE="tools.prompt_trial", CUDA_VISIBLE_DEVICES="",
+                   CMM_MODULE="tools.prompt_trial",
+                   CMM_CPU_TELEMETRY=str(root / "cpu-runtime.json"),
+                   CUDA_VISIBLE_DEVICES="",
                    HIP_VISIBLE_DEVICES="")
     cpu_env.pop("UV_PROJECT_ENVIRONMENT", None)
     code = run_logged([
@@ -205,7 +282,8 @@ def cpu_check(
     result: dict[str, Any] = {
               **estimate_cpu(float(match[1])), "exit_code": code,
               "score": score, "gpu_calls_identical": identical,
-              "profile": raw, "code_sha": git("rev-parse", "HEAD")}
+              "profile": raw, "code_sha": git("rev-parse", "HEAD"),
+              'runtime': loads((root / 'cpu-runtime.json').read_text())}
     result["passed"] = (
         code == 0 and identical
         and score["correct_ids"] == gpu_report["score"]["correct_ids"]
@@ -229,6 +307,7 @@ def editor_context(
                          case["id"], {}).items() if k in {"call", "error"}})
                      for case in data["cases"]
                      if case["id"] not in base["score"]["correct_ids"]],
+        "parent_id": candidate.stem,
         "goal": (
             "Clarify input argument roles; do not execute functions or return "
             "their results. Keep instructions concise and general."
@@ -240,157 +319,250 @@ def editor_context(
 
 
 def main() -> int:
-    """Run a finite, resumable search; publish no results or code remotely."""
+    """Run the finite search; resume a frozen candidate without retuning."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--cache", type=Path, required=True)
-    parser.add_argument("--optimizer", required=True)
-    parser.add_argument("--rounds", type=int, choices=range(1, 5), default=4)
-    parser.add_argument("--workers", type=int, choices=(1, 2), default=2)
+    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--cache', type=Path, required=True)
+    parser.add_argument('--optimizer', required=True)
+    parser.add_argument('--optimizer-revision', default=OPTIMIZER_REVISION)
+    parser.add_argument('--rounds', type=int, choices=range(1, 5), default=4)
+    parser.add_argument('--workers', type=int, choices=(1, 2), default=2)
     args = parser.parse_args()
     root, cache = args.output.resolve(), args.cache.resolve()
     root.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ, HF_HOME=str(cache), HF_HUB_OFFLINE="1",
-               TRANSFORMERS_OFFLINE="1", OMP_NUM_THREADS="4")
-    env.pop("UV_PROJECT_ENVIRONMENT", None)
+    state_path = root / 'state.json'
+    summary_path = root / 'summary.json'
+    signal.signal(signal.SIGTERM, cancel_signal)
     try:
-        synchronize(root / "sync.log")
-        preflight = subprocess.check_output([
-            sys.executable, "-c", "import json,torch; "
+        # Finished runs display their report without restarting a search.
+        if state_path.exists():
+            saved = loads(state_path.read_text())
+            if saved.get('phase') == 'done':
+                print(summary_path.read_text(), flush=True)
+                return 0 if loads(summary_path.read_text())['status'] in {
+                    'completed', 'no_improvement'} else 1
+        if synchronize(root / 'sync.log'):
+            os.execv(sys.executable, [
+                sys.executable, '-m', 'tools.prompt_experiment', *sys.argv[1:],
+            ])
+        code_sha = git('rev-parse', 'HEAD')
+        view = root / 'hf' / args.optimizer_revision
+        models = pin_model_cache(cache, view, {
+            'Qwen/Qwen3-0.6B': TARGET_REVISION,
+            args.optimizer: args.optimizer_revision,
+        })
+        env = dict(os.environ, HF_HOME=str(view),
+                   HF_HUB_CACHE=str(view / 'hub'),
+                   HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1',
+                   OMP_NUM_THREADS='4')
+        for variable in ('UV_PROJECT_ENVIRONMENT', 'TRANSFORMERS_CACHE',
+                         'HUGGINGFACE_HUB_CACHE'):
+            env.pop(variable, None)
+        preflight = loads(subprocess.check_output([
+            sys.executable, '-c', "import json,torch; "
             "assert torch.cuda.is_available(), 'GPU required'; "
             "print(json.dumps({'torch':torch.__version__,"
-            "'gpu':torch.cuda.get_device_name(0),"
-            "'free_total_bytes':torch.cuda.mem_get_info(0)}))",
-        ], env=env, text=True)
-        manifest = {"code_sha": git("rev-parse", "HEAD"),
-                    "target_revision": TARGET_REVISION,
-                    "optimizer": args.optimizer, "optimizer_dtype": "bfloat16",
-                    "target_dtype": "float32", "target_decoding": "greedy",
-                    "value_token_limit": 256, "data_ref": DATA_REF,
-                    "workers": args.workers, "rounds": args.rounds,
-                    "gpu_preflight": loads(preflight)}
-        write_json(root / "manifest.json", manifest)
-        store = root / "candidates"
+            "'gpu':torch.cuda.get_device_name(0),'hip':torch.version.hip}))",
+        ], env=env, text=True))
+        runtime = {'models': models, 'environment': environment_metadata(),
+                   'gpu': preflight, 'optimizer': args.optimizer,
+                   'optimizer_dtype': 'bfloat16', 'optimizer_max_tokens': 512,
+                   'target_dtype': 'float32', 'target_decoding': 'greedy',
+                   'value_token_limit': MAX_VALUE_STEPS}
+        fixture = Path('tests/fixtures/prompt_development.json').resolve()
+        identity = hashlib.sha256(json.dumps({
+            'code_sha': code_sha, 'runtime': runtime, 'data_ref': DATA_REF,
+            'dev_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
+            'workers': args.workers, 'rounds': args.rounds,
+        }, sort_keys=True).encode()).hexdigest()
+        state = read_state(state_path, identity)
+        epoch = root / identity
+        epoch.mkdir(exist_ok=True)
+        provenance = epoch / 'provenance.json'
+        write_json(provenance, {'code_sha': code_sha, 'runtime': runtime})
+        env['CMM_PROMPT_PROVENANCE'] = str(provenance)
+        manifest = {'code_sha': code_sha, 'runtime': runtime,
+                    'data_ref': DATA_REF,
+                    'workers': args.workers, 'rounds': args.rounds,
+                    'identity': identity}
+        write_json(epoch / 'manifest.json', manifest)
+        store = root / 'candidates'
         baseline_id = save_candidate(store, Candidate(
             name_instructions=prompt.NAME_INSTRUCTIONS,
             parameter_instructions=prompt.PARAMETER_INSTRUCTIONS))
-        baseline_path = store / f"{baseline_id}.json"
-        fixture = Path("tests/fixtures/prompt_development.json").resolve()
-        epoch = root / manifest["code_sha"]
-        epoch.mkdir(exist_ok=True)
-        base = run_trial(baseline_path, fixture, epoch / "baseline.json", env)
-        if not base.get("finished"):
-            raise ValueError("baseline failed; see baseline artifact/log")
-        trials: list[tuple[str, dict[str, Any]]] = []
+        baseline_path = store / f'{baseline_id}.json'
+        base = run_trial(baseline_path, fixture, epoch / 'baseline.json', env)
+        if not base.get('finished') or has_oom(base):
+            raise ValueError('baseline failed; see baseline artifact/log')
         best_path, best = baseline_path, base
-        previous = root / "best.json"
-        if previous.exists():
-            old_id = loads(previous.read_text())["candidate_id"]
-            if not re.fullmatch(r"[a-f0-9]{64}", old_id):
-                raise ValueError("invalid previous candidate ID")
-            old_path = store / f"{old_id}.json"
-            old_trial = run_trial(old_path, fixture,
-                                  epoch / "previous.json", env)
-            trials.append((old_id, old_trial["score"]))
-            if select_candidate(base["score"], trials) is not None:
-                best_path, best = old_path, old_trial
-        for round_index in range(args.rounds):
-            if len(best["score"]["correct_ids"]) == best["score"]["total"]:
-                break
-            if synchronize(root / "sync.log"):
-                # Re-execution reloads modules after merging and invalidates
-                # every cached comparison through the new code fingerprint.
+        trials: list[tuple[str, dict[str, Any]]] = []
+        for ref in state['trials']:
+            trial = loads(Path(ref['report']).read_text())
+            candidate = store / f"{ref['candidate_id']}.json"
+            if trial.get('fingerprint') != fingerprint(
+                    candidate, fixture, env):
+                carried = epoch / f"carry-{ref['candidate_id']}.json"
+                trial = run_trial(candidate, fixture, carried, env)
+                ref['report'] = str(carried)
+            if trial.get('finished'):
+                trials.append((ref['candidate_id'], trial['score']))
+                chosen = select_candidate(base['score'], trials)
+                if chosen == ref['candidate_id']:
+                    best_path, best = candidate, trial
+        all_edits: list[dict[str, Any]] = []
+        if state['phase'] == 'search':
+            for round_index in range(state['next_round'], args.rounds):
+                if len(best['score']['correct_ids']) == best['score']['total']:
+                    break
+                if synchronize(root / 'sync.log'):
+                    os.execv(sys.executable, [
+                        sys.executable, '-m', 'tools.prompt_experiment',
+                        *sys.argv[1:],
+                    ])
+                tasks = []
+                for worker in range(args.workers):
+                    folder = epoch / f'round-{round_index}-worker-{worker}'
+                    folder.mkdir(exist_ok=True)
+                    context = folder / 'context.json'
+                    write_json(context, editor_context(
+                        best, fixture, best_path, worker))
+                    tasks.append((folder, context))
+
+                def edit(task: tuple[Path, Path]) -> dict[str, Any]:
+                    """Keep one immutable editor attempt per proposal slot."""
+                    folder, context = task
+                    return editor_session(folder, context, store, fixture,
+                                          args.optimizer, env)
+
+                edits = parallel(edit, tasks, args.workers)
+                for worker_index, edited in enumerate(edits):
+                    # Only repeat a saved candidate's evaluation after OOM;
+                    # no extra model proposal or hidden candidate budget.
+                    artifact = Path(edited['artifact'])
+                    log_oom = 'out of memory' in (
+                        artifact / 'editor.log').read_text().lower()
+                    if (not edited.get('serial_retry')
+                            and (has_oom(edited) or log_oom)):
+                        edited['serial_retry'] = 'started'
+                        write_json(artifact / 'result.json', edited)
+                        if 'candidate_id' in edited:
+                            retry = run_trial(store / (
+                                edited['candidate_id'] + '.json'), fixture,
+                                artifact / 'serial-oom-retry.json', env)
+                            edited['serial_retry'] = retry
+                            edited['trial'] = retry
+                            edited['status'] = (
+                                'evaluated' if retry.get('finished') and
+                                not has_oom(retry) else 'evaluation_failed')
+                            write_json(artifact / 'result.json', edited)
+                        else:
+                            # No candidate existed: retry this same proposal
+                            # slot once after all other editors have exited.
+                            folder, context = tasks[worker_index]
+                            prior = str(artifact)
+                            edited = editor_session(
+                                folder, context, store, fixture,
+                                args.optimizer, env, serial_retry=True)
+                            edited['retry_of'] = prior
+                            artifact = Path(edited['artifact'])
+                            write_json(artifact / 'result.json', edited)
+                    all_edits.append(edited)
+                    if edited['status'] != 'evaluated':
+                        continue
+                    candidate_id = edited['candidate_id']
+                    trial_path = artifact / 'accepted-trial.json'
+                    write_json(trial_path, edited['trial'])
+                    trials.append((candidate_id, edited['trial']['score']))
+                    state['trials'].append({
+                        'candidate_id': candidate_id,
+                        'report': str(trial_path)})
+                    chosen = select_candidate(base['score'], trials)
+                    if chosen == candidate_id:
+                        best_path = store / f'{chosen}.json'
+                        best = edited['trial']
+                    print(json.dumps({'round': round_index,
+                                      'candidate_id': candidate_id,
+                                      'correct': len(edited['trial']['score'][
+                                          'correct_ids'])}), flush=True)
+                state['next_round'] = round_index + 1
+                write_json(state_path, state)
+            if synchronize(root / 'sync.log'):
                 os.execv(sys.executable, [
-                    sys.executable, "-m", "tools.prompt_experiment",
+                    sys.executable, '-m', 'tools.prompt_experiment',
                     *sys.argv[1:],
                 ])
-            tasks = []
-            for worker in range(args.workers):
-                folder = epoch / f"round-{round_index}-worker-{worker}"
-                folder.mkdir(exist_ok=True)
-                context = folder / "context.json"
-                write_json(context, editor_context(best, fixture, best_path,
-                                                   worker))
-                tasks.append((folder, context))
-
-            def edit(task: tuple[Path, Path]) -> dict[str, Any]:
-                """One bounded editor process; no edits to shared source."""
-                folder, context = task
-                output = folder / "editor.json"
-                stamp = fingerprint(best_path, fixture) + args.optimizer
-                old = load_cached(output, stamp)
-                if old is not None and old.get("finished"):
-                    return old
-                code = run_logged([
-                    sys.executable, "-m", "tools.prompt_editor", "--context",
-                    str(context), "--store", str(store), "--fixture",
-                    str(fixture), "--output", str(output), "--optimizer",
-                    args.optimizer, "--fingerprint", stamp,
-                ], folder / "editor.log", env)
-                if not output.exists():
-                    return {"error": f"editor failed: {code}",
-                            "exit_code": code}
-                edited_result: dict[str, Any] = loads(output.read_text())
-                return edited_result
-
-            with ThreadPoolExecutor(max_workers=args.workers) as pool:
-                edits = list(pool.map(edit, tasks))
-            for index, edited in enumerate(edits):
-                if "candidate_id" not in edited or "trial" not in edited:
-                    continue
-                candidate_id = edited["candidate_id"]
-                trials.append((candidate_id, edited["trial"]["score"]))
-                chosen = select_candidate(base["score"], trials)
-                if chosen is not None:
-                    best_path = store / f"{chosen}.json"
-                    if chosen == candidate_id:
-                        best = edited["trial"]
-                    write_json(root / "best.json", {"candidate_id": chosen})
-                print(json.dumps({"round": round_index, "worker": index,
-                                  "candidate_id": candidate_id,
-                                  "correct": len(edited["trial"]["score"][
-                                      "correct_ids"])}), flush=True)
-            write_json(epoch / "search.json", {
-                "baseline": base["score"], "trials": trials})
-        if synchronize(root / "sync.log"):
-            os.execv(sys.executable, [
-                sys.executable, "-m", "tools.prompt_experiment", *sys.argv[1:],
-            ])
-        chosen = select_candidate(base["score"], trials)
-        summary: dict[str, Any] = {
-            "manifest": manifest, "baseline": base["score"],
-            "selected_candidate": chosen, "status": "no_improvement"}
-        if chosen is not None:
-            selected = store / f"{chosen}.json"
-            best = run_trial(selected, fixture, epoch / "selected.json", env)
-            cpu = cpu_check(epoch, selected, fixture, env, best, cache)
-            summary["cpu"] = cpu
-            summary["status"] = "cpu_failed"
-            if cpu["passed"]:
-                # No editor remains alive, and no held-out information has
-                # influenced candidate selection. One comparison, no retuning.
-                summary["calibrated"] = {}
-                for heldout in copy_calibrated(epoch):
-                    summary["calibrated"][heldout.stem] = {
-                        "baseline": run_trial(
-                            baseline_path, heldout,
-                            epoch / f"{heldout.stem}-baseline.json",
-                            env)["score"],
-                        "candidate": run_trial(
-                            selected, heldout,
-                            epoch / f"{heldout.stem}-candidate.json",
-                            env)["score"],
-                    }
-                summary["status"] = "completed"
-        write_json(epoch / "summary.json", summary)
-        print(json.dumps(summary, default=str), flush=True)
-        return 0
+            chosen = select_candidate(base['score'], trials)
+            if chosen is None:
+                all_edits = [loads(path.read_text()) for path in
+                             epoch.glob('round-*/attempt-*/result.json')]
+                status = ('no_improvement' if trials or len(
+                    base['score']['correct_ids']) ==
+                    base['score']['total'] else
+                    search_status(all_edits))
+                summary = {'status': status, 'manifest': manifest,
+                           'baseline': base['score'],
+                           'selected_candidate': None,
+                           'editor_outcomes': [{k: e.get(k) for k in (
+                               'status', 'error', 'exit_code', 'artifact')}
+                               for e in all_edits]}
+                write_json(summary_path, summary)
+                state['phase'] = 'done'
+                write_json(state_path, state)
+                print(json.dumps(summary, default=validate_number), flush=True)
+                return 0 if status == 'no_improvement' else 1
+            state.update(phase='selected', candidate_id=chosen)
+            write_json(state_path, state)
+        selected = store / f"{state['candidate_id']}.json"
+        best = run_trial(selected, fixture, epoch / 'selected.json', env)
+        if (not best.get('finished')
+                or not eligible(base['score'], best['score'])):
+            raise ValueError('fixed candidate no longer improves baseline')
+        summary = {'manifest': manifest, 'baseline': base['score'],
+                   'selected_candidate': state['candidate_id'],
+                   'status': 'cpu_failed'}
+        cpu_path = epoch / 'cpu-result.json'
+        if cpu_path.exists():
+            cpu = loads(cpu_path.read_text())
+        else:
+            cpu_folder = Path(tempfile.mkdtemp(
+                prefix='cpu-attempt-', dir=epoch))
+            cpu = cpu_check(cpu_folder, selected, fixture, env, best, view)
+        write_json(cpu_path, cpu)
+        summary['cpu'] = cpu
+        if cpu['passed']:
+            state['phase'] = 'heldout'
+            write_json(state_path, state)
+            summary['calibrated'] = {}
+            for heldout in copy_calibrated(epoch):
+                comparison = {}
+                for label, candidate in [('baseline', baseline_path),
+                                         ('candidate', selected)]:
+                    result = run_trial(candidate, heldout,
+                                       epoch / f'{heldout.stem}-{label}.json',
+                                       env)
+                    if not result.get('finished'):
+                        raise ValueError('heldout failed; resume fixed pair')
+                    comparison[label] = result['score']
+                summary['calibrated'][heldout.stem] = comparison
+            summary['status'] = 'completed'
+        write_json(summary_path, summary)
+        state['phase'] = 'done'
+        write_json(state_path, state)
+        print(json.dumps(summary, default=validate_number), flush=True)
+        return 0 if summary['status'] == 'completed' else 1
+    except KeyboardInterrupt:
+        stop_children()
+        write_json(root / 'interrupted.json', {'time_ns': time.time_ns()})
+        print('prompt experiment interrupted; owned workers stopped',
+              file=sys.stderr)
+        return 130
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        write_json(root / "failure.json", {
-            "error": str(error), "time_ns": time.time_ns()})
-        print(f"prompt experiment stopped: {error}", file=sys.stderr)
+        stop_children()
+        write_json(root / 'failure.json', {
+            'error': str(error), 'time_ns': time.time_ns()})
+        print(f'prompt experiment stopped: {error}', file=sys.stderr)
         return 1
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

@@ -54,7 +54,7 @@ Transformers 5.22.2。共有RAMは124 GiB、確認時のディスク空きは622
 SDKの公開constructorはモデルIDとdtypeを受け取る。既存Transformersには
 `qwen3_5`からテキスト用`Qwen3_5ForCausalLM`への対応と、通常のtorchによる
 DeltaNet/convの実装がある。新しいランタイムが必須とまでは判断しなかった。
-**実際のモデルロード・ROCm推論・並列動作は未検証である。**
+再開後、モデルロードと短いROCm推論は確認した。並列動作と改稿効果は別の実験で測る。
 
 公式repositoryのvocab.json、tokenizer.json、merges.txtと
 [non-thinking用テンプレート](https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/chat_template.jinja)を確認した。
@@ -67,10 +67,13 @@ SDKのlogits取得はprefix全体を毎回計算する。KV cacheを使う他ラ
 Qwen3.5-9Bの公式モデル情報では、revision
 `c202236235762e1c871ad0ccb60c8ee5ba337b9a`、safetensors総量19306310880 bytesを確認した。
 共有キャッシュへの取得を開始したが、ユーザーの作業終了指示で中断した。
-取得済み部分は残し、モデルの実行はしていない。
+取得済み部分を残していた。再開後は取得が完了し、GPU/BF16ロードと短いJSON応答を確認した。
+取得721.21秒、ロード4.58秒、ロードを含む5トークンの応答8.27秒、PyTorchのピーク割当18,015,556,096 bytes。
+1回の小さな試行で、改稿の速度・質や並列性を測った値ではない。
+[原記録](../measurements/2026-11-11-optimizer-smoke.json)に条件を残した。
 
 再開時はまず既知のツール実装レビュー指摘を直す。その後、9Bが有効な2操作と一般的な改稿を
 出せるかを小さく確認し、0.6Bの完了・型適合・完全正答・既存正答の喪失を独立に測る。
 別系列も比較するなら、8候補の予算を事前にモデル間で均等配分する案がある。
-この比較案はまだ採用・実施していない。追加33件はモデルや候補の選定へ流用しない。
+この比較案はまだ採用・実施していない。追加88件はモデルや候補の選定へ流用しない。
 現状の制限と再開手順は[引継ぎ](../handoffs/2026-11-11-local-prompt-improvement.md)にある。

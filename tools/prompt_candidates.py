@@ -2,10 +2,12 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
 
@@ -57,11 +59,16 @@ _ACTION = TypeAdapter(Annotated[WritePrompt | RunPrompt,
 
 def write_json(path: Path, value: Any) -> None:
     """Atomically replace a development artifact with standard JSON."""
-    temporary = path.with_suffix(path.suffix + ".tmp")
     text = json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False,
                       default=validate_number)
-    temporary.write_text(text + "\n", encoding="utf-8")
-    temporary.replace(path)
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                                     dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+        stream.write(text + '\n')
+    try:
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def save_candidate(root: Path, candidate: Candidate) -> str:
@@ -71,12 +78,18 @@ def save_candidate(root: Path, candidate: Candidate) -> str:
                       ensure_ascii=False, separators=(",", ":")) + "\n"
     candidate_id = hashlib.sha256(text.encode()).hexdigest()
     path = root / f"{candidate_id}.json"
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=root,
+                                     delete=False) as stream:
+        temporary = Path(stream.name)
+        stream.write(text)
     try:
-        with path.open("x", encoding="utf-8") as stream:
-            stream.write(text)
-    except FileExistsError:
-        if path.is_symlink() or path.read_text(encoding="utf-8") != text:
-            raise ValueError("candidate storage integrity mismatch")
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            if path.is_symlink() or path.read_text(encoding='utf-8') != text:
+                raise ValueError('candidate storage integrity mismatch')
+    finally:
+        temporary.unlink(missing_ok=True)
     return candidate_id
 
 
@@ -145,6 +158,11 @@ def score_records(
         group = result["by_function"].setdefault(
             name, {"total": 0, "correct": 0})
         group["total"] += 1
+        for value in case['expected_parameters'].values():
+            kind = ('boolean' if isinstance(value, bool) else
+                    'string' if isinstance(value, str) else 'number')
+            result['by_type'].setdefault(kind, {'total': 0,
+                                                'correct': 0})['total'] += 1
         row = indexed.get(case["id"], {})
         if "call" not in row:
             result["errors"].append(case["id"])
@@ -173,7 +191,6 @@ def score_records(
                     "string" if isinstance(value, str) else "number")
             counts = result["by_type"].setdefault(
                 kind, {"total": 0, "correct": 0})
-            counts["total"] += 1
             counts["correct"] += assess_call(
                 dict(case, expected_parameters={key: value}),
                 FunctionCall(prompt=call.prompt, name=call.name,
