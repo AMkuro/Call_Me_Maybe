@@ -16,6 +16,7 @@ tools・prompt・workspacesを設定してworkflowを考える」と範囲を明
 
 - 設定: [OpenCode設定](../../../research/prompt-improvement/opencode.json)、指示文、作業領域、2ツール。
 - モデル: Qwen3.5-9B/BF16/GPU、native generateのKV cache。モデルrevisionを固定する。
+  サーバーとクライアントのモデルIDを同じ`モデル名@revision`にする。
 - 権限: 組み込みtoolsをすべて無効化し、`write_prompt`と`run`だけを許す。
 - 作業領域: エージェントごとに分け、1領域につき1候補だけを受け付ける。
 - `write_prompt`: 2つの指示文字列のみ。`run`: 引数なしで固定の11件を評価する。
@@ -31,6 +32,8 @@ SDKで開始した2試行は採点前に中断した。出力と消費済み2枠
 
 OpenCodeの実効設定で、公開toolsがちょうど2つであることを確認した。
 Native serverは42トークンのtool callを7.48秒で返した。小さな接続確認であり、改稿効果の証明ではない。
+初回の接続ではクライアントのrevision欠落により6接続とも推論前に拒否された。
+この設定失敗は品質試行に数えず記録を残し、モデルIDの一致を直接テストして修正した。
 実際の改善は対象0.6Bで評価し、改善した1候補だけをCPU・固定した88件へ進める。
 現時点で確認した構成はLinux/ROCmの開発環境であり、提出環境の保証ではない。
 

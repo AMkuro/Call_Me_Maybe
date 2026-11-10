@@ -174,11 +174,16 @@ def editor_session(
     config = loads((templates / 'opencode.json').read_text())
     if config['model'] != 'local/' + optimizer:
         raise ValueError('OSS configuration and optimizer model differ')
+    provenance = loads(Path(env['CMM_PROMPT_PROVENANCE']).read_text())
+    served_id = optimizer + '@' + provenance['runtime']['models'][
+        optimizer]['revision']
+    models = config['provider']['local']['models']
+    models[served_id] = models.pop(optimizer)
+    config['model'] = config['small_model'] = 'local/' + served_id
     config['provider']['local']['options']['baseURL'] = env.get(
         'CMM_OPTIMIZER_URL', 'http://127.0.0.1:8011/v1')
     write_json(workspace / 'opencode.json', config)
     shutil.copyfile(templates / 'improver.txt', workspace / 'improver.txt')
-    provenance = loads(Path(env['CMM_PROMPT_PROVENANCE']).read_text())
     write_json(workspace / 'tool-config.json', {
         'store': str(store), 'fixture': str(fixture), 'output': str(output),
         'provenance': env['CMM_PROMPT_PROVENANCE'], 'fingerprint': stamp,
