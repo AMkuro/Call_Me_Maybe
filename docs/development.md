@@ -101,6 +101,21 @@ memory workloads without loading or downloading models. It compares installed
 NumPy/BLAS kernels across machines and thread settings; it does not certify
 campus performance reproduction or predict the application's runtime.
 
+## Isolated prompt-improvement proposal (2026-11-11)
+
+A separate `exp/local-prompt-improvement` worktree now holds a
+[workflow design proposal](superpowers/specs/2026-11-11-local-prompt-improvement-design.md)
+and a [static fixture review](research/calibrated-fixture-review.md).
+The proposed local model has only prompt-saving and fixed-evaluation tools;
+GPU improvements would be checked serially on phys16-t6 (raw total time plus
+8 seconds as a separate estimate), then on the fixed calibrated fixtures.
+Updates from `feat/implementation` would be merged between rounds and the
+baseline and candidate re-evaluated on the same code. Design approval,
+workflow implementation and real-model experiments are still pending.
+The calibrated data have 5 functions and 11 requests per suite, but unequal
+function frequencies and a distinct boolean type mix. They are supplemental
+checks, not evidence of equal difficulty or unseen accuracy.
+
 ## Environments
 
 The owner requires GPU use for real-model development work (2026-11-10).
