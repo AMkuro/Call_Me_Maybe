@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 
 from pydantic import ValidationError
 
+from src import __main__ as entry
 from src.cli import parse_args
 from src.decoder import choose_token, generate
 from src.errors import PromptError, StartupError
@@ -52,18 +53,59 @@ class InputTests(unittest.TestCase):
                 parse_args(['--unknown'])
         self.assertEqual(raised.exception.code, 2)
 
-    def test_loaders_accept_dynamic_definitions_and_empty_input(self) -> None:
-        """Definitions are dynamic and an empty prompt array is valid."""
+    def test_loaders_accept_dynamic_definitions_and_prompts(self) -> None:
+        """Definitions are dynamic and prompt strings preserve their input."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'input.json'
             fn = definition(flag='boolean', text='string', count='number')
             path.write_text(json.dumps([fn.model_dump()]), encoding='utf-8')
             self.assertEqual(load_functions(path), [fn])
-            path.write_text('[]', encoding='utf-8')
-            self.assertEqual(load_prompts(path), [])
             path.write_text('[{"prompt": "日本語"}, {"prompt": ""}]',
                             encoding='utf-8')
             self.assertEqual(load_prompts(path), ['日本語', ''])
+
+    def test_empty_prompt_array_is_insufficient_input(self) -> None:
+        """An empty array is an explicit startup error, not a zero-item job."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'prompts.json'
+            path.write_text('[]', encoding='utf-8')
+            with self.assertRaisesRegex(StartupError, 'no prompts'):
+                load_prompts(path)
+
+    def test_empty_array_stops_before_model_and_output(self) -> None:
+        """Real startup validation preserves old output or leaves it absent."""
+        for existing in [True, False]:
+            with self.subTest(existing=existing):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    functions = root / 'functions.json'
+                    functions.write_text(json.dumps([
+                        definition().model_dump(),
+                    ]), encoding='utf-8')
+                    prompts = root / 'prompts.json'
+                    prompts.write_text('[]', encoding='utf-8')
+                    output = root / 'results' / 'calls.json'
+                    previous = b'["previous run"]\n'
+                    if existing:
+                        output.parent.mkdir()
+                        output.write_bytes(previous)
+                    stderr = io.StringIO()
+                    with patch.object(
+                        entry, 'Model', side_effect=AssertionError(
+                            'model must not load for empty input'
+                        ),
+                    ) as model, contextlib.redirect_stderr(stderr):
+                        status = entry.main([
+                            '--functions_definition', str(functions),
+                            '--input', str(prompts), '--output', str(output),
+                        ])
+                    self.assertEqual(status, 1)
+                    self.assertIn('no prompts', stderr.getvalue())
+                    model.assert_not_called()
+                    if existing:
+                        self.assertEqual(output.read_bytes(), previous)
+                    else:
+                        self.assertFalse(output.parent.exists())
 
     def test_bad_function_files_are_startup_errors(self) -> None:
         """Missing, malformed or unsupported definitions fail clearly."""

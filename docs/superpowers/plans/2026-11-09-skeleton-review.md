@@ -24,7 +24,10 @@
 - Both comma and closing-brace delimiters appear once in the assembled JSON.
 - Function names containing quotes, backslashes and control characters round-trip through JSON.
 - Save failure stops processing with a clear error and nonzero exit.
-- Empty input and all-failed input replace old results with an empty array.
+- Original policy: empty input and all-failed input replace old results with an
+  empty array. Superseded for empty input by the owner's 2026-11-10 decision:
+  reject an empty prompt array before model startup and leave output untouched
+  (ADR-0012 update). A nonempty input whose prompts all fail still saves `[]`.
 
 ## Task 1: Regression tests, then the five corrections
 

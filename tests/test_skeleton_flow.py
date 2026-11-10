@@ -233,21 +233,17 @@ class MainTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertIn('disk full', self.stderr.getvalue())
 
-    def test_zero_results_replace_the_previous_run(self) -> None:
-        """Empty input and all-failed input save an empty result array."""
-        for prompts, results, status in (
-            ([], [], 0), (['x'], [PromptError('failed')], 1),
-        ):
-            with self.subTest(prompts=prompts):
-                self.output.write_text('[{"prompt":"previous run"}]')
-                self.assertEqual(self.run_main(prompts, results), status)
-                self.assertEqual(json.loads(self.output.read_text()), [])
+    def test_all_failed_results_replace_the_previous_run(self) -> None:
+        """A nonempty input with no successful calls saves an empty array."""
+        self.output.write_text('[{"prompt":"previous run"}]')
+        self.assertEqual(self.run_main(['x'], [PromptError('failed')]), 1)
+        self.assertEqual(json.loads(self.output.read_text()), [])
 
     def test_empty_result_save_error_is_reported(self) -> None:
         """Saving an empty array uses the same error handling."""
         with patch.object(entry, 'save_results',
                           side_effect=OSError('permission denied')):
-            self.assertEqual(self.run_main([], []), 1)
+            self.assertEqual(self.run_main(['x'], [PromptError('failed')]), 1)
         self.assertIn('permission denied', self.stderr.getvalue())
 
     def test_partial_success_keeps_each_successful_result(self) -> None:

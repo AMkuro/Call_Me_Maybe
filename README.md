@@ -32,7 +32,13 @@ current argument, token choices and diagnostic scores. Redirecting stderr
 produces ordinary result and warning lines instead of terminal controls.
 
 The program reads the function definitions and the prompts from
-`data/input/` and writes `data/output/function_calls.json`:
+`data/input/` and writes `data/output/function_calls.json`.
+
+The prompt array must contain at least one entry. An empty array is reported
+as insufficient input before loading the model and leaves existing output
+unchanged.
+
+Specify paths with:
 
 ```sh
 uv run python -m src \

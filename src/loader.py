@@ -35,12 +35,16 @@ def load_functions(path: Path) -> list[FunctionDef]:
 def load_prompts(path: Path) -> list[str]:
     """Read the prompts (the ``prompt`` key of each input entry).
 
+    Raises StartupError for insufficient input when the array is empty.
+
     Effect: reads a file.
     """
     try:
         entries = TypeAdapter(list[dict[str, str]]).validate_json(
             path.read_text(encoding="utf-8")
         )
+        if not entries:
+            raise ValueError("insufficient input: no prompts supplied")
         if any(set(entry) != {"prompt"} for entry in entries):
             raise ValueError('each input entry must contain only "prompt"')
         return [entry["prompt"] for entry in entries]

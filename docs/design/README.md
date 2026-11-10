@@ -28,7 +28,7 @@ ADR-0013 の詳細をユーザーが承認した。トークン単位の TUI 表
 | [0009](adr/0009-environment-and-config.md) | 環境と設定 | 決定(未確定の細部あり) |
 | [0010](adr/0010-measurement-policy.md) | 測定の方針 | 決定 |
 | [0011](adr/0011-name-trie-and-output-path.md) | 関数名の木、出力先、モデルのラッパーの形 | 決定(サンプル 5 名のみ確認) |
-| [0012](adr/0012-skeleton-review-corrections.md) | 値の終了、JSON の組み立て、結果の保存 | 修正方針をユーザー承認済み(2026-11-09) |
+| [0012](adr/0012-skeleton-review-corrections.md) | 値の終了、JSON の組み立て、結果の保存 | 承認済み。2026-11-10に空の入力配列を起動時エラーへ変更 |
 | [0013](adr/0013-implementation-details.md) | 名前の終端、語彙、生成上限、警告 | ユーザー承認済み(2026-11-10) |
 | [0014](adr/0014-terminal-progress.md) | 選択・生成を追うトークン単位の TUI | ユーザー承認済み(2026-11-10) |
 

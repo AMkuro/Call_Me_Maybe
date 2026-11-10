@@ -41,7 +41,7 @@ ADR-0013 is approved; the owner additionally requested a live TUI (ADR-0014).
 
 Current state (supersedes the historical checkpoints below): all leaves and
 token-level TUI are implemented. Owner approvals are complete for ADR-0013/0014.
-make lint and 89 tests pass. One independent review completed; its two Important
+make lint and 91 tests pass. One independent review completed; its two Important
 findings have regression fixes. The owner clarified that PR #44 approves the
 foundation independently of semantic-accuracy tuning. It is ready for human
 review of component boundaries and implementation contracts; the measured
@@ -109,3 +109,9 @@ accuracy is reference evidence for follow-up tuning, not an approval gate.
   Do not block its approval on a 90% accuracy score. Preserve the measurements
   for later parameter/component tuning. Infrastructure defects revealed by any
   measurement remain review findings. Human implementation approval is pending.
+- Owner input-contract correction: an empty prompt array is insufficient input
+  and must fail before model startup, preserving existing output. Recorded as
+  the 2026-11-10 update to ADR-0012. Two regression tests failed on the old
+  implementation, then passed. Full make install/lint/test passed (91 tests).
+  Real CLI checks covered both existing and absent output files with offline,
+  absent model caches. Nonempty all-failed inputs still save `[]` and exit1.
