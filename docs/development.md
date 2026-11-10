@@ -14,6 +14,13 @@ The provisional value cap is 256 tokens, with parameter-specific errors when
 generation fails to end. The current tests pass (89 tests), and independent
 review findings have regression fixes. The independent PoC stays in `examples/`.
 
+PR #44 reviews the implementation foundation: component boundaries, decoding
+constraints, validation, persistence, error handling and terminal observation.
+The owner explicitly separated this approval from semantic-accuracy tuning.
+The measured accuracy remains reference evidence for later parameter/component
+changes; reaching 90% is not an approval condition for this foundation PR.
+Evidence of an infrastructure defect still belongs in this review.
+
 Real-model samples produced valid typed JSON in 11/11 cases and correct calls
 in 10/11. Changed definitions produced valid typed JSON in 5/5 and correct calls
 in 3/5, so semantic accuracy is below the Subject target. Separate serial CPU

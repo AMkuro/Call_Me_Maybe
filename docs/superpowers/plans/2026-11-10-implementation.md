@@ -42,8 +42,10 @@ ADR-0013 is approved; the owner additionally requested a live TUI (ADR-0014).
 Current state (supersedes the historical checkpoints below): all leaves and
 token-level TUI are implemented. Owner approvals are complete for ADR-0013/0014.
 make lint and 89 tests pass. One independent review completed; its two Important
-findings have regression fixes. Semantic accuracy remains below target on
-changed definitions; this increment must remain a draft for human review.
+findings have regression fixes. The owner clarified that PR #44 approves the
+foundation independently of semantic-accuracy tuning. It is ready for human
+review of component boundaries and implementation contracts; the measured
+accuracy is reference evidence for follow-up tuning, not an approval gate.
 
 - Skeleton PR #43: MERGED, merge commit ffff6d7caf95b8e1a92d16782e2ce8fd7095afa2.
 - Baseline: make install/lint/test passed; 53 tests, no real-model claim.
@@ -103,3 +105,7 @@ changed definitions; this increment must remain a draft for human review.
   Constant renamed EOS; startup vocabulary mapping already comes from the public
   vocabulary file. Tensor-to-list conversion is still needed; redundant Python
   int conversion/list copying was removed. No unmeasured cache layer added.
+- Owner scope correction: PR #44 is the foundation implementation review.
+  Do not block its approval on a 90% accuracy score. Preserve the measurements
+  for later parameter/component tuning. Infrastructure defects revealed by any
+  measurement remain review findings. Human implementation approval is pending.
