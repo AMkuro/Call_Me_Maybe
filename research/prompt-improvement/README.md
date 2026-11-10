@@ -13,6 +13,8 @@ or expected answer. Native session state and raw tool logs remain available.
 The trusted experiment workflow reuses existing validation/scoring and CPU
 measurement code. It prepares two workspaces, runs OpenCode concurrently,
 selects by fixed development gold, and repeats within the remaining budget.
+Later proposals receive previous prompts and actual development scores, including
+rejected candidates. Model-written score summaries never control promotion.
 Once a candidate improves without regression, it stops both model services,
 runs the native CLI at CPU0-15/6threads/16G/no swap, records raw and raw+8s,
 then evaluates the frozen baseline/candidate on the eight calibrated suites.

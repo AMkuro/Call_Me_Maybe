@@ -334,12 +334,14 @@ def cpu_check(
 
 def editor_context(
     base: dict[str, Any], fixture: Path, candidate: Path, role: int,
+    previous: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Expose only development failures and a specific generic editing goal."""
     data = loads(fixture.read_text())
     observed = {r["id"]: r for r in base["records"]}
     return {
         "current_prompt": loads(candidate.read_text()),
+        "previous_attempts": previous,
         "development_functions": data["functions"],
         "failures": [dict(case, observed={k: v for k, v in observed.get(
                          case["id"], {}).items() if k in {"call", "error"}})
@@ -473,7 +475,10 @@ def main() -> int:
                     folder.mkdir(exist_ok=True)
                     context = folder / 'context.json'
                     write_json(context, editor_context(
-                        best, fixture, best_path, worker))
+                        best, fixture, best_path, worker, [
+                            {'prompt': loads((store / (cid + '.json'))
+                                             .read_text()), 'score': score}
+                            for cid, score in dict(trials).items()]))
                     tasks.append((folder, context))
 
                 def edit(task: tuple[Path, Path]) -> dict[str, Any]:

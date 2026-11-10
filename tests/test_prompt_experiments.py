@@ -15,6 +15,7 @@ from tools.prompt_candidates import (
     Candidate, eligible, score_records, select_candidate, write_json,
 )
 from tools.prompt_experiment import choose_update, load_cached, estimate_cpu
+from tools.prompt_experiment import editor_context
 
 
 class PromptExperimentTests(unittest.TestCase):
@@ -107,6 +108,23 @@ class PromptExperimentTests(unittest.TestCase):
         """Preserve measured duration and derive the agreed estimate."""
         self.assertEqual(estimate_cpu(63.45),
                          {"raw_seconds": 63.45, "estimated_seconds": 71.45})
+
+    def test_rejected_feedback_reaches_the_next_proposal(self) -> None:
+        """Give deterministic editors prior failures instead of replaying."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture = root / 'fixture.json'
+            fixture.write_text(json.dumps({'functions': [], 'cases': []}))
+            candidate = root / 'candidate.json'
+            candidate.write_text(self.candidate().model_dump_json())
+            previous = [{'prompt': {'name_instructions': 'prior selection',
+                                    'parameter_instructions': 'prior values'},
+                         'score': {'correct_ids': ['a'], 'total': 2}}]
+            base = {'records': [], 'score': {'correct_ids': []}}
+            context = editor_context(base, fixture, candidate, 0, previous)
+            self.assertEqual(context['previous_attempts'], previous)
+            self.assertNotEqual(context, editor_context(
+                base, fixture, candidate, 0, []))
 
     def test_json_artifacts_preserve_decimal_numbers(self) -> None:
         """Serialize cached decimals as numbers without rounding."""

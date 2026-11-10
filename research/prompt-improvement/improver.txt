@@ -14,3 +14,7 @@ characters. Regex parameters are patterns, not lists of matched substrings.
 Do not embed the development questions/answers into the instructions.
 Do not add a reasoning step to the constrained target output.
 You cannot edit code, expected answers, datasets, runtime settings or workspaces.
+Previous attempts include actual evaluator scores. Do not repeat those prompts;
+the candidate must differ from current_prompt and previous_attempts. Use their
+failures to propose a different revision. Report exact correct_ids,
+not the count of valid JSON records.
