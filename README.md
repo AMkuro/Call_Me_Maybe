@@ -98,8 +98,12 @@ These are implementation limits, not additional Subject requirements.
 A value has a provisional limit of 256 tokens. Failure to finish
 reports the parameter and limit, skips that prompt and returns a nonzero
 exit status. A generated precision/type error also skips that prompt; invalid
-input files stop startup before loading the model. Successful results are saved after each prompt by atomic
-replacement of the output file.
+input files stop startup before loading the model. Successful results are
+saved after each prompt by atomic replacement of the output file.
+
+Durability across power loss or an OS crash is not implemented, and there
+are no plans to add it. Atomic replacement alone does not guarantee that
+saved results survive either event.
 
 ## Performance analysis
 
