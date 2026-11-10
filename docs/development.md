@@ -33,6 +33,11 @@ timing took 98.94 seconds for the 11 samples (cached model, four threads).
 See [verification record](implementation-verification.md) for the actual cases,
 prompt changes, repeated limit tests, interrupted measurements and limitations.
 
+[Prompt experiment hypotheses](research/prompt-hypotheses.md) collects primary
+research, proposed comparisons and evaluation criteria for later accuracy tuning.
+It records proposals only; the research task did not run model experiments or
+change application behavior.
+
 The Qwen3-0.6B cache used for the terminator probe is under the ignored
 `.cache/huggingface/`; set `HF_HOME="$PWD/.cache/huggingface"` to reuse it.
 The cache-detection unit test now isolates its repository path as well as its
