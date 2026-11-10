@@ -12,6 +12,7 @@ class Args(BaseModel):
 
     Judgment: the defaults follow the Subject (default input and output
     live under data/). The default output path is ADR-0011.
+    Path fields validate types only; loaders and prepare_output check I/O.
     """
 
     model_config = ConfigDict(frozen=True)

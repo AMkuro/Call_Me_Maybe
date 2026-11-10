@@ -25,7 +25,7 @@ ADR-0013 の詳細をユーザーが承認した。トークン単位の TUI 表
 | [0004](adr/0004-numbers-and-types.md) | 数値と型 | 桁区切り数値の正規化をADR-0015に反映。コード未変更 |
 | [0005](adr/0005-prompt-and-tuning.md) | プロンプトと調整 | 決定 |
 | [0006](adr/0006-no-matching-function.md) | 該当する関数がないとき | 決定 |
-| [0007](adr/0007-error-policy-and-model-check.md) | エラー方針とモデルの確認 | 決定(2026-11-09 更新あり。ファイルの確認は取りやめ) |
+| [0007](adr/0007-error-policy-and-model-check.md) | エラー方針とモデルの確認 | モデルのハッシュ確認は取りやめ。出力先の書き込み確認はモデル起動前に行う |
 | [0008](adr/0008-dependencies-and-sdk.md) | 依存関係と配布 SDK | 決定(2026-11-09 更新あり) |
 | [0009](adr/0009-environment-and-config.md) | 環境と設定 | 決定(未確定の細部あり) |
 | [0010](adr/0010-measurement-policy.md) | 測定の方針 | 決定 |

@@ -4,6 +4,7 @@ direction: down
 main: "main (__main__)"
 parse_args: "parse_args (cli)"
 load_inputs: "load_functions, load_prompts (loader)"
+prepare_output: "prepare_output (writer)\n保存先の準備・一時ファイルの書き込み確認"
 load_model: "Model() (model_port)"
 load_vocab: "load_vocab (vocab)"
 build_trie: "build_name_trie (name_trie)"
@@ -21,7 +22,10 @@ save_empty: "save_results: 空配列を保存 (writer)"
 return_code: 終了コードを返す
 write_error: "原因を標準エラーへ出して\n非0で終了"
 
-main -> parse_args -> load_inputs -> load_model -> load_vocab -> build_trie -> next_prompt
+main -> parse_args -> load_inputs -> prepare_output -> load_model -> load_vocab -> build_trie -> next_prompt
+prepare_output -> write_error: "StartupError: モデル未起動" {
+  style.stroke-dash: 3
+}
 next_prompt -> process_prompt: ある
 process_prompt -> save_results -> next_prompt
 process_prompt -> next_prompt: "PromptError: 飛ばす" {
