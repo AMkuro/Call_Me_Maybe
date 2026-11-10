@@ -27,6 +27,12 @@ runs for explicit CPU measurements or submission checks; do not default to
 four CPU threads for development inference. Verify GPU availability in the
 actual execution environment, since the sandbox can hide GPU device nodes.
 
+For provisional campus application-time estimates, use the measured phys16-t6
+total application time plus 8 seconds (owner decision, 2026-11-11; ADR-0010). Preserve raw
+measurements separately; add no actual sleep and do not apply the offset per
+prompt/token/forward or to hardware-probe kernels. This is based on the known 11
+inputs, not inference-profile equivalence. The SDK phys16-t8 default is separate.
+
 Remote publication is separate from local edits, verification and commits.
 A request to fix something does not authorize a push or a PR mutation: obtain
 a separate explicit instruction before pushing, creating/updating a PR, or

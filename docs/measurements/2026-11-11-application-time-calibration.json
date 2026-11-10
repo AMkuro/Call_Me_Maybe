@@ -117,11 +117,39 @@
       "relative_to_reported_campus_median_percent": 14.71782663492508
     }
   },
-  "interpretation": "Both tested candidates miss71.41s. No new profile adopted. Complete-application time alone cannot validate per-forward speed, thermal behavior or unseen inputs.",
+  "interpretation": "Raw5/6-thread times miss71.41s. User adopts a practical total-application-time estimate: phys16-t6 raw seconds plus8seconds. This is not an inference-equivalent profile or a new measurement.",
   "unknown": [
     "campus source commit and exact input/model/environment match",
     "campus per-forward latency and input lengths",
     "cause of reported campus stop",
     "physical memory-bandwidth equivalence"
-  ]
+  ],
+  "practical_estimate": {
+    "adopted_by": "user",
+    "adopted_date": "2026-11-11",
+    "base_profile": "phys16-t6",
+    "rule": "estimated total seconds = measured total seconds +8",
+    "offset_s": 8,
+    "basis": "Reported campus median71.41 minus local6-thread median63.45 is7.96seconds; round to8 for a simple engineering estimate",
+    "estimated_trials_s": [
+      73.12,
+      70.95,
+      71.45
+    ],
+    "estimated_median_s": 71.45,
+    "estimated_range_s": [
+      70.95,
+      73.12
+    ],
+    "status": "estimate derived from existing observations, not a measured runtime",
+    "actual_delay_added": false,
+    "scope": "Apply once to the complete application run, using the known11-input workload as the current basis; not per prompt, token, forward or hardware-probe kernel",
+    "sdk_profile_default": "phys16-t8 unchanged",
+    "future_validation": [
+      "input size including character count as an auxiliary indicator",
+      "input and generated token counts",
+      "forward count and input length per forward",
+      "time series from a consistent CPU temperature sensor and its rate of change"
+    ]
+  }
 }

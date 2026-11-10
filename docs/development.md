@@ -72,7 +72,12 @@ and exit0; raw evidence and exact campus workload/environment remain unverified.
 Provisional local trials gave medians63.45s at6threads and81.92s at5threads,
 so neither matches the reported campus median71.41s. The timing harness now
 accepts CMM_OMP_THREADS while retaining its default8-thread SDK profile.
-No new profile is adopted; see the verification record for provenance and limits.
+No inference-equivalent profile is adopted. The owner later chose a practical
+application-time estimate: measured phys16-t6 total time plus 8 seconds. This gives
+71.45 s from the 63.45 s median; raw times remain intact and no sleep is added.
+The rule applies once per application run, based on the known 11 inputs;
+normalized work and CPU temperature curves remain future checks. See ADR-0010
+and the verification record for provenance and limits.
 
 [Prompt experiment hypotheses](research/prompt-hypotheses.md) collects primary
 research, proposed comparisons and evaluation criteria for later accuracy tuning.

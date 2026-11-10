@@ -38,3 +38,9 @@ syntax and documentation links. Independent review found no Critical,
 Important or Minor findings, reran the4 added harness tests and checked raw
 measurements, aggregation, medians, ranges, percentages and source/input hashes.
 No model or campus raw-evidence verification was claimed by that reviewer.
+
+Follow-up owner decision: stop pursuing exact reproduction for now and estimate
+whole-application time as the measurement with 6 threads plus 8 seconds. Current median
+estimate71.45s derives from raw63.45s; no actual delay, raw data rewrite or
+inference-equivalence claim. Keep normalized input/work units and CPU temperature
+time series/rise rate as future validation. SDK phys16-t8 stays unchanged.
