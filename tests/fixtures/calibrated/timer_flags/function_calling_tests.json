@@ -1,0 +1,35 @@
+[
+  {
+    "prompt": "Set a timer for 10 minutes that repeats."
+  },
+  {
+    "prompt": "Set a timer for 25 minutes without repeating."
+  },
+  {
+    "prompt": "Greet Ruby."
+  },
+  {
+    "prompt": "Reverse the text 'quiet'."
+  },
+  {
+    "prompt": "Write 'forest' backwards."
+  },
+  {
+    "prompt": "Enable audio."
+  },
+  {
+    "prompt": "Disable audio."
+  },
+  {
+    "prompt": "Turn audio on."
+  },
+  {
+    "prompt": "Replace all numbers in 'There are 17 eggs in 2 boxes' with 'X'."
+  },
+  {
+    "prompt": "Replace all vowels in 'Silent River' with '*'."
+  },
+  {
+    "prompt": "Replace each 'cup' with 'mug' in 'cup and cupcake'."
+  }
+]

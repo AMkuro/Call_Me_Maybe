@@ -1,0 +1,213 @@
+{
+  "functions": [
+    {
+      "name": "fn_schedule_timer",
+      "description": "Set a timer with its duration in minutes and whether it repeats.",
+      "parameters": {
+        "minutes": {
+          "type": "number"
+        },
+        "repeat": {
+          "type": "boolean"
+        }
+      },
+      "returns": {
+        "type": "boolean"
+      }
+    },
+    {
+      "name": "fn_greet_contact",
+      "description": "Generate a greeting message for a contact by name.",
+      "parameters": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_reverse_text",
+      "description": "Reverse the characters in a string.",
+      "parameters": {
+        "s": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_set_audio",
+      "description": "Set whether audio is enabled.",
+      "parameters": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "returns": {
+        "type": "boolean"
+      }
+    },
+    {
+      "name": "fn_replace_regex",
+      "description": "Replace all occurrences matching a regex pattern in a string.",
+      "parameters": {
+        "source_string": {
+          "type": "string"
+        },
+        "regex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "timer-flags-01",
+      "prompt": "Set a timer for 10 minutes that repeats.",
+      "expected_name": "fn_schedule_timer",
+      "expected_parameters": {
+        "minutes": 10,
+        "repeat": true
+      }
+    },
+    {
+      "id": "timer-flags-02",
+      "prompt": "Set a timer for 25 minutes without repeating.",
+      "expected_name": "fn_schedule_timer",
+      "expected_parameters": {
+        "minutes": 25,
+        "repeat": false
+      }
+    },
+    {
+      "id": "timer-flags-03",
+      "prompt": "Greet Ruby.",
+      "expected_name": "fn_greet_contact",
+      "expected_parameters": {
+        "name": "Ruby"
+      }
+    },
+    {
+      "id": "timer-flags-04",
+      "prompt": "Reverse the text 'quiet'.",
+      "expected_name": "fn_reverse_text",
+      "expected_parameters": {
+        "s": "quiet"
+      }
+    },
+    {
+      "id": "timer-flags-05",
+      "prompt": "Write 'forest' backwards.",
+      "expected_name": "fn_reverse_text",
+      "expected_parameters": {
+        "s": "forest"
+      }
+    },
+    {
+      "id": "timer-flags-06",
+      "prompt": "Enable audio.",
+      "expected_name": "fn_set_audio",
+      "expected_parameters": {
+        "enabled": true
+      }
+    },
+    {
+      "id": "timer-flags-07",
+      "prompt": "Disable audio.",
+      "expected_name": "fn_set_audio",
+      "expected_parameters": {
+        "enabled": false
+      }
+    },
+    {
+      "id": "timer-flags-08",
+      "prompt": "Turn audio on.",
+      "expected_name": "fn_set_audio",
+      "expected_parameters": {
+        "enabled": true
+      }
+    },
+    {
+      "id": "timer-flags-09",
+      "prompt": "Replace all numbers in 'There are 17 eggs in 2 boxes' with 'X'.",
+      "expected_name": "fn_replace_regex",
+      "expected_parameters": {
+        "source_string": "There are 17 eggs in 2 boxes",
+        "regex": "\\d+",
+        "replacement": "X"
+      },
+      "regex_checks": [
+        {
+          "input": "There are 17 eggs in 2 boxes",
+          "output": "There are X eggs in X boxes"
+        },
+        {
+          "input": "A9B42",
+          "output": "AXBX"
+        },
+        {
+          "input": "none",
+          "output": "none"
+        }
+      ]
+    },
+    {
+      "id": "timer-flags-10",
+      "prompt": "Replace all vowels in 'Silent River' with '*'.",
+      "expected_name": "fn_replace_regex",
+      "expected_parameters": {
+        "source_string": "Silent River",
+        "regex": "[aeiouAEIOU]",
+        "replacement": "*"
+      },
+      "regex_checks": [
+        {
+          "input": "Silent River",
+          "output": "S*l*nt R*v*r"
+        },
+        {
+          "input": "AEIOU",
+          "output": "*****"
+        },
+        {
+          "input": "sky",
+          "output": "sky"
+        }
+      ]
+    },
+    {
+      "id": "timer-flags-11",
+      "prompt": "Replace each 'cup' with 'mug' in 'cup and cupcake'.",
+      "expected_name": "fn_replace_regex",
+      "expected_parameters": {
+        "source_string": "cup and cupcake",
+        "regex": "cup",
+        "replacement": "mug"
+      },
+      "regex_checks": [
+        {
+          "input": "cup and cupcake",
+          "output": "mug and mugcake"
+        },
+        {
+          "input": "cupboard",
+          "output": "mugboard"
+        },
+        {
+          "input": "CUP",
+          "output": "CUP"
+        }
+      ]
+    }
+  ]
+}
