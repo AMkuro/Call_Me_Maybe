@@ -44,7 +44,9 @@ def build_name_trie(
             for token in ids[:-1]:
                 if node.name is not None:
                     raise ValueError("function names have colliding EOS paths")
-                node = node.children.setdefault(token, NameTrie())
+                if token not in node.children:
+                    node.children[token] = NameTrie()
+                node = node.children[token]
             if node.name is not None or ids[-1] in node.children:
                 raise ValueError("function names have colliding EOS paths")
             node.children[ids[-1]] = NameTrie(name=name)
