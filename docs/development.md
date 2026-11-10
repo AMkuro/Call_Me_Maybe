@@ -17,7 +17,7 @@ The owner approved the application skeleton, merged into `develop` in PR #43.
 Implementation on `feat/implementation` includes all skeleton leaves, byte-level
 value masks, the EOS trie, atomic output and token-level terminal diagnostics.
 The provisional value cap is 256 tokens, with parameter-specific errors when
-generation fails to end. The current tests pass (146 tests), and independent
+generation fails to end. The current tests pass (150 tests), and independent
 review findings have regression fixes. The independent PoC stays in `examples/`.
 
 PR #44 reviews the implementation foundation: component boundaries, decoding
@@ -66,6 +66,13 @@ in 3/5, so semantic accuracy is below the Subject target. Separate serial CPU
 timing took 98.94 seconds for the 11 samples (cached model, four threads).
 See [verification record](implementation-verification.md) for the actual cases,
 prompt changes, repeated limit tests, interrupted measurements and limitations.
+
+A user-provided campus application summary reports65.74/71.41/71.49seconds
+and exit0; raw evidence and exact campus workload/environment remain unverified.
+Provisional local trials gave medians63.45s at6threads and81.92s at5threads,
+so neither matches the reported campus median71.41s. The timing harness now
+accepts CMM_OMP_THREADS while retaining its default8-thread SDK profile.
+No new profile is adopted; see the verification record for provenance and limits.
 
 [Prompt experiment hypotheses](research/prompt-hypotheses.md) collects primary
 research, proposed comparisons and evaluation criteria for later accuracy tuning.

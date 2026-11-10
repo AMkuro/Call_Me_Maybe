@@ -1,0 +1,55 @@
+{
+  "recorded_date": "2026-11-11",
+  "measurement_date": null,
+  "source": "User-provided text summarizing another agent's screenshot review",
+  "evidence_status": "reported; original screenshots and full raw reports not available in this session",
+  "cpu_reported": "Intel Core i7-14700",
+  "campus_pc_id": null,
+  "runs": [
+    {
+      "run": 1,
+      "reported_wall_s": 65.74,
+      "reported_exit_code": 0
+    },
+    {
+      "run": 2,
+      "reported_wall_s": 71.41,
+      "reported_exit_code": 0
+    },
+    {
+      "run": 3,
+      "reported_wall_s": 71.49,
+      "reported_exit_code": 0
+    }
+  ],
+  "derived": {
+    "median_s": 71.41,
+    "last_two_median_s": 71.44999999999999,
+    "range_s": [
+      65.74,
+      71.49
+    ]
+  },
+  "provisional_target_s": 71.41,
+  "provisional_target_scope": "Total application time for the reported workload only; not confirmed steady-state or per-forward equivalence",
+  "reported_temperature_c": 100,
+  "reported_throttling": true,
+  "throttling_count": null,
+  "stop_cause": "not established; temperature, lock/logout and session handling are not distinguished by the supplied evidence",
+  "unknown": [
+    "source commit",
+    "input file hashes and exact input count",
+    "model revision",
+    "exact dependency versions",
+    "thread settings and CPU affinity",
+    "full launch command",
+    "per-forward times and input lengths",
+    "final environment capture completion",
+    "raw logs"
+  ],
+  "local_references": {
+    "phys16_t8_wall_s": 55.59,
+    "cpu_four_threads_wall_s": 98.93741811800282,
+    "note": "Existing local measurements have their own provenance; they do not supply missing campus metadata"
+  }
+}
