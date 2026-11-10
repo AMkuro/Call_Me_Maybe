@@ -78,8 +78,7 @@
       "expected_parameters": {
         "a": 14,
         "b": 9
-      },
-      "baseline_slot": 1
+      }
     },
     {
       "id": "original-02",
@@ -88,8 +87,25 @@
       "expected_parameters": {
         "a": 120,
         "b": 35
-      },
-      "baseline_slot": 2
+      }
+    },
+    {
+      "id": "original-12",
+      "prompt": "What is 47 plus 18?",
+      "expected_name": "fn_add_numbers",
+      "expected_parameters": {
+        "a": 47,
+        "b": 18
+      }
+    },
+    {
+      "id": "original-13",
+      "prompt": "Add 5 and 29.",
+      "expected_name": "fn_add_numbers",
+      "expected_parameters": {
+        "a": 5,
+        "b": 29
+      }
     },
     {
       "id": "original-03",
@@ -97,17 +113,7 @@
       "expected_name": "fn_greet",
       "expected_parameters": {
         "name": "Mia"
-      },
-      "baseline_slot": 3
-    },
-    {
-      "id": "original-04",
-      "prompt": "Greet Marcus, please.",
-      "expected_name": "fn_greet",
-      "expected_parameters": {
-        "name": "Marcus"
-      },
-      "baseline_slot": 4
+      }
     },
     {
       "id": "original-05",
@@ -115,17 +121,7 @@
       "expected_name": "fn_reverse_string",
       "expected_parameters": {
         "s": "garden"
-      },
-      "baseline_slot": 5
-    },
-    {
-      "id": "original-06",
-      "prompt": "Write the string 'window' backwards.",
-      "expected_name": "fn_reverse_string",
-      "expected_parameters": {
-        "s": "window"
-      },
-      "baseline_slot": 6
+      }
     },
     {
       "id": "original-07",
@@ -133,8 +129,7 @@
       "expected_name": "fn_get_square_root",
       "expected_parameters": {
         "a": 81
-      },
-      "baseline_slot": 7
+      }
     },
     {
       "id": "original-08",
@@ -142,8 +137,7 @@
       "expected_name": "fn_get_square_root",
       "expected_parameters": {
         "a": 225
-      },
-      "baseline_slot": 8
+      }
     },
     {
       "id": "original-09",
@@ -167,8 +161,7 @@
           "input": "no digits",
           "output": "no digits"
         }
-      ],
-      "baseline_slot": 9
+      ]
     },
     {
       "id": "original-10",
@@ -192,8 +185,7 @@
           "input": "xyz",
           "output": "xyz"
         }
-      ],
-      "baseline_slot": 10
+      ]
     },
     {
       "id": "original-11",
@@ -217,8 +209,7 @@
           "input": "DOG",
           "output": "DOG"
         }
-      ],
-      "baseline_slot": 11
+      ]
     }
   ]
 }
