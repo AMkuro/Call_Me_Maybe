@@ -175,6 +175,9 @@ class PromptTests(unittest.TestCase):
         self.assertIn('<think>\n\n</think>\n\n', prompt)
         self.assertTrue(prompt.endswith('Function name:\n'))
         self.assertIn('name only', prompt)
+        # One line per argument, not one line per function.
+        self.assertIn(f'{fn.name}: {fn.description}\nArguments:\n'
+                      '    a (type=number)', prompt)
 
     def test_parameter_prompt_has_selected_definition(self) -> None:
         """Parameter extraction must not execute the requested function."""
