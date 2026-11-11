@@ -19,6 +19,13 @@ they work once `src` exists. For the independent inference experiment, see
 
 ## Environments
 
+[Campus runtime feasibility and proposed measurements](research/campus-runtime-feasibility.md)
+records the CPU/memory reports pulled from `feat/implementation` on 2026-11-11.
+Those reports and the hardware probe are not part of this integration baseline.
+The measured workload ratios do not establish a reproduced campus machine or
+the Subject's five-minute result. An application observation mode and local
+calibration are proposed in ADR-0022; implementation awaits owner approval.
+
 - `make install` recreates `.venv` from `uv.lock` (CPU torch). `uv sync` alone
   also works, as the reviewers require. torch comes from the default `cpu`
   dependency group, which uses the PyTorch CPU index.
@@ -84,7 +91,9 @@ in to native Auto-merge per PR; no custom merger or release branches.
 
 Static import checks cannot prove that every SDK attribute used is public or
 that every runtime class uses Pydantic; those remain explicit review
-requirements. Accuracy, generation speed and CPU benchmarks are unmeasured.
+requirements. Application accuracy and completion time are not established for
+this integration baseline. Recorded SDK and NumPy benchmarks do not certify
+the application's runtime.
 A complete submission needs unseen prompts/functions, 90%+ semantic accuracy,
 100% schema-valid JSON and the Subject's runtime evaluation, measured on a
 separately provisioned, recorded model benchmark.
