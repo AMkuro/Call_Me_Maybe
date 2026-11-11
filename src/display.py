@@ -20,8 +20,10 @@ _ROWS = (
 
 def _visible(text: str) -> str:
     """Escape control characters so input cannot issue terminal commands."""
-    return "".join(char if char.isprintable() else json.dumps(char)[1:-1]
-                   for char in text)
+    return "".join(
+        char if char.isprintable() else json.dumps(char)[1:-1]
+        for char in text
+    )
 
 
 def _clip(text: str, width: int) -> str:
