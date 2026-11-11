@@ -11,8 +11,9 @@ NAME_INSTRUCTIONS = (
 )
 PARAMETER_INSTRUCTIONS = (
     "The user request will be fulfilled by calling the given function. "
-    "Write the arguments of that call: do not answer the request, and do "
-    "not execute the function yourself. "
+    "Extract the arguments of that call from the user request: copy each "
+    "value as it appears in the request; do not answer the request or "
+    "compute a result. "
     "Keep the requested input values and strings exact. Return only a JSON "
     "object with prompt, name, parameters. "
     "Use JSON numbers, strings, true/false."

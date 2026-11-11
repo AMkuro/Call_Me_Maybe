@@ -182,5 +182,6 @@ class PromptTests(unittest.TestCase):
         prompt = build_parameters_prompt('Keep the text', fn)
         self.assertIn(fn.description, prompt)
         self.assertIn('Keep the text', prompt)
-        self.assertIn('do not execute', prompt)
-        self.assertIn('do not answer the request', prompt)
+        self.assertIn('Extract the arguments', prompt)
+        self.assertIn('from the user request', prompt)
+        self.assertIn('do not answer the request or compute a result', prompt)
