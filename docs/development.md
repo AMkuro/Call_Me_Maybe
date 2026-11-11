@@ -101,6 +101,39 @@ memory workloads without loading or downloading models. It compares installed
 NumPy/BLAS kernels across machines and thread settings; it does not certify
 campus performance reproduction or predict the application's runtime.
 
+## Isolated prompt-improvement checkpoint (2026-11-11)
+
+A separate `exp/local-prompt-improvement` worktree now holds a
+[workflow design proposal](superpowers/specs/2026-11-11-local-prompt-improvement-design.md)
+and a [static fixture review](research/calibrated-fixture-review.md).
+The proposed local model has only prompt-saving and fixed-evaluation tools;
+GPU improvements would be checked serially on phys16-t6 (raw total time plus
+8 seconds as a separate estimate), then on the fixed calibrated fixtures.
+Updates from `feat/implementation` would be merged between rounds and the
+baseline and candidate re-evaluated on the same code. The owner approved the
+design, then requested a stronger optimizer and agent-based model research.
+The selected first pilot is Qwen3.5-9B BF16, while the target stays Qwen3-0.6B
+float32. The tooling now passes 174 unit tests and lint after the resumed review fixes.
+The 9B GPU/BF16 loader and a short JSON generation passed; prompt-search
+outcomes are recorded separately.
+See the [model research](research/local-prompt-editor-models.md) and
+local handoff (untracked, under `.cache/handoff/`) before running it.
+The inherited line-length error in `src/display.py` was fixed by wrapping
+its signature only; application behavior is unchanged. Model snapshots and
+actual installed package/SDK versions are bound to the evidence fingerprint.
+The calibrated branch has now been statically checked at eight suites (88
+cases), pinned to commit `8d63548988a37bd1862b7192076fea3b1e946154`.
+The calibrated data have 5 functions and 11 requests per suite, but unequal
+function frequencies and a distinct boolean type mix. They are supplemental
+checks, not evidence of equal difficulty or unseen accuracy.
+
+The owner subsequently requested an existing OSS agent harness (Ponytail full).
+Prompt improvement now configures installed OpenCode1.15.10 and Transformers
+Serve, exposing only `write_prompt` and `run` in isolated workspaces. The old
+custom agent loop was removed. Two unscored SDK attempts were stopped; six
+proposal slots remain. See [OSS setup](../research/prompt-improvement/README.md)
+and ADR-0019. Server-only dependencies remain in the development GPU environment.
+
 ## Environments
 
 The owner requires GPU use for real-model development work (2026-11-10).

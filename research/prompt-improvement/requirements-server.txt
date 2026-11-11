@@ -1,0 +1,7 @@
+# Development only; install after make gpu-install using the ROCm index.
+fastapi==0.162.4
+uvicorn==0.54.0
+openai==3.49.0
+torch==2.14.1+rocm7.2
+torchvision==0.29.1+rocm7.2
+pillow==13.0.0

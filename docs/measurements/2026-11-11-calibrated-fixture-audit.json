@@ -1,0 +1,407 @@
+{
+  "dataset_commit": "f1b487e247e86aee9ea8503e3ce0902fc303e447",
+  "application_commit": "0d7b32e3ca7bb6a080af1a78384563c0b17e1bf9",
+  "tokenizer_revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+  "suites": {
+    "distributed": {
+      "function_count": 5,
+      "case_count": 11,
+      "count_by_function": {
+        "fn_add_numbers": 2,
+        "fn_greet": 2,
+        "fn_reverse_string": 2,
+        "fn_get_square_root": 2,
+        "fn_substitute_string_with_regex": 3
+      },
+      "prompt_chars": {
+        "min": 10,
+        "median": 30,
+        "max": 81,
+        "mean": 35.91
+      },
+      "prompt_tokens": {
+        "min": 3,
+        "median": 10,
+        "max": 23,
+        "mean": 10.91
+      },
+      "name_context_chars": {
+        "min": 802,
+        "median": 822,
+        "max": 873,
+        "mean": 828.09
+      },
+      "name_context_tokens": {
+        "min": 167,
+        "median": 173,
+        "max": 186,
+        "mean": 174.36
+      },
+      "parameter_context_tokens": {
+        "min": 149,
+        "median": 154,
+        "max": 185,
+        "mean": 161.55
+      },
+      "arity_by_function": {
+        "fn_add_numbers": 2,
+        "fn_greet": 1,
+        "fn_reverse_string": 1,
+        "fn_get_square_root": 1,
+        "fn_substitute_string_with_regex": 3
+      },
+      "parameter_types": {
+        "number": 3,
+        "string": 5
+      },
+      "description_chars": {
+        "fn_add_numbers": 46,
+        "fn_greet": 49,
+        "fn_reverse_string": 48,
+        "fn_get_square_root": 38,
+        "fn_substitute_string_with_regex": 61
+      },
+      "regex_cases": 3,
+      "exact_source_prompt_overlap": null,
+      "per_function_prompt_chars": {
+        "fn_add_numbers": {
+          "min": 27,
+          "median": 29.0,
+          "max": 31,
+          "mean": 29
+        },
+        "fn_greet": {
+          "min": 10,
+          "median": 10.5,
+          "max": 11,
+          "mean": 10.5
+        },
+        "fn_reverse_string": {
+          "min": 26,
+          "median": 26.0,
+          "max": 26,
+          "mean": 26
+        },
+        "fn_get_square_root": {
+          "min": 30,
+          "median": 31.0,
+          "max": 32,
+          "mean": 31
+        },
+        "fn_substitute_string_with_regex": {
+          "min": 57,
+          "median": 64,
+          "max": 81,
+          "mean": 67.33
+        }
+      },
+      "regex_count_method": "Matched fn_substitute_string_with_regex names; no new gold labels inferred from model outputs."
+    },
+    "original": {
+      "function_count": 5,
+      "case_count": 11,
+      "count_by_function": {
+        "fn_add_numbers": 4,
+        "fn_greet": 1,
+        "fn_reverse_string": 1,
+        "fn_get_square_root": 2,
+        "fn_substitute_string_with_regex": 3
+      },
+      "prompt_chars": {
+        "min": 13,
+        "median": 28,
+        "max": 66,
+        "mean": 32.09
+      },
+      "prompt_tokens": {
+        "min": 5,
+        "median": 10,
+        "max": 19,
+        "mean": 11.18
+      },
+      "name_context_chars": {
+        "min": 805,
+        "median": 820,
+        "max": 858,
+        "mean": 824.09
+      },
+      "name_context_tokens": {
+        "min": 168,
+        "median": 173,
+        "max": 183,
+        "mean": 174.45
+      },
+      "parameter_context_tokens": {
+        "min": 150,
+        "median": 160,
+        "max": 182,
+        "mean": 162.64
+      },
+      "arity_by_function": {
+        "fn_add_numbers": 2,
+        "fn_greet": 1,
+        "fn_reverse_string": 1,
+        "fn_get_square_root": 1,
+        "fn_substitute_string_with_regex": 3
+      },
+      "parameter_types": {
+        "number": 3,
+        "string": 5
+      },
+      "description_chars": {
+        "fn_add_numbers": 46,
+        "fn_greet": 49,
+        "fn_reverse_string": 48,
+        "fn_get_square_root": 38,
+        "fn_substitute_string_with_regex": 61
+      },
+      "regex_cases": 3,
+      "exact_source_prompt_overlap": 0,
+      "per_function_prompt_chars": {
+        "fn_add_numbers": {
+          "min": 13,
+          "median": 16.5,
+          "max": 38,
+          "mean": 21
+        },
+        "fn_greet": {
+          "min": 17,
+          "median": 17,
+          "max": 17,
+          "mean": 17
+        },
+        "fn_reverse_string": {
+          "min": 26,
+          "median": 26,
+          "max": 26,
+          "mean": 26
+        },
+        "fn_get_square_root": {
+          "min": 28,
+          "median": 29.0,
+          "max": 30,
+          "mean": 29
+        },
+        "fn_substitute_string_with_regex": {
+          "min": 51,
+          "median": 51,
+          "max": 66,
+          "mean": 56
+        }
+      }
+    },
+    "transfer": {
+      "function_count": 5,
+      "case_count": 11,
+      "count_by_function": {
+        "fn_multiply_numbers": 1,
+        "fn_welcome": 3,
+        "fn_to_uppercase": 2,
+        "fn_get_absolute_value": 2,
+        "fn_replace_matches_with_regex": 3
+      },
+      "prompt_chars": {
+        "min": 13,
+        "median": 31,
+        "max": 64,
+        "mean": 34.55
+      },
+      "prompt_tokens": {
+        "min": 3,
+        "median": 9,
+        "max": 19,
+        "mean": 9.27
+      },
+      "name_context_chars": {
+        "min": 813,
+        "median": 831,
+        "max": 864,
+        "mean": 834.55
+      },
+      "name_context_tokens": {
+        "min": 164,
+        "median": 170,
+        "max": 180,
+        "mean": 170.36
+      },
+      "parameter_context_tokens": {
+        "min": 148,
+        "median": 153,
+        "max": 180,
+        "mean": 158.64
+      },
+      "arity_by_function": {
+        "fn_multiply_numbers": 2,
+        "fn_welcome": 1,
+        "fn_to_uppercase": 1,
+        "fn_get_absolute_value": 1,
+        "fn_replace_matches_with_regex": 3
+      },
+      "parameter_types": {
+        "number": 3,
+        "string": 5
+      },
+      "description_chars": {
+        "fn_multiply_numbers": 55,
+        "fn_welcome": 49,
+        "fn_to_uppercase": 38,
+        "fn_get_absolute_value": 41,
+        "fn_replace_matches_with_regex": 61
+      },
+      "regex_cases": 3,
+      "exact_source_prompt_overlap": 0,
+      "per_function_prompt_chars": {
+        "fn_multiply_numbers": {
+          "min": 16,
+          "median": 16,
+          "max": 16,
+          "mean": 16
+        },
+        "fn_welcome": {
+          "min": 13,
+          "median": 14,
+          "max": 31,
+          "mean": 19.33
+        },
+        "fn_to_uppercase": {
+          "min": 29,
+          "median": 35.5,
+          "max": 42,
+          "mean": 35.5
+        },
+        "fn_get_absolute_value": {
+          "min": 30,
+          "median": 32.0,
+          "max": 34,
+          "mean": 32
+        },
+        "fn_replace_matches_with_regex": {
+          "min": 43,
+          "median": 64,
+          "max": 64,
+          "mean": 57
+        }
+      }
+    },
+    "boolean": {
+      "function_count": 5,
+      "case_count": 11,
+      "count_by_function": {
+        "fn_set_alarm": 2,
+        "fn_greet_person": 1,
+        "fn_reverse_text": 1,
+        "fn_set_notifications": 4,
+        "fn_substitute_regex": 3
+      },
+      "prompt_chars": {
+        "min": 10,
+        "median": 29,
+        "max": 55,
+        "mean": 33.91
+      },
+      "prompt_tokens": {
+        "min": 3,
+        "median": 7,
+        "max": 18,
+        "mean": 8.36
+      },
+      "name_context_chars": {
+        "min": 813,
+        "median": 832,
+        "max": 858,
+        "mean": 836.91
+      },
+      "name_context_tokens": {
+        "min": 164,
+        "median": 169,
+        "max": 180,
+        "mean": 169.64
+      },
+      "parameter_context_tokens": {
+        "min": 143,
+        "median": 152,
+        "max": 179,
+        "mean": 157.36
+      },
+      "arity_by_function": {
+        "fn_set_alarm": 2,
+        "fn_greet_person": 1,
+        "fn_reverse_text": 1,
+        "fn_set_notifications": 1,
+        "fn_substitute_regex": 3
+      },
+      "parameter_types": {
+        "number": 1,
+        "boolean": 2,
+        "string": 5
+      },
+      "description_chars": {
+        "fn_set_alarm": 53,
+        "fn_greet_person": 49,
+        "fn_reverse_text": 44,
+        "fn_set_notifications": 32,
+        "fn_substitute_regex": 66
+      },
+      "regex_cases": 3,
+      "exact_source_prompt_overlap": 0,
+      "per_function_prompt_chars": {
+        "fn_set_alarm": {
+          "min": 43,
+          "median": 43.0,
+          "max": 43,
+          "mean": 43
+        },
+        "fn_greet_person": {
+          "min": 10,
+          "median": 10,
+          "max": 10,
+          "mean": 10
+        },
+        "fn_reverse_text": {
+          "min": 29,
+          "median": 29,
+          "max": 29,
+          "mean": 29
+        },
+        "fn_set_notifications": {
+          "min": 21,
+          "median": 22.0,
+          "max": 25,
+          "mean": 22.5
+        },
+        "fn_substitute_regex": {
+          "min": 49,
+          "median": 54,
+          "max": 55,
+          "mean": 52.67
+        }
+      }
+    }
+  },
+  "cross_suite_exact_duplicates": [],
+  "static_checks": {
+    "native_fixture_consistency": 3,
+    "gold_schema_valid": 33,
+    "regex_gold_examples_valid": 27,
+    "case_ids_unique": true,
+    "duplicate_json_keys_rejected_by_reader": true
+  },
+  "source_file_sha256": {
+    "tests/fixtures/calibrated/original/measurement_fixture.json": "fd412f2feb929df1241b5675c808fba84b69e8d3c9e275cda74663c416aa8631",
+    "tests/fixtures/calibrated/original/functions_definition.json": "dc215bb95be6f4d5996cfaeba7284af279db92c53a026495686effdcdb0e91fd",
+    "tests/fixtures/calibrated/original/function_calling_tests.json": "2e935077cfe05e4df886f616a2cd61c6c4951992733db16a3a3ee445f800417f",
+    "tests/fixtures/calibrated/transfer/measurement_fixture.json": "28dee222f1b51c060268a760c620c4b2a78236091068408e4c9494288d6d904b",
+    "tests/fixtures/calibrated/transfer/functions_definition.json": "50a5a5ab24e78e4fae011fdb1994bae6aca5ed545a920e63d18e8331b8d17205",
+    "tests/fixtures/calibrated/transfer/function_calling_tests.json": "15ce1678fa2cf3f45cb7cafbe42cefefc96d23ada273468bfcf119ceebe2373f",
+    "tests/fixtures/calibrated/boolean/measurement_fixture.json": "772853c8f0224d2127a2cba2c89a313fd387b3e4539a4d01aed8d23581b3f45c",
+    "tests/fixtures/calibrated/boolean/functions_definition.json": "4ed6867f27c64c4cc9575e8ab481865359f115002e7ec7d39b3891f328a79e1b",
+    "tests/fixtures/calibrated/boolean/function_calling_tests.json": "4556da72dca4f758925b45764eca8c8c3520c2498be5da0b8783408774d69b67"
+  },
+  "measurement_scope": {
+    "model_inference": false,
+    "chars": "Python len on decoded prompt string (Unicode code points)",
+    "tokens": "Cached tokenizers.Tokenizer.encode(add_special_tokens=False), matching SDK encode option",
+    "parameter_context": "build_parameters_prompt only; excludes forced assistant JSON head and growing generated values",
+    "application_commit": "0d7b32e3ca7bb6a080af1a78384563c0b17e1bf9"
+  }
+}

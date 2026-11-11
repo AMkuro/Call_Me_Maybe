@@ -12,6 +12,11 @@ if [[ ! $THREADS =~ ^([1-9]|1[0-6])$ ]]; then
   echo 'CMM_OMP_THREADS must be an integer from 1 to 16.' >&2
   exit 2
 fi
+MODULE=${CMM_MODULE:-src}
+case "$MODULE" in
+  src|tools.prompt_trial) ;;
+  *) echo 'CMM_MODULE must be src or tools.prompt_trial.' >&2; exit 2 ;;
+esac
 # 測定開始前に CPU を冷ます目標 (℃) と、下がらないと判断するまでの秒数。
 COOL_TARGET=${CMM_COOL_TARGET_C:-50}
 COOL_STALL=${CMM_COOL_STALL_S:-60}
@@ -69,7 +74,7 @@ SAMPLER=$!
 
 systemd-run --user --scope --quiet -p MemoryMax=16G -p MemorySwapMax=0 \
   taskset -c 0-15 /usr/bin/time -f 'wall_s=%e max_rss_kib=%M' -o "$OUT/$LABEL.time" \
-  uv run python -m src "$@"
+  uv run python -m "$MODULE" "$@"
 RC=$?
 kill "$SAMPLER" 2>/dev/null
 wait "$SAMPLER" 2>/dev/null
@@ -83,7 +88,7 @@ LIMIT=not_reached
   echo "tctl_start_mc=${T0:-unavailable} tctl_end_mc=$(tctl || echo unavailable)" \
     "tctl_max_mc=$([ -n "$T0" ] && echo "$TMAX" || echo unavailable)" \
     "cool_wait_s=$COOL_WAIT cool_target_c=$COOL_TARGET thermal_limit=$LIMIT"
-  echo "profile=phys16-t$THREADS mem_max=16G swap=0 cpus=0-15 omp=$THREADS"
+  echo "profile=phys16-t$THREADS mem_max=16G swap=0 cpus=0-15 omp=$THREADS module=$MODULE"
 } > "$OUT/$LABEL.txt"
 rm -f "$OUT/$LABEL.time" "$TMAX_FILE"
 cat "$OUT/$LABEL.txt"
