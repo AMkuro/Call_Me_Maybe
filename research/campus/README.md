@@ -1,5 +1,9 @@
 # 校舎PC調査（Call Me Maybe 実行環境）
 
+連続実行で温まる過程と処理時間を自動で測る場合は、
+[thermalモードの手順](../../docs/research/safe-thermal-survey.md)を使う。
+熱スロットリング・温度上限・監視不能等で停止し、途中結果も残す。
+
 2026-11-11に取得した校舎・開発機のCPU／メモリ比較は、
 [性能再現の診断と追加調査案](../../docs/research/campus-runtime-feasibility.md)に記録した。
 原記録と調査器は同書が指定する`feat/implementation`のcommitにある。

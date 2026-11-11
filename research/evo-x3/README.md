@@ -1,5 +1,8 @@
 # EVO-X3 検証環境（校舎 i7-14700 のSDK負荷に合わせた近似）
 
+[thermalの連続負荷調査](../../docs/research/safe-thermal-survey.md)は、手動で冷間・温間を作り分けずに温度とforward時間を測る。
+このAMD開発機ではthermal counterがなく、現在の安全条件では開始しない。VMも設定管理の利点を含めて候補とする。
+
 2026-11-11の[追加診断と調査案](../../docs/research/campus-runtime-feasibility.md)では、
 校舎と開発機のCPU／メモリの時間比が負荷ごとに異なることを確認した。
 以下のSDK負荷の校正は、実アプリの全入力や校舎の熱挙動を再現する根拠にはならない。

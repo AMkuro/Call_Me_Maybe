@@ -2,6 +2,7 @@
 
 inspect（既定）は標準ライブラリと Linux の標準情報源だけを読む軽量調査。
 benchmark は明示指定時のみ、配布 llm_sdk の公開 API で CPU 推論を測る。
+thermal の連続負荷と安全停止の引数は thermal --help を参照する。
 モデルのダウンロードは --allow-download を付けない限り行わない。
 
 公開レポートには許可したキーと安全な文字種の値だけを出力し、
@@ -1034,6 +1035,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """調査を実行してレポートを表示し、--write 時のみ保存する。"""
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments and arguments[0] == 'thermal':
+        if not __package__:
+            sys.path.insert(0, str(REPO_ROOT))
+        from tools.thermal_survey import main as thermal_main
+        return thermal_main(arguments[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
     if not 10 <= args.budget <= 900 or not 1 <= args.repeats <= 10 or \
