@@ -18,11 +18,14 @@ Subject v1.7 V.5の全プロンプト5分未満を検証するため、校舎CPU
 ## CLIとデータ
 
 ```sh
-python3 -m tools.campus_survey thermal --pc-id cmm-007 \
+python3 -m tools.campus_survey thermal \
   --hf-home /path/to/existing/huggingface --output /tmp/campus-thermal.jsonl
 ```
 
 - Python 3.10+、Linux。モデルはQwen3-0.6B、`device='cpu'`、公開APIのみ。
+- 所有者の指示によりPC IDは既定で既存の鍵とhostnameからHMAC生成する。`--pc-id`は任意の明示指定だけに使う。
+  鍵の読み取りは既存機能を再利用し、未作成なら既存の`--init-hmac-key`で初期化する。
+  `--hmac-key-file`で既存鍵を指定でき、鍵・hostnameの生値は保存しない。
 - `--lengths 16,64,256`（各1〜2048、2種類以上）、`--duration 300`秒、全体の`--budget 360`秒。
 - `--threads`は明示した場合だけ設定する。既定は継承し、設定値を記録する。
 - `--max-temp-c 85`（1〜95）、`--min-free-mib 1024`（512以上）。

@@ -30,6 +30,7 @@ Subjectは標準的なハードウェアで全テストプロンプトを5分未
 実装上はcampus_survey thermalを追加し、公開SDKの固定入力長のforwardを連続実行する。
 親が温度・thermal counter・メモリを監視し、異常または監視不能で子を停止して途中結果を残す。
 詳細な閾値・保存形式・制限は[実装設計](../../superpowers/specs/2026-11-11-safe-thermal-survey.md)を参照する。
+所有者の追加指示により、thermalのPC IDは既存のHMAC生成を既定とし、手動指定を必須にしない。
 元のobserve案から、実行途中の処理速度を直接比較できる固定SDK負荷へ絞った。
 SDK・src・既存の測定形式は変更しない。既存の総時間＋8秒という暫定方針も維持する。
 

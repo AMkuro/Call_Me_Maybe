@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import socket
 import statistics
 import subprocess
 import sys
@@ -394,7 +395,9 @@ def metadata(pc_id: str, hf_home: Path | None) -> Event:
 def main(argv: list[str] | None = None) -> int:
     """Write a new private JSONL report; never overwrite an existing path."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--pc-id', required=True)
+    parser.add_argument('--pc-id', help='optional ID; default: hostname HMAC')
+    parser.add_argument('--hmac-key-file', type=Path,
+                        default=survey.HMAC_KEY_FILE)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--hf-home', type=Path)
     parser.add_argument('--lengths', type=survey.parse_lengths,
@@ -411,9 +414,14 @@ def main(argv: list[str] | None = None) -> int:
                  1 <= args.threads <= len(os.sched_getaffinity(0)))):
         parser.error('invalid duration/budget, temperature, memory or threads')
     try:
-        pc_id = survey.validate_pc_id(args.pc_id)
-    except ValueError:
-        parser.error('invalid anonymous pc-id')
+        if args.pc_id is None:
+            pc_id = survey.hmac_pc_id(
+                survey.read_hmac_key(args.hmac_key_file), socket.gethostname())
+        else:
+            pc_id = survey.validate_pc_id(args.pc_id)
+    except (OSError, ValueError, EOFError):
+        parser.error('invalid PC ID or HMAC key; initialize the key with '
+                     'python -m tools.campus_survey --init-hmac-key')
     try:
         descriptor = os.open(args.output, os.O_WRONLY | os.O_CREAT |
                              os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -423,7 +431,9 @@ def main(argv: list[str] | None = None) -> int:
                 stream.write(json.dumps(event, allow_nan=False) + '\n')
                 stream.flush()
 
-            emit({**metadata(pc_id, args.hf_home), 'config': {
+            emit({**metadata(pc_id, args.hf_home),
+                  'pc_id_method': 'hmac' if args.pc_id is None else 'explicit',
+                  'config': {
                 key: getattr(args, key) for key in (
                     'lengths', 'duration', 'budget', 'threads',
                     'max_temp_c', 'min_free_mib')}})

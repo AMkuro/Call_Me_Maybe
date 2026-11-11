@@ -14,9 +14,14 @@
 
 ```sh
 .venv/bin/python -m tools.campus_survey thermal \
-  --pc-id cmm-007 --hf-home "$HOME/goinfre/huggingface" \
+  --hf-home "$HOME/goinfre/huggingface" \
   --output /tmp/campus-thermal-001.jsonl
 ```
+
+PC IDは既存のHMAC鍵とhostnameから自動生成する。`--pc-id`は不要で、既存の鍵を上書きしない。
+初回で鍵がなければ`python3 -m tools.campus_survey --init-hmac-key`を一度実行する。
+既定の鍵は`.cache/campus-survey/hmac.key`で、別の既存鍵は`--hmac-key-file`で指定できる。
+鍵とhostnameの生値はレポートへ保存しない。明示した匿名IDを使う既存の`--pc-id`も利用できる。
 
 校舎には開発機用のCPU固定・容量制限を付けない。
 スレッド数は既定で継承する。明示して比較する場合だけ`--threads 8`等を付ける。
@@ -80,8 +85,9 @@ AMDのk10tempは読めるがthermal counterはないため、本ツールはモ�
 
 ## 検証記録（2026-11-11）
 
-`make install`・`make lint`（Subject指定flags、27ファイル）・`make test`（75件）が成功した。
-新規22テストは偽のCPUセンサー・counter・固定logitsを使うSDKと実際の子プロセスで実行した。
+`make install`・`make lint`（Subject指定flags、27ファイル）・`make test`（77件）が成功した。
+thermalの24テストは偽のCPUセンサー・counter・固定logitsを使うSDKと実際の子プロセスで実行した。
+HMACの追加修正では既存鍵によるIDの再現性と、鍵・hostnameを保存しないことを確認した。
 温度上限・counter増減・監視消失・低メモリ・時間切れ・親のSIGTERM・孫プロセス・書込失敗を確認した。
 実機を過熱させる停止テストは行っていない。
 

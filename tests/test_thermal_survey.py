@@ -422,6 +422,45 @@ class ThermalTests(unittest.TestCase):
 class ThermalCLITests(unittest.TestCase):
     """File ownership and partial results are part of the real CLI contract."""
 
+    def test_default_id_reuses_hmac_without_recording_secrets(self) -> None:
+        """A saved key gives a stable anonymous ID without manual input."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            key = root / 'hmac.key'
+            key.write_text('0123456789abcdef')
+            key.chmod(0o600)
+            for number in (1, 2):
+                output = root / f'run-{number}.jsonl'
+                with patch('socket.gethostname',
+                           return_value='CAMPUS.example'), \
+                        patch.object(thermal, 'discover_sensors',
+                                     return_value=[]), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    code = thermal.main(['--hmac-key-file', str(key),
+                                         '--output', str(output)])
+                self.assertEqual(code, 3)
+                rows = [json.loads(line)
+                        for line in output.read_text().splitlines()]
+                self.assertEqual(rows[0]['pc_id'], 'h0f84f2e9e6b2')
+                self.assertEqual(rows[0]['pc_id_method'], 'hmac')
+                self.assertNotIn('0123456789abcdef', output.read_text())
+                self.assertNotIn('CAMPUS.example', output.read_text())
+            self.assertEqual(key.read_text(), '0123456789abcdef')
+
+    def test_missing_hmac_key_does_not_create_a_report(self) -> None:
+        """A missing secret must not fall back to an unhashed hostname."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / 'run.jsonl'
+            with patch.dict(os.environ, {}, clear=True), \
+                    patch('sys.stdin.isatty', return_value=False), \
+                    contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit) as error:
+                thermal.main(['--hmac-key-file', str(root / 'absent'),
+                              '--output', str(output)])
+            self.assertEqual(error.exception.code, 2)
+            self.assertFalse(output.exists())
+
     def test_existing_file_and_symlink_stay_untouched(self) -> None:
         """Refusing an output path must not overwrite its target."""
         with tempfile.TemporaryDirectory() as directory:
