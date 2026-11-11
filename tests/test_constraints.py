@@ -183,3 +183,4 @@ class PromptTests(unittest.TestCase):
         self.assertIn(fn.description, prompt)
         self.assertIn('Keep the text', prompt)
         self.assertIn('do not execute', prompt)
+        self.assertIn('do not answer the request', prompt)

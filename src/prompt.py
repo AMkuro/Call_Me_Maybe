@@ -10,7 +10,9 @@ NAME_INSTRUCTIONS = (
     " Use the descriptions to match the requested action."
 )
 PARAMETER_INSTRUCTIONS = (
-    "Extract arguments for the selected function; do not execute it. "
+    "The user request will be fulfilled by calling the given function. "
+    "Write the arguments of that call: do not answer the request, and do "
+    "not execute the function yourself. "
     "Keep the requested input values and strings exact. Return only a JSON "
     "object with prompt, name, parameters. "
     "Use JSON numbers, strings, true/false."
@@ -60,10 +62,11 @@ def build_name_prompt(
 
 
 def _parameters_request(user_prompt: str, fn: FunctionDef) -> str:
-    """User turn content: the selected definition and the request."""
+    """User turn content: the user's request, then the call that fulfils it."""
     definition = json.dumps(fn.model_dump(), ensure_ascii=False,
                             separators=(",", ":"))
-    return f"Function: {definition}\nRequest: {json.dumps(user_prompt)}"
+    return (f"User request: {json.dumps(user_prompt)}\n"
+            f"Function to call: {definition}")
 
 
 def example_answer(user_prompt: str, fn: FunctionDef,

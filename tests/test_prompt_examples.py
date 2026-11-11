@@ -30,12 +30,13 @@ EXAMPLE: dict[str, Any] = {'function': FN.model_dump(), 'prompt': REQUEST,
 class PromptExampleTests(unittest.TestCase):
     """Examples are earlier chat turns in exactly the generated format."""
 
-    def test_no_examples_keep_the_previous_prompt(self) -> None:
-        """Zero examples must not change the evaluated baseline."""
+    def test_no_examples_show_the_user_request_first(self) -> None:
+        """The request is the user's; the function is the call for it."""
         definition = json.dumps(FN.model_dump(), separators=(',', ':'))
         expected = (
             f'<|im_start|>system\n{prompt.PARAMETER_INSTRUCTIONS}<|im_end|>\n'
-            f'<|im_start|>user\nFunction: {definition}\nRequest: "Go"'
+            f'<|im_start|>user\nUser request: "Go"\nFunction to call: '
+            f'{definition}'
             '<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n')
         with patch.object(prompt, 'PARAMETER_EXAMPLES', []):
             self.assertEqual(prompt.build_parameters_prompt('Go', FN),
@@ -49,7 +50,7 @@ class PromptExampleTests(unittest.TestCase):
         answer = prompt.example_answer(REQUEST, FN, VALUES)
         self.assertEqual(text.count('<think>'), 1)
         self.assertLess(text.index(answer + '<|im_end|>'),
-                        text.index('Request: "Go"'))
+                        text.index('User request: "Go"'))
         self.assertEqual(answer, '{"prompt": "Scale -0.25 in \\"m/s\\", '
                          'rounded", "name": "fn_scale", "parameters": '
                          '{"x": -0.25, "unit": "m/s", "round": true}}')
