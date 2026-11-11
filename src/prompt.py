@@ -50,10 +50,9 @@ def build_name_prompt(
     user_prompt: str, functions: dict[str, FunctionDef]
 ) -> str:
     """Prompt for choosing the function name."""
-    definitions = "\n\n".join(
-        f"{fn.name}: {fn.description}\nArguments:" + "".join(
-            f"\n    {name} (type={spec.type})"
-            for name, spec in fn.parameters.items()
+    definitions = "\n".join(
+        f"{fn.name}: {fn.description} Arguments: " + ", ".join(
+            f"{name} ({spec.type})" for name, spec in fn.parameters.items()
         ) for fn in functions.values()
     )
     return _chat(
