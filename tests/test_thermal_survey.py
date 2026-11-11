@@ -22,7 +22,7 @@ from tools import thermal_survey as thermal
 def args(**changes: object) -> argparse.Namespace:
     """Use a brief diagnostic with no real model or heat."""
     values = dict(lengths=[16, 64], duration=.08, budget=2, threads=None,
-                  max_temp_c=85, min_free_mib=1024, hf_home=None)
+                  max_temp_c=None, min_free_mib=1024, hf_home=None)
     values.update(changes)
     return argparse.Namespace(**values)
 
@@ -103,7 +103,7 @@ class ThermalTests(unittest.TestCase):
 
     def test_initial_unsafe_or_missing_guards_never_load_model(self) -> None:
         """No work starts without trustworthy temperature and counters."""
-        for value, reason in [('85000', 'temperature_limit'),
+        for value, reason in [('100000', 'temperature_limit'),
                               ('bad', 'monitor_unavailable')]:
             self.temp.write_text(value)
             summary, code, _ = self.run_measure()
@@ -117,10 +117,10 @@ class ThermalTests(unittest.TestCase):
                          (3, 'monitor_unavailable'))
         self.assertFalse(self.calls.exists())
 
-    def test_sensor_critical_margin_limits_a_high_user_setting(self) -> None:
-        """A lower CPU-specific limit overrides the user's higher cap."""
+    def test_sensor_critical_limit_overrides_a_high_user_setting(self) -> None:
+        """A user setting cannot raise the CPU's actual critical limit."""
         (self.temp.parent / 'temp1_crit').write_text('90000')
-        self.temp.write_text('80000')
+        self.temp.write_text('90000')
         summary, code, _ = self.run_measure(max_temp_c=95)
         self.assertEqual((code, summary['reason']),
                          (3, 'temperature_limit'))
@@ -153,7 +153,7 @@ class ThermalTests(unittest.TestCase):
             self.assertTrue(changed)
             self.assertTrue(any(e['event'] == 'forward' for e in events))
 
-    def test_flooded_pipe_does_not_starve_temperature_checks(self) -> None:
+    def test_flooded_pipe_does_not_starve_throttle_checks(self) -> None:
         """Frequent results still permit periodic safety sampling."""
         changed = False
 
@@ -161,11 +161,43 @@ class ThermalTests(unittest.TestCase):
             nonlocal changed
             if event['event'] == 'forward' and not changed:
                 changed = True
-                self.temp.write_text('86000')
+                self.counter.write_text('13')
 
         summary, code = thermal.measure(args(duration=1), emit)
         self.assertEqual((code, summary['reason']),
-                         (4, 'temperature_limit'))
+                         (4, 'thermal_throttling'))
+
+    def test_below_critical_temperature_continues_by_default(self) -> None:
+        """No counter increase allows 99 C work below the CPU's 100 C crit."""
+        self.temp.write_text('99000')
+        summary, code, _ = self.run_measure()
+        self.assertEqual((code, summary['reason']),
+                         (0, 'duration_completed'))
+
+    def test_throttle_reason_takes_priority_at_critical_limit(self) -> None:
+        """The first counter increase remains the reported stop reason."""
+        def emit(event: dict) -> None:
+            if event['event'] == 'forward':
+                self.temp.write_text('100000')
+                self.counter.write_text('13')
+
+        summary, code = thermal.measure(args(duration=.3), emit)
+        self.assertEqual((code, summary['reason']),
+                         (4, 'thermal_throttling'))
+
+    def test_missing_critical_limit_refuses_before_model_load(self) -> None:
+        """A missing emergency threshold cannot use a fake limit."""
+        (self.temp.parent / 'temp1_crit').unlink()
+        summary, code, _ = self.run_measure()
+        self.assertEqual((code, summary['reason']),
+                         (3, 'monitor_unavailable'))
+        self.assertFalse(self.calls.exists())
+
+    def test_explicit_lower_temperature_limit_is_still_enforced(self) -> None:
+        """An optional lower bound can stop work but is never the default."""
+        self.temp.write_text('85000')
+        summary, code, _ = self.run_measure(max_temp_c=85)
+        self.assertEqual((code, summary['reason']), (3, 'temperature_limit'))
 
     def test_blocked_child_ignoring_term_is_killed_within_budget(self) -> None:
         """A native-style hang cannot bypass the parent's deadline."""

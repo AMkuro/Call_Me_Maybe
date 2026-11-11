@@ -28,7 +28,10 @@ python3 -m tools.campus_survey thermal \
   `--hmac-key-file`で既存鍵を指定でき、鍵・hostnameの生値は保存しない。
 - `--lengths 16,64,256`（各1〜2048、2種類以上）、`--duration 300`秒、全体の`--budget 360`秒。
 - `--threads`は明示した場合だけ設定する。既定は継承し、設定値を記録する。
-- `--max-temp-c 85`（1〜95）、`--min-free-mib 1024`（512以上）。
+- 2026-11-11の再測定指示により固定85℃とcritの10℃手前の停止を廃止し、thermal counterの増加を主な停止条件にする。
+  CPU固有のcrit値は緊急停止として維持する。critが読めない場合は開始しない。
+  `--max-temp-c`は任意の追加上限（1〜150℃、既定なし）で、CPU固有critを引き上げられない。
+  `--min-free-mib 1024`（512以上）は維持する。
 - 監視間隔0.5秒。モデルロード中、forwardが戻らない場合も親が監視する。
 - モデル取得・自動インストールをしない。既存キャッシュがなければ負荷を開始しない。
 - JSON Linesを排他的に権限600で新規作成し、上書き・symlink追従をしない。
@@ -49,7 +52,8 @@ python3 -m tools.campus_survey thermal \
 1. coretemp/k10temp等のCPU温度が取れない、値が不正、既存のセンサーが読めなくなる。
 2. Intelのcore/package thermal throttle counterが取れない、読めなくなる、減少する、baselineより増える。
    カウンターごとに比較し、合計を独立した事象数にしない。
-3. いずれかのCPUセンサーが指定温度以上、または取得できるcrit値の10℃手前以上になる。
+3. counter増加がなくても、CPU固有のcrit値、または明示された追加温度上限へ達したら緊急停止する。
+   同じ観測でcounter増加とcrit到達があれば、thermal_throttlingを終了理由にする。
 4. MemAvailable、または読めるcgroup v2の残メモリが指定の余裕未満になる。
 5. 全体予算超過、SIGINT/SIGTERM、子の失敗・異常終了、レポートの書き込み失敗。
 

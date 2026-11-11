@@ -51,7 +51,7 @@ def optional_integer(path: Path) -> int | str:
 
 
 def discover_sensors() -> list[Sensor]:
-    """Keep CPU sensors separate, with a CPU-specific critical margin."""
+    """Keep CPU sensors separate, requiring their actual critical limits."""
     sensors = []
     for hwmon in sorted(HWMON_ROOT.glob('hwmon*')):
         name = (hwmon / 'name').read_text().strip()
@@ -60,8 +60,7 @@ def discover_sensors() -> list[Sensor]:
         for path in sorted(hwmon.glob('temp[0-9]*_input')):
             stem = path.name.removesuffix('_input')
             critical = hwmon / f'{stem}_crit'
-            limit = (integer(critical, 11_000, 150_000) - 10_000
-                     if critical.exists() else 150_000)
+            limit = integer(critical, 11_000, 150_000)
             sensors.append((f'{hwmon.name}_{name}_{stem}', path, limit))
     return sensors
 
@@ -143,18 +142,18 @@ def snapshot(sensors: list[Sensor], counters: list[Path],
 def stop_reason(sample: Event, baseline: Event, limits: dict[str, int],
                 min_free_mib: int) -> str | None:
     """Apply safety bounds, without interpreting quotas as thermal events."""
-    if not (baseline['cgroup_memory_limits'].keys() <=
-            sample['cgroup_memory_limits'].keys()):
-        return 'monitor_unavailable'
-    if any(sample['temperatures_mc'][key] >= limit
-           for key, limit in limits.items()):
-        return 'temperature_limit'
     for key, before in baseline['thermal_counters'].items():
         after = sample['thermal_counters'][key]
         if after > before:
             return 'thermal_throttling'
         if after < before:
             return 'counter_reset'
+    if not (baseline['cgroup_memory_limits'].keys() <=
+            sample['cgroup_memory_limits'].keys()):
+        return 'monitor_unavailable'
+    if any(sample['temperatures_mc'][key] >= limit
+           for key, limit in limits.items()):
+        return 'temperature_limit'
     if sample['available_bytes'] < min_free_mib * 1024**2:
         return 'low_memory'
     return None
@@ -253,8 +252,11 @@ def measure(args: argparse.Namespace, emit: Callable[[Event], None]
         if not sensors or not counters:
             return result, 3
         baseline = snapshot(sensors, counters)
-        limits = {name: min(limit, args.max_temp_c * 1000)
-                  for name, _, limit in sensors}
+        limits = {
+            name: (limit if args.max_temp_c is None
+                   else min(limit, args.max_temp_c * 1000))
+            for name, _, limit in sensors
+        }
         emit({'event': 'sample', 'elapsed_ns': 0,
               'limits_mc': limits, **baseline})
         reason = stop_reason(baseline, baseline, limits, args.min_free_mib)
@@ -405,11 +407,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--duration', type=int, default=300)
     parser.add_argument('--budget', type=int, default=360)
     parser.add_argument('--threads', type=int)
-    parser.add_argument('--max-temp-c', type=int, default=85)
+    parser.add_argument('--max-temp-c', type=int,
+                        help='optional lower cap; default: CPU critical limit')
     parser.add_argument('--min-free-mib', type=int, default=1024)
     args = parser.parse_args(argv)
     if not (1 <= args.duration < args.budget <= 900
-            and 1 <= args.max_temp_c <= 95 and args.min_free_mib >= 512
+            and (args.max_temp_c is None or 1 <= args.max_temp_c <= 150)
+            and args.min_free_mib >= 512
             and (args.threads is None or
                  1 <= args.threads <= len(os.sched_getaffinity(0)))):
         parser.error('invalid duration/budget, temperature, memory or threads')

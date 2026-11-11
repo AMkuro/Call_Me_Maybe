@@ -15,7 +15,7 @@
 ```sh
 .venv/bin/python -m tools.campus_survey thermal \
   --hf-home "$HOME/goinfre/huggingface" \
-  --output /tmp/campus-thermal-001.jsonl
+  --output /tmp/campus-thermal-002.jsonl
 ```
 
 PC IDは既存のHMAC鍵とhostnameから自動生成する。`--pc-id`は不要で、既存の鍵を上書きしない。
@@ -30,16 +30,18 @@ PC IDは既存のHMAC鍵とhostnameから自動生成する。`--pc-id`は不要
 
 ## 安全停止
 
-- CPU温度が85℃、または取得できたCPU固有のcrit値の10℃手前の、低い方へ到達。
-- core/package thermal counterが開始時より増加、または減少して比較不能。
+- core/package thermal counterが開始時から増加したら停止する。減少した場合も比較不能として停止する。
+- counter増加がなくても、CPU固有のcrit温度に達したら緊急停止する。critが取得できなければ開始しない。
 - 温度・thermal counter・必須メモリ情報が欠測、不正、読み取り不能。
 - ホストと取得可能なcgroupの残メモリの小さい方が1024MiB未満。
 - 時間切れ、Ctrl-C/SIGTERM、子プロセスの失敗、記録の書き込み失敗。
 
 親が0.5秒間隔で監視し、停止時は対象プロセス群へSIGTERM、1秒後も残る群へSIGKILLを送る。
-85℃は測定器の既定上限で、全CPUの保証温度ではない。
-`--max-temp-c`は1〜95℃、`--min-free-mib`は512MiB以上を指定できるが、crit値の10℃手前の制限は維持する。
+再測定では固定85℃とcritの10℃手前の停止を廃止した。同じ観測でcounter増加とcrit到達があれば、
+終了理由はthermal_throttlingとする。`--max-temp-c`は既定なしで、必要な場合だけ追加の低い上限を指定できる。
+CPU固有のcrit値を超える設定は効かず、`--min-free-mib`は512MiB以上を指定できる。
 監視を無効にするオプションはない。サンプリングによる対策であり、急変や物理故障を防ぐ保証ではない。
+critはcoretempが公開するCPU固有の最大接合温度である（[kernel文書](https://docs.kernel.org/hwmon/coretemp.html)）。
 
 Intelのthermal counterが見えないAMDやVMゲストでは、負荷開始前に停止する。
 電力・CPU割当による速度低下は熱スロットリングとは別に記録する。周波数低下だけで熱が原因と断定しない。
@@ -83,11 +85,15 @@ AMDのk10tempは読めるがthermal counterはないため、本ツールはモ�
 [実装設計](../superpowers/specs/2026-11-11-safe-thermal-survey.md)、判断は
 [ADR-0022](../design/adr/0022-campus-runtime-calibration.md)を参照する。
 
+初回の`research/campus/campus-thermal-001.json`は以前の85℃設定で約15.2秒・86℃となって停止した原記録である。
+新しい停止条件による再測定では、`/tmp/campus-thermal-002.jsonl`等の別ファイル名を使い、原記録を保持する。
+
 ## 検証記録（2026-11-11）
 
-`make install`・`make lint`（Subject指定flags、27ファイル）・`make test`（77件）が成功した。
-thermalの24テストは偽のCPUセンサー・counter・固定logitsを使うSDKと実際の子プロセスで実行した。
+`make install`・`make lint`（Subject指定flags、27ファイル）・`make test`（81件）が成功した。
+thermalの28テストは偽のCPUセンサー・counter・固定logitsを使うSDKと実際の子プロセスで実行した。
 HMACの追加修正では既存鍵によるIDの再現性と、鍵・hostnameを保存しないことを確認した。
+停止条件の修正では、99℃・counter増加なしでの継続、critでの緊急停止、counter増加の優先、crit欠測の拒否を確認した。
 温度上限・counter増減・監視消失・低メモリ・時間切れ・親のSIGTERM・孫プロセス・書込失敗を確認した。
 実機を過熱させる停止テストは行っていない。
 
@@ -98,4 +104,5 @@ HMACの追加修正では既存鍵によるIDの再現性と、鍵・hostnameを
 
 開発環境で実際にCLIを実行し、モデル起動前にmonitor_unavailable・終了コード3で停止することと、
 権限600の途中レポートにmetadataとsummaryが残ることを確認した。
-校舎での連続SDK実行、実モデルでの熱変化、VM起動、実アプリの5分判定は未検証である。
+以前の85℃条件での校舎SDK実行と温度変化は原記録を確認した。
+新条件での校舎再測定、VM起動、実アプリの5分判定は未検証である。

@@ -14,7 +14,7 @@
 
 - Linux; no SDK/src changes, downloads, dependencies, or hardware setting changes.
 - Default 300 s workload, 360 s total budget, 0.5 s polling, 1 s TERM grace.
-- Stop at min(user max 85 C by default, sensor crit minus 10 C), throttle counter change, lost safety data, low memory, interruption or budget.
+- Stop on thermal counter increase; CPU crit remains an emergency ceiling. No fixed 85 C cap or crit-minus-10 C margin. Optional lower cap cannot raise crit. Lost safety data, low memory, interruption and budget still stop.
 - Preserve each timing and sensor sample; do not mix workload lengths or call this an application deadline certificate.
 - VM remains a configuration candidate; guest-only sensor-less execution is refused.
 
