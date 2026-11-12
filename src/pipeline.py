@@ -1,6 +1,7 @@
 """Handle one prompt: name -> skeleton -> values -> check."""
 
 import json
+import math
 from collections.abc import Callable
 
 from .decoder import TokenChoice, generate
@@ -15,6 +16,7 @@ from .values import allowed_value_tokens, is_value_complete
 
 # Provisional value cap, to be re-evaluated with stress cases (ADR-0013).
 MAX_VALUE_STEPS = 256
+Trace = Callable[[dict[str, object]], None]
 
 
 def _diagnostic_text(model: Model, ids: list[int]) -> str:
@@ -55,12 +57,42 @@ def _report_choice(
         report("metrics", "not computed (forced token)")
 
 
+def _trace_choice(
+    choice: TokenChoice, model: Model, trace: Trace, stage: str,
+    preview: str, parameter: str = "",
+) -> None:
+    """Publish only the observed top candidates; never request extra logits."""
+    def score(value: float) -> float | None:
+        return value if math.isfinite(value) else None
+
+    raw = [
+        [token, _diagnostic_text(model, [token]), score(logit), allowed]
+        for token, logit, allowed in (choice.raw_candidates or [])
+    ]
+    masked = [
+        [token, _diagnostic_text(model, [token]), score(logit)]
+        for token, logit in (choice.allowed_candidates or [])
+    ]
+    selected_logit = next(
+        (score(logit) for token, logit in (choice.allowed_candidates or [])
+         if token == choice.token), None,
+    )
+    trace({
+        "type": "token", "stage": stage, "step": choice.step,
+        "parameter": parameter, "preview": preview,
+        "selected": [choice.token, _diagnostic_text(model, [choice.token]),
+                     selected_logit],
+        "forced": choice.forced, "raw": raw, "masked": masked,
+    })
+
+
 def select_name(
     user_prompt: str,
     functions: dict[str, FunctionDef],
     model: Model,
     trie: NameTrie,
     report: Callable[[str, str], None] | None = None,
+    trace: Trace | None = None,
 ) -> FunctionDef:
     """Let the model choose a function, limited by the name tree.
 
@@ -78,10 +110,18 @@ def select_name(
         if report is not None:
             report("value", _diagnostic_text(model, choice.tokens))
             _report_choice(choice, model, report, warn=True)
+        if trace is not None:
+            preview = json.dumps({
+                "prompt": user_prompt,
+                "name": _diagnostic_text(model, choice.tokens),
+                "parameters": {},
+            }, ensure_ascii=False)
+            _trace_choice(choice, model, trace, "select_name", preview)
 
     generated = generate(
         model.logits, prompt_ids, allowed_next, max_name_steps(trie),
-        on_token=observed if report is not None else None,
+        on_token=observed if report is not None or trace is not None else None,
+        top_k=10 if trace is not None else 0,
     )
     name = leaf_name(trie, generated)
     if name is None:
@@ -97,6 +137,8 @@ def generate_value(
     model: Model,
     vocab: dict[int, bytes],
     report: Callable[[str, str], None] | None = None,
+    trace: Trace | None = None,
+    prefix: str = "",
 ) -> list[int]:
     """Generate one parameter value and its following JSON delimiter.
 
@@ -116,11 +158,17 @@ def generate_value(
             report("value", written.decode("utf-8", errors="ignore"))
             report("value_tokens", str(choice.step))
             _report_choice(choice, model, report, warn=False)
+        if trace is not None:
+            written = b"".join(vocab[token] for token in choice.tokens)
+            preview = prefix + written.decode("utf-8", errors="ignore")
+            _trace_choice(choice, model, trace, "generate_parameters",
+                          preview, slot.name)
 
     try:
         return generate(
             model.logits, ids, allowed_next, MAX_VALUE_STEPS,
-            on_token=observed if report is not None else None,
+            on_token=observed if report is not None or trace is not None else None,
+            top_k=10 if trace is not None else 0,
         )
     except PromptError as e:
         raise PromptError(
@@ -134,6 +182,7 @@ def generate_parameters(
     model: Model,
     vocab: dict[int, bytes],
     report: Callable[[str, str], None] | None = None,
+    trace: Trace | None = None,
 ) -> str:
     """Generate the parameters, forcing the skeleton.
 
@@ -151,18 +200,29 @@ def generate_parameters(
         f'"name": {json.dumps(fn.name)}'
     )
     ids = ids + model.encode(text)
+    if trace is not None:
+        trace({"type": "state", "stage": "generate_parameters",
+               "function": fn.name, "preview": text})
     for part in build_skeleton(fn):
         if isinstance(part, Forced):
             text = text + part.text
             ids = ids + model.encode(part.text)
+            if trace is not None:
+                trace({"type": "state", "preview": text})
         else:
             if report is not None:
                 report("parameter", f"{part.name} ({part.type})")
                 report("value", "")
                 report("value_tokens", "0")
-            value_ids = generate_value(part, ids, model, vocab, report)
+            if trace is None:
+                value_ids = generate_value(part, ids, model, vocab, report)
+            else:
+                value_ids = generate_value(part, ids, model, vocab, report,
+                                           trace=trace, prefix=text)
             text = text + model.decode(value_ids)
             ids = ids + value_ids
+            if trace is not None:
+                trace({"type": "state", "preview": text})
     return text
 
 
@@ -191,6 +251,7 @@ def process_prompt(
     trie: NameTrie,
     vocab: dict[int, bytes],
     report: Callable[[str, str], None] | None = None,
+    trace: Trace | None = None,
 ) -> FunctionCall:
     """Run the whole flow for one prompt. Raises PromptError on failure.
 
@@ -198,11 +259,17 @@ def process_prompt(
     """
     if report is not None:
         report("stage", "select_name")
-    fn = select_name(user_prompt, functions, model, trie, report)
+    if trace is not None:
+        trace({"type": "state", "stage": "select_name"})
+    fn = select_name(user_prompt, functions, model, trie, report, trace)
     if report is not None:
         report("stage", "generate_parameters")
         report("value", "")
-    text = generate_parameters(user_prompt, fn, model, vocab, report)
+    text = generate_parameters(user_prompt, fn, model, vocab, report, trace)
     if report is not None:
         report("stage", "validate_call")
-    return validate_call(text, fn)
+    call = validate_call(text, fn)
+    if trace is not None:
+        trace({"type": "state", "stage": "complete",
+               "preview": json.dumps(call.model_dump(), ensure_ascii=False)})
+    return call
