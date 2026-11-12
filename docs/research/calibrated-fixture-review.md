@@ -90,7 +90,7 @@ case ID、同一セット内の依頼、3セット間の依頼に完全一致の
 改善用LLMに渡さず、配布例で改善した候補を固定してから基準と比較する。
 本レビューは制御側で既にデータを読んだ静的監査なので、実験全体を二重盲検とは呼ばない。
 33件の結果を受けて再調整する場合、その集合は開発集合へ変わる。未使用評価の再利用として扱わない。
-自動化の提案は[隔離した改善ワークフローの設計](../superpowers/specs/2026-11-11-local-prompt-improvement-design.md)にある。
+自動化の提案は、隔離した改善ワークフローの設計(`exp/local-prompt-improvement` の `docs/superpowers/specs/2026-11-11-local-prompt-improvement-design.md`)にある。
 
 ## 再開時の追加版（2026-11-11）
 

@@ -44,7 +44,7 @@ pilot-1の結果を受けた別の設計は[ADR-0020（提案）](0020-few-shot-
 追加fixtureを調整へ戻すなら評価集合としての用途を変更し、別の未使用集合を用意する。
 モデルの改稿能力、並列GPUの実効性、改善の有無、CPUでの再現はまだ未検証である。
 
-詳細は[設計案](../../superpowers/specs/2026-11-11-local-prompt-improvement-design.md)と
+詳細は設計案(`exp/local-prompt-improvement` の `docs/superpowers/specs/2026-11-11-local-prompt-improvement-design.md`)と
 [fixtureの事前レビュー](../../research/calibrated-fixture-review.md)を参照する。
 
 ## 作業終了時点

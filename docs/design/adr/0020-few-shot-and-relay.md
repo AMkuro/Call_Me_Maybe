@@ -81,7 +81,7 @@ pilot-1の失敗に対する直し:
 ## 実装の範囲（承認後）
 
 - `src/prompt.py`: 例の組を受け取り、会話の形で組み立てる。例が0組なら現在と同じ文字列になること。
-- `tools/prompt_candidates.py`・`tools/prompt_trial.py`: 候補データに例を足し、strictに検証する。
+- `tools/prompt_candidates.py`・`tools/prompt_trial.py`(`exp/local-prompt-improvement` にある): 候補データに例を足し、strictに検証する。
 - 改善側の文脈の組み立て（正解値を外す、再提出を差し戻す）。
 - テスト: 例0組で現在のプロンプトと一致すること、例の答えが骨組みと同じ書き方であること、
   候補に評価集合の値が含まれたら拒否すること。

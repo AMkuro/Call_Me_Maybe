@@ -313,7 +313,7 @@ H05以降は、その誤答と費用を見て追加する。
 
 ## 2026-11-11: 自動実験の設計案
 
-別worktreeでのローカルLLMによる改善は、[設計案](../superpowers/specs/2026-11-11-local-prompt-improvement-design.md)と
+別worktreeでのローカルLLMによる改善は、設計案(`exp/local-prompt-improvement` の `docs/superpowers/specs/2026-11-11-local-prompt-improvement-design.md`)と
 [ADR-0018](../design/adr/0018-local-prompt-experiments.md)に具体化した。設計は承認され、ツールのドラフト作成後にユーザー指示で中断した。
 [モデル調査](local-prompt-editor-models.md)ではQwen3.5-9Bを初回の改善側へ選び、本体0.6Bは固定する。
 再開後にレビュー修正と174テスト・lintを完了し、9BのGPUロードを確認した。

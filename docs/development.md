@@ -104,8 +104,11 @@ campus performance reproduction or predict the application's runtime.
 ## Isolated prompt-improvement checkpoint (2026-11-11)
 
 A separate `exp/local-prompt-improvement` worktree now holds a
-[workflow design proposal](superpowers/specs/2026-11-11-local-prompt-improvement-design.md)
-and a [static fixture review](research/calibrated-fixture-review.md).
+workflow design proposal (`docs/superpowers/specs/2026-11-11-local-prompt-improvement-design.md`
+on that branch) and a [static fixture review](research/calibrated-fixture-review.md).
+The experiment tooling (`tools/prompt_*.py`, `research/prompt-improvement/`,
+their tests and fixture, the `prompt-improve` targets) stays on that branch;
+`develop` receives only the prompt changes in `src/` and the recorded results.
 The proposed local model has only prompt-saving and fixed-evaluation tools;
 GPU improvements would be checked serially on phys16-t6 (raw total time plus
 8 seconds as a separate estimate), then on the fixed calibrated fixtures.
@@ -131,8 +134,8 @@ The owner subsequently requested an existing OSS agent harness (Ponytail full).
 Prompt improvement now configures installed OpenCode1.15.10 and Transformers
 Serve, exposing only `write_prompt` and `run` in isolated workspaces. The old
 custom agent loop was removed. Two unscored SDK attempts were stopped; six
-proposal slots remain. See [OSS setup](../research/prompt-improvement/README.md)
-and ADR-0019. Server-only dependencies remain in the development GPU environment.
+proposal slots remain. See the OSS setup (`research/prompt-improvement/README.md`
+on `exp/local-prompt-improvement`) and ADR-0019. Server-only dependencies remain in the development GPU environment.
 
 ## Environments
 

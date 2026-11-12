@@ -14,7 +14,7 @@ tools・prompt・workspacesを設定してworkflowを考える」と範囲を明
 これは実装側の選定で、ユーザーが個別の製品名を指定したものではない。
 独自のトークン生成・エージェント会話ループは削除した。既存の採点・CPU計測・追加評価の連携は再利用する。
 
-- 設定: [OpenCode設定](../../../research/prompt-improvement/opencode.json)、指示文、作業領域、2ツール。
+- 設定: OpenCode設定(`exp/local-prompt-improvement` の `research/prompt-improvement/opencode.json`)、指示文、作業領域、2ツール。
 - モデル: Qwen3.5-9B/BF16/GPU、native generateのKV cache。モデルrevisionを固定する。
   サーバーとクライアントのモデルIDを同じ`モデル名@revision`にする。
 - 権限: 組み込みtoolsをすべて無効化し、`write_prompt`と`run`だけを許す。
