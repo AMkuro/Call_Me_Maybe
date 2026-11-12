@@ -18,14 +18,15 @@ from .values import allowed_value_tokens, is_value_complete
 MAX_VALUE_STEPS = 256
 
 
-@dataclass(frozen=True)
+@dataclass
 class Run:
     """What stays the same for every prompt of one run.
 
-    Judgment: a plain frozen dataclass, not pydantic: it holds the model
-    handle and a callback, nothing to validate (as ``Model``, ADR-0011).
+    Judgment: a plain dataclass, not pydantic: it holds the model handle
+    and a callback, nothing to validate (as ``Model``, ADR-0011).
     ``report`` receives dashboard observations (ADR-0014/0021); without it
-    the decoder computes no diagnostics.
+    the decoder computes no diagnostics. It is set once the dashboard
+    exists, after the model is loaded.
     """
 
     model: Model

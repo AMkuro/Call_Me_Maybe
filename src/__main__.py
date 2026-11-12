@@ -2,7 +2,6 @@
 
 import sys
 from collections.abc import Sequence
-from dataclasses import replace
 from pathlib import Path
 
 from .cli import Args, parse_args
@@ -31,8 +30,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     try:
         with terminal_progress(len(prompts)) as report:
-            all_done = _process_all(prompts, replace(run, report=report),
-                                    args.output)
+            run.report = report
+            all_done = _process_all(prompts, run, args.output)
     except OSError as e:
         print(f"cannot save output to {args.output}: {e}", file=sys.stderr)
         return 1
