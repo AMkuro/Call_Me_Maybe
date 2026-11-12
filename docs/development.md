@@ -86,6 +86,10 @@ change application behavior.
 
 The Qwen3-0.6B cache used for the terminator probe is under the ignored
 `.cache/huggingface/`; set `HF_HOME="$PWD/.cache/huggingface"` to reuse it.
+Inside the Claude Code sandbox, which blocks huggingface.co, also set
+`HF_HUB_OFFLINE=1`: otherwise loading fails on the update check. Both can go
+in the ignored `.local.mk` (`export HF_HOME := $(CURDIR)/.cache/huggingface`,
+`export HF_HUB_OFFLINE := 1`), which `make gpu-run` reads.
 This is an existing development-machine cache, not a campus download location.
 Campus timing instructions reuse an existing cache offline and stop when it
 is missing; they do not download model weights into the repository.
