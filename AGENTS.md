@@ -8,9 +8,10 @@ Read docs/development.md and docs/ci-auto-integration.md before changing CI,
 the build environment or merging. README.md is a submission artifact: keep
 development-only content (PoC, CI, GPU setup, SDK patches, branches, status)
 out of it and put it in docs/development.md.
-Work on a new branch cut from the latest integration branch (currently
-origin/develop; fetch first), and open the PR against that branch, so merges
-stay small. Do not push directly to main or develop.
+Do ordinary development on local develop. Do not create a branch per task.
+Use exp/* only for experiments that explicitly need isolation. Parallel AI
+investigation is allowed, but keep ordinary code and design work together.
+Branch creation and PR creation are not standard development steps.
 Do not merge existing experimental/PoC branches as part of unrelated work.
 
 Run make install, make lint, make test. CI is disabled (manual runs only)
@@ -28,7 +29,7 @@ four CPU threads for development inference. Verify GPU availability in the
 actual execution environment, since the sandbox can hide GPU device nodes.
 
 For provisional campus application-time estimates, use the measured phys16-t6
-total application time plus 8 seconds (owner decision, 2026-11-11; ADR-0010). Preserve raw
+total application time plus 8 seconds (owner decision, 2026-11-11). Preserve raw
 measurements separately; add no actual sleep and do not apply the offset per
 prompt/token/forward or to hardware-probe kernels. This is based on the known 11
 inputs, not inference-profile equivalence. The SDK phys16-t8 default is separate.
@@ -36,12 +37,14 @@ inputs, not inference-profile equivalence. The SDK phys16-t8 default is separate
 Remote publication is separate from local edits, verification and commits.
 A request to fix something does not authorize a push or a PR mutation: obtain
 a separate explicit instruction before pushing, creating/updating a PR, or
-enabling its merge. Remote history persists and is costly to revise; do not
-publish intermediate local work automatically.
+enabling its merge. Remote merges also require explicit authorization.
+Remote history persists and is costly to revise; do not publish intermediate
+local work automatically.
 
-When publication and integration are explicitly authorized, create or update
-a PR with only the authorized task's changes. After inspecting its diff and
-required checks, opt in ONLY that intended integration PR using:
+Only when PR creation or updates and integration are explicitly authorized,
+include only the authorized changes. Push permission alone does not authorize
+PR operations. For an explicitly authorized PR merge, inspect its diff and
+required checks, then opt in ONLY that intended integration PR using:
 
     gh pr merge NUMBER --repo AMkuro/Call_Me_Maybe --auto --squash --match-head-commit SHA
 
@@ -62,7 +65,8 @@ otherwise equal options.
    the design and the meaning of the code. Prefer what can be explained;
    explain any unfamiliar construct when introducing it.
 2. Explainability: for each important decision, be able to say why, with
-   evidence. Record it (ADR) and keep facts apart from guesses.
+   evidence. Record important design reasoning in the relevant section of
+   docs/architecture.md and keep facts apart from guesses.
 3. Verifiability: check AI output and implementations by an independent means
    (run it, measure it, diff it). Say what was not verified.
 4. Responsibility and authority: the agent may do the work, but the human
@@ -77,8 +81,8 @@ otherwise equal options.
 
 Apply the owner's three scope rules:
 
-- For documentation edits, update the related documents together and resolve
-  contradictions between them. Do not automatically expand into code changes.
+- For documentation edits, resolve related contradictions within the authorized
+  scope. Do not automatically expand into code or other document changes.
 - For code edits, include the necessary tests and verification in that request.
 - The owner normally handles push and PR operations. Perform them only when
   explicitly requested; local edits and commits do not authorize publication.
@@ -92,28 +96,36 @@ push or mutate PRs from a correction or local commit.
 Ask only when a material decision is missing, and preserve the owner's
 design-approval rules.
 
-Do not start implementing from a vague request. Design first.
+docs/architecture.md is the source of truth for the current application design.
+Keep it consistent with implemented code when the design changes. Keep proposed
+changes separate from the current design; do not describe proposals as implemented.
+For important decisions, record the background, adopted rationale, alternatives,
+constraints and verification method in the relevant design section.
 
-1. Write the design under docs/ before any code in src/: requirements (from
-   docs/subject-v1.7.md), components and data flow, and the decisions still
-   open. In Claude Code, use the engineering:system-design skill for the
-   structure and the doc-coauthoring skill for the document.
-2. Record each architectural decision as an ADR: context, options, trade-offs,
-   decision, and what to revisit. The human decides. The agent proposes options
-   with a recommendation and never marks a decision as made.
-3. Start implementing only after the human approves the design.
-4. Write tests first. Test the pure parts (name tree, masks, skeleton,
-   validation) directly with data, the decode loop with a function that
+Do not create new ADRs or automatically update existing ADRs. Preserve existing
+ADR files as history: do not delete, renumber or reorganize them. Do not consult
+them as authoritative sources during ordinary investigation, design or
+implementation. Read them only when the user explicitly requests investigation
+of historical design decisions.
+
+1. For small fixes, do not add unnecessary design documents or approval stages.
+   Clarify vague requirements only when a material decision is missing.
+2. For important specification or structural changes, present a design proposal
+   and obtain human approval before implementation. Do not mark proposals as
+   human decisions until approved.
+3. Divide work into auditable changes and run the necessary checks for each.
+   Implementation does not have to happen in one batch.
+4. Write tests first for code changes. Test the pure parts (name tree, masks,
+   skeleton, validation) directly with data, the decode loop with a function that
    returns fixed logits, and the end-to-end properties (every output parses
    and matches the schema) on the real model. Do not add an abstraction
    only to make tests possible.
-5. Implement the approved design in one batch, not unit by unit: this keeps
-   the AI's context whole and avoids reworking changes that were already
-   audited. Run the checks (lint, tests) and a reviewer once at the end and
-   show the result to the human. Keep docs/architecture.md in sync.
+5. Preserve existing functionality, performance requirements and the Subject's
+   Pydantic validation requirement. Verify AI output independently; do not
+   assume an implementation is correct because an AI produced it. Review
+   substantive changes and report verification results to the human.
 6. Keep facts apart from guesses. If something cannot be verified, say so and
    say what was tried.
 7. Keep accuracy measurements and timing measurements separate in every
    note and report. Accuracy runs may be parallel. Timing runs are ideally
-   single-run; if run in parallel, record the variance and the outlier rule
-   (see docs/design/adr/0010-measurement-policy.md).
+   single-run; if run in parallel, record the variance and the outlier rule.
