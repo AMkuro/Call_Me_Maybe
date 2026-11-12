@@ -21,6 +21,8 @@ class TokenChoice(BaseModel):
     allowed_mass: float | None = None
     margin: float | None = None
     constrained: bool = False
+    raw_candidates: list[tuple[int, float, bool]] | None = None
+    allowed_candidates: list[tuple[int, float]] | None = None
 
 
 def choose_token(logits: Sequence[float], allowed: Collection[int]) -> int:
@@ -44,12 +46,29 @@ def choose_token(logits: Sequence[float], allowed: Collection[int]) -> int:
     return int(np.argmax(masked))
 
 
+def _top_tokens(scores: np.ndarray, candidates: Sequence[int], count: int
+                ) -> list[tuple[int, float]]:
+    """Select a small ranked view without sorting the whole vocabulary."""
+    indices = np.asarray(candidates, dtype=int)
+    if not len(indices):
+        return []
+    limit = min(count, len(indices))
+    # The cutoff is found in O(V) expected time, then ties are broken by ID.
+    threshold = float(np.partition(scores[indices], -limit)[-limit])
+    better = indices[scores[indices] > threshold]
+    ties = np.sort(indices[scores[indices] == threshold])
+    chosen = list(map(int, better)) + list(map(int, ties[:limit - len(better)]))
+    chosen.sort(key=lambda i: (-float(scores[i]), i))
+    return [(i, float(scores[i])) for i in chosen]
+
+
 def generate(
     next_logits: Callable[[list[int]], list[float]],
     ids: list[int],
     allowed_next: Callable[[list[int]], list[int] | None],
     max_steps: int,
     on_token: Callable[[TokenChoice], None] | None = None,
+    top_k: int = 0,
 ) -> list[int]:
     """Generate tokens after ``ids`` until ``allowed_next`` returns None.
 
@@ -78,11 +97,11 @@ def generate(
             raise PromptError("no allowed token can continue this value")
         if len(allowed) == 1:
             token = allowed[0]
-            diagnostics: dict[str, int | float | bool | None] = {}
+            diagnostics: dict[str, object] = {}
         else:
             logits = next_logits(ids + generated)
             token = choose_token(logits, allowed)
-            diagnostics = {}
+            diagnostics: dict[str, object] = {}
             if on_token is not None:
                 scores = np.asarray(logits, dtype=float)
                 weights = np.exp(scores - np.max(scores))
@@ -96,6 +115,14 @@ def generate(
                     "margin": float(ordered[-1] - ordered[-2]),
                     "constrained": raw_top not in allowed,
                 }
+                if top_k > 0:
+                    permitted = set(indices)
+                    raw = _top_tokens(scores, range(len(scores)), top_k)
+                    kept = _top_tokens(scores, indices, top_k)
+                    diagnostics["raw_candidates"] = [
+                        (i, logit, i in permitted) for i, logit in raw
+                    ]
+                    diagnostics["allowed_candidates"] = kept
         generated.append(token)
         if on_token is not None:
             on_token(TokenChoice.model_validate({
