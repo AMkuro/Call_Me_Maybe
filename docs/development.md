@@ -5,6 +5,31 @@ submission artifact and must not carry any of it: this file is removed or kept
 out of the submitted version. Read it (and `docs/ci-auto-integration.md`)
 before changing CI, the build environment or the SDK.
 
+## Local develop integration (2026-11-12)
+
+Ordinary development and design work now converge on local `develop`; independent
+experiments remain separate. Publication still needs explicit authorization.
+See the [branch inventory and integration record](integration-2026-11-12.md).
+AGENTS.md still describes the previous branch/PR workflow; this task's explicit
+owner instruction overrides it. Updating that policy file is a separate task.
+
+The eight calibrated suites now live in `tests/fixtures/calibrated/`, with their
+static consistency test. The literature survey is in `docs/literature/`.
+The observation-boundary proposal is ADR-0024, unapproved and unimplemented;
+its ranking-related parts are superseded by ADR-0023. Earlier dated sections
+below record historical branch status, not the current checkout.
+
+`tools.cpu_watch` (ADR-0025) is available only for explicitly requested CPU
+investigations. It pauses arbitrary jobs on its documented temperature window;
+it is separate from the thermal survey's stop-and-measure workload. It does not
+change the application's default or the requirement to develop on the GPU.
+Runs are ignored under `research/evo-x3/watch/`. No real CPU load was launched
+during integration; unit tests use short jobs and synthetic sensor data.
+
+The dev group pins uv 0.11.21 from feat/cpu-watch, making `.venv/bin/uv` available
+for sandbox checks when the host uv is unavailable. `make install` deletes that
+venv, so installation must use a uv executable outside `.venv`.
+
 ## Token progress update (2026-11-12)
 
 The token ranking and candidate table have been removed at the owner's request
