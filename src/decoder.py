@@ -57,7 +57,8 @@ def _top_tokens(scores: np.ndarray, candidates: Sequence[int], count: int
     threshold = float(np.partition(scores[indices], -limit)[-limit])
     better = indices[scores[indices] > threshold]
     ties = np.sort(indices[scores[indices] == threshold])
-    chosen = list(map(int, better)) + list(map(int, ties[:limit - len(better)]))
+    chosen = list(map(int, better))
+    chosen.extend(map(int, ties[:limit - len(better)]))
     chosen.sort(key=lambda i: (-float(scores[i]), i))
     return [(i, float(scores[i])) for i in chosen]
 
