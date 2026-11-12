@@ -307,7 +307,7 @@ D2図はTUIへの通知と整形を省略している。§3.1の名前図は現�
 ## 9. 未実装提案：明示的な生成ループと1トークン選択（承認待ち）
 
 この節は2026-11-12の依頼と2026-11-13の再検討指示に対する提案であり、§1〜8の現行実装を変更したものではない。
-案Aの基本方針には同意を得たが、以下の具体的な契約・依存・検証境界は実装承認待ちである。
+案Aの基本方針は承認済み。766e3beを対象としたインターフェースレビューにより、以下の具体的な契約は再提案であり実装承認待ちである。
 前案の選択関数への上限管理、pipelineのDashboard直接依存、RunとDashboardでの一括strict検証は撤回する。
 過去の未承認案・履歴文書を根拠に採用せず、現行コード・Subject要約・既存テストから比較した。
 ランキング、LF方式、プロンプト調整、Dashboard全体の状態モデル再設計は対象外とする。
@@ -364,249 +364,331 @@ TokenChoiceは現在観測時だけPydantic検証され、生成ID列のcopyも�
 | 生成列への追加 | 名前のローカル列 | 値のローカル列 | 各ループに直接記載 |
 | 結果の解釈 | 選択FunctionDefを返す | 値とJSON区切りのID列を返す | 各pipeline関数 |
 | エラーの文脈 | 名前生成のエラー | 引数名・型を付けたPromptError | 共通エラーを各段階で扱う |
-| 診断値の取得 | 選択に使ったlogitsから制約前argmaxを取得 | 追加診断なし | 名前ループ。表示が利用可能なときだけ計算 |
+| 診断値の取得 | 表示が利用可能なときだけraw_topを要求 | 診断を要求しない | 共通の1選択関数内で要求時だけ計算。名前ループはIDを受け取る |
 | 文字列整形・描画 | 名前の途中と制約警告 | 値の途中とトークン数 | display。生成側はIDと既存の型付きデータだけを渡す |
 
-### 9.3 設計案の比較と推奨
+### 9.3 案Aの基本構造（承認済み）
 
-| 観点 | 案A：各段階の明示ループ＋共通1選択（推奨） | 案B：共通ループ＋明示的な制約データ |
-| --- | --- | --- |
-| 呼び出し順 | 完了→候補→選択→追加→表示を各関数で読める | generate内の名前/値分岐と、呼び出し元の制約データを追う |
-| 重複 | while・完了判定・append・表示呼び出しが2箇所。推論・マスクは共通。上限チェックは各ループに置く | ループは1箇所だが、段階別の文法・終了・表示の分岐を共通ループへ集める |
-| 状態 | generatedを各関数のローカル変数で所有 | 生成列と制約データを共通ループが所有。名前/値の組合せ検証が必要 |
-| Pydantic | 選択結果はプリミティブのtuple。TokenChoiceとRunは廃止し、検証済みデータを直接使う | 既存NameTrie/ValueSlotをunionで再利用できる。値側vocabの必須条件など組合せの検証が増える |
-| テスト | choose_token直接テスト＋1選択＋2段階の固定logitsテスト | 共通ループと制約データの各分岐を検証。既存のCallable用テストはやはり移行が必要 |
-| 性能 | 選択・文法・forward回数を維持。ループ関数の往復を削減 | 同じforward回数を保てるが、段階分岐・構造化制約の準備が増える |
-| 表示依存 | pipelineは最小のGenerationProgress型契約だけを参照。具体的Dashboardはmainで組み立てる | 表示をループ内で呼ぶならdecoderに表示文脈が入る。pipeline側の共通ループへ移す案もモジュール責務が変わる |
-| 理解コスト | 2段階の処理をそれぞれ順読みでき、共有規則は1関数へ辿れる | 異なる2文法を1制御関数へ集める理由と分岐データの理解が必要 |
+名前と値の各ループが、完了・許可集合・上限・追加・通知を通常の呼び出し順に管理し、
+1トークンのforced/推論/制約付きargmaxだけを共通化する。短い上限チェックの重複は許容する。
+比較した案Bは、共通ループへ木またはslot/vocabを渡して分岐する方式である。
+ループ自体は1箇所にできるが、2つの文法・終了・表示の文脈を共通制御へ集める必要があるため、
+今回の順読みを優先して案Aを選ぶ基本方針が承認された。
+以下はその基本構造を再選択する比較ではなく、具体的な3インターフェースの承認前レビューである。
 
-案Bをクロージャなしにするには、木またはslot・vocabを明示データとして渡し、共通ループ内から
-通常の関数を呼ぶ必要がある。新規クラスを使わず既存のNameTrieとValueSlotを識別する案は成立するが、
-値側の語彙必須などの組合せは起動・呼び出し境界で確認する。
-制約オブジェクトのメソッドをCallableとして渡すだけでは、
-今回の「生成をコールバックで進めない」という追加要件を満たさない。
-汎用Callableの引数へcontextを足す方式も同じ理由で採らない。
+### 9.4 選択完了時に返す情報の比較と結論
 
-案Aを推奨する。2つの文法の反復まで1つにまとめる利益より、完了・継続・追加の順序を
-その段階で読める利益が今回の目的に合う。上限判定はループの責務なので、
-同じ短いチェックを2箇所に置き、両段階の境界テストで意味を揃える。引数を減らすため別の汎用関数へ隠さない。
-lambda・partialへの置換、継承・Strategy・イベントバス・ジェネレータは導入しない。
+比較の基準は、呼び出し元が次のIDと必要な診断だけを扱い、推論に使った分布を所有しないことである。
+Vを語彙数とする。下表の費用は既存choose_tokenの数値検査・負の無限大マスク・argmaxに追加される分だけを示す。
 
-### 9.4 選択関数の責務と戻り値
+| 方式 | 責務・型・呼び出し元 | 追加計算・配列操作 | メモリ・forced | 判断 |
+| --- | --- | --- | --- | --- |
+| 案1：採用IDと全logits | tuple[int, list[float] \| None]。分布の利用・寿命・診断計算がpipelineへ漏れる | 名前観測時だけraw argmaxを計算できる。返却自体に配列操作は不要 | 同じlistへの参照ならcopyなし。ただしV個の分布が呼び出し元まで生存する。forcedはNone、推論なし | 前案。診断1値のための公開範囲が広いので撤回 |
+| 案2：採用IDと必要な診断ID | tuple[int, int \| None]。選択時点で得た事実だけを返し、警告文は作らない | 要求時だけraw argmaxを1回計算。値生成と表示なしでは省く | 戻り値は定数サイズ。分布を外へ保持しない。forcedは要求があっても診断なし | 推奨。診断要求を表すキーワード引数を1つ認める |
+| 案3：採用IDのみ | intだけなら明瞭。ただし正確な警告には同じ推論の情報を別経路で残す必要がある | 名前用の別選択APIと共有内部処理なら追加forwardなしで成立するが、関数の段数が増える | 戻り値は最小。Model.last_logits等の副経路は隠れた可変状態を増やす | 警告が必要な現仕様では採らない。2回目の推論で補う案も採らない |
 
-最終提案の共通選択関数は3引数とする。
+案3で警告が原理的に不可能と主張するものではない。名前用APIだけ診断を返し、値用APIはIDだけ返す構成も成立する。
+ただし、その2入口を同じ内部処理へ接続する追加の関数より、案2の明示的な計算要求1つの方が追いやすい。
+採用IDからだけでは、制約前の最大IDがマスクされたかを復元できない。
+
+最終提案は3つの必須引数に、意味を限定したキーワード専用引数を加える。
 
 ```python
-select_next_token(
-    model: Model, ids: list[int], allowed: list[int],
-) -> tuple[int, list[float] | None]
+def select_next_token(
+    model: Model,
+    ids: list[int],
+    allowed: list[int],
+    *,
+    include_raw_top: bool = False,
+) -> tuple[int, int | None]: ...
 ```
 
-idsは今回モデルへ渡す入力全体であり、prefixと生成列を区別しない。
-関数は空候補を拒否し、1候補ならそのIDとNoneを返す。複数候補ならModel.logits(ids)を1回だけ呼び、
-既存choose_tokenで制約付きargmaxを求め、採用IDとその選択に使ったlogitsを返す。
-forcedではlogitsを取得しないので語彙サイズを調べるための推論も行わない。
-許可IDは既存の木または語彙から取得し、複数候補の範囲・非有限値の検査はchoose_tokenを維持する。
+include_raw_topは「この推論の制約前argmaxを取得する」という計算要求である。
+段階名、表示モード、Dashboard、上限、生成列の更新を選択関数へ渡す引数ではない。
+前回は3引数だけに絞るため全logitsを返したが、今回は小さな計算要求と小さな戻り値を優先する。
 
-返るlogitsはSDKから既に受け取った同じlistであり、コピーや追加forwardはしない。
-Noneは未計算の値であり、0点・空の分布とは扱わない。生成側はlogitsを変更せず、履歴として蓄積しない。
-副作用は最大1回のモデル推論だけで、終了・上限・生成列への追加・警告の判定・表示・保存は担当しない。
+- 空候補なら現在と同じPromptErrorにする。1候補ならそのIDとNoneを返し、推論・配列変換・診断を一切しない。
+- 複数候補ならModel.logits(ids)を1回だけ呼び、既存choose_tokenで採用IDを決める。
+- include_raw_topが真の場合だけ、同じlogitsからnp.argmaxでraw_topを取得する。選択には使わない。
+  返すのは(token_id, raw_top_id)であり、logits自体や生成履歴は返さない。
+- 偽なら(token_id, None)。Noneは「未計算」を意味し、forcedであることや0点を意味しない。
+  呼び出し元がforcedを知る必要があればlen(allowed) == 1で分かる。現在の画面に新しいforced表示は足さない。
+- 終了・上限・prefixの連結・生成列への追加・文字列整形・保存はこの関数の責務に含めない。
 
-| 戻り値の案 | 制約警告との関係・費用 | 採否 |
+Pythonのlogits listに対するnp.argmaxは、一時的なNumPy配列への変換とO(V)の走査を伴う。
+現行の診断も同じ操作をしている。名前の観測時に限って残し、値生成・表示なしでは追加の走査と配列を作らない。
+choose_token内部の検査用配列の再利用まで同時に最適化せず、その純粋関数と同点規則を維持する。
+戻り値は2つのスカラーで、logitsのcopyや保持は不要になる。追加forward・softmax・上位k件はどの段階にもない。
+
+TokenChoiceのstep・tokensは選択結果ではなくループの進捗であり、選択関数の戻り値には含めない。
+新しい選択クラスも作らない。既存TokenChoiceは廃止する。ループはgeneratedだけを所有し、
+件数はlen(generated)から取得するので、重複するstep状態も保持しない。
+
+### 9.5 GenerationProgressの必要性と最小契約
+
+表示と生成の分離には、依存先を隠すことではなく、渡すデータと呼び出し先の責務を限定する必要がある。
+mainが具体的な表示を接続する方向を維持し、次を比較した。
+
+| 方式 | 実行順と依存の追いやすさ | 代償・Subjectとの関係 | 判断 |
+| --- | --- | --- | --- |
+| 案1：GenerationProgress型契約 | pipelineからdisplayへのimportを外し、5つの意味の決まった同期呼び出しだけを公開する。mainでDashboardとの接続が見える | Protocol宣言を1つ維持する必要がある。型宣言もPythonのクラスである点を無視できない | 推奨。端末・書式変更の依存を限定する目的に範囲を絞る |
+| 案2：具体的な進捗表示オブジェクト | Dashboardを明示的に渡せば実行先は最も直接的。メソッド自体は案1と同じにできる | 新しい型宣言は不要だが、pipelineが端末クラスへ依存する | 成立する最小の代替案。型契約のコストを認めない場合はこちら |
+| 案3：最小データだけを共有バッファ等へ渡す | 生成側はデータの保存だけを行える | 同期ループ中に別の誰が描画するかを解決する必要があり、スレッド・ポーリング・配送・復帰管理が増える | 単一の同期画面には不採用。戻り値で後から表示するだけではリアルタイム性を失う |
+
+GenerationProgressは汎用report(label, text)を持たない。許可集合・次トークン・終了を返すメソッドも持たない。
+stageは画面の任意フィールド名ではなく、既存の3段階に限定した意味上の値である。
+名前と値の進捗も別々の契約にし、labelの文字列でデータの意味を切り替えない。
+
+以下は型契約の宣言案であり、今回実装したコードではない。StageはLiteralの型別名であって新規クラスではない。
+
+```python
+Stage = Literal["select_name", "generate_parameters", "validate_call"]
+
+class GenerationProgress(Protocol):
+    @property
+    def available(self) -> bool: ...
+
+    def stage(self, stage: Stage) -> None: ...
+
+    def function_selected(self, name: str) -> None: ...
+
+    def parameter_started(self, name: str, param_type: ParamType) -> None: ...
+
+    def name_token(self, tokens: Sequence[int], raw_top: int | None) -> None: ...
+
+    def value_token(self, written: bytes, step: int) -> None: ...
+```
+
+| 呼び出し | 呼び出す場所と時点 | 最小データと表示側の担当 |
 | --- | --- | --- |
-| 採用IDだけ | 選択済みlogitsを失い、現行の名前警告を追加推論なしで作れない | 不採用 |
-| 採用IDと制約前argmax | 3引数のままだと表示なし・値生成でも全語彙のargmaxが増える | 不採用 |
-| 採用IDと使用済みlogits | 名前の観測時だけraw_topを計算できる。分布を受け渡す契約と一時的な参照は必要 | 推奨 |
+| stage | process_promptで名前選択・引数生成・検証に入る直前 | 段階だけ。引数生成開始時に名前の途中表示を消す処理はdisplay |
+| function_selected | select_nameで木の葉から名前が確定した時 | 名前だけ。確定した関数名の表示と強制再描画 |
+| parameter_started | generate_parametersでValueSlotの生成に入る前 | slot.nameとslot.typeだけ。表示しないterminatorやValueSlot全体は渡さない |
+| name_token | select_nameでID追加後 | SDKで途中の名前をdecodeするためID列が必要。末尾IDとraw_topで警告を整形する |
+| value_token | generate_valueでID追加後 | 語彙から連結した生bytesとlen(generated)。値表示と件数に不要なID列・slot・logitsは渡さない |
+| available | 名前選択前と各通知前に読む | 既存の診断ストリームが利用可能か。生成の完了・継続の返答には使わない |
 
-名前ループは表示が利用可能な分岐でのみ、受け取ったlogitsのargmaxを取得する。
-これは選択根拠から診断値を求める処理であり、文言・repr・桁数・端末制御は含めない。
-値ループはlogitsを診断に使わない。未使用の分布を返さない代わりにdiagnose_name引数を足す案も比較したが、
-今回は選択関数の3引数と表示からの独立を優先する。上位k件・softmax・sortは導入しない。
+値のwrittenは、現在observedで行っているvocabの連結をループ側へ移して作る。
+バイト列の取得は生成済み内容の観測であり、UTF-8の表示用decode・repr・桁揃え・端末制御ではない。
+観測時だけ作り、既存のバイト列連結回数を増やさない。逐次キャッシュする新しい状態も導入しない。
+名前はSDKの公開decodeと特殊トークンの扱いを保つためID列を渡す。単純なvocab連結へ統一しない。
 
-既存TokenChoiceのstepとtokensは生成ループの状態であり、1選択の戻り値ではない。
-今回、選択の戻り値を包むためのPydanticモデルへ作り替えることもしない。
-表示側は渡されたID列から件数と採用末尾IDを読めるので、TokenChoice自体を廃止する提案とする。
-forcedはlogitsがNoneかどうかで分かり、step・tokens・forcedを重複した状態として保持しない。
+受信メソッドは同期で、生成列を書き換えたり保持したりせず、その場で表示文字列へ変換する。
+Sequenceは静的に読み取り専用の操作を示すだけで、listを実行時に不変化する型ではない。
+実装するDashboardが変更しないことをテストし、非同期キュー用snapshotは作らない。
+SDKのdecodeでlist化が必要な分だけコピーし、旧TokenChoice用copyより増やさない。
+全メソッドの戻り値はNoneなので、受信者が採用ID・許可集合・継続指示を返す契約にはならない。
 
-### 9.5 表示への依存をどう分けるか
+progress.pyはこの型宣言とschemaのParamTypeだけを参照し、pipeline・display・decoder・SDKをimportしない。
+DashboardはProtocolを継承せず、必要なメソッドを持つことで構造的に適合する。
+mainがDashboardをwithで作り、同じオブジェクトをGenerationProgressとしてpipelineへ渡す。
+登録処理・イベントバス・Observer階層・Callable・実行時のisinstanceによるProtocol検査は追加しない。
 
-pipelineからRun.report/sayと具体的なDashboardへの依存を外す。
-ただし、同期リアルタイム表示を維持するには、生成ループから何らかの受信者を明示的に呼ぶ必要がある。
-受信者への依存を消したと主張して、別名のCallableや暗黙のグローバル変数へ隠さない。
+Dashboardはtotal・Model・vocabを構築時に受け取る。Modelとvocabは公開decodeと警告用トークン表記だけに使い、
+モデル推論・設定変更は行わない。警告文・repr・UTF-8の途中の表示・制御文字のエスケープはdisplayに集約する。
+mainからの入力番号・成功/失敗、fields・集計・計時・描画間隔・context managerによる復帰は維持する。
+pipelineの_token_text・_decodedはdisplayへ移す。Dashboard全体を作り直す提案ではない。
 
-| 構成 | 依存と代償 | 採否 |
+### 9.6 Run廃止後の引数をどう管理するか
+
+引数数を揃えるための全依存コンテキストは作らない。以下は最終提案における直接利用と転送の区別である。
+user_prompt、fn、slot、idsは処理対象であり、それ以外を依存として数える。
+
+| 関数 | 自身で直接利用する入力・依存 | 下位へ転送する依存 | 合計引数と判断 |
+| --- | --- | --- | --- |
+| process_prompt | progressで段階を通知。返されたfnとtextをvalidate_callへ渡す | user_prompt・model・vocab・functions・trieを必要な下位へ転送。progressも転送 | 6。調停役の依存として明示し、検証や選択のロジックは重ねない |
+| select_name | user_promptとfunctionsで入力を作り、modelでencode、trieで完了/候補/上限を確認、functionsから定義を取得、progressへ通知 | modelを1選択関数へも渡す | 5。vocab・slot・出力先を受け取らない |
+| generate_parameters | user_prompt・fn・modelでプロンプト/JSON/Forcedを処理し、progressへ引数開始を通知 | vocabはgenerate_valueへの転送のみ。model・progressも渡す | 5。値生成を含む処理なのでvocabの転送は必要 |
+| generate_value | slot・ids・vocabで完了/候補を求め、progressへbytesと件数を渡す | modelは1選択関数への転送のみ | 5。functions・trieは不要 |
+| select_next_token | modelで推論、idsをその入力に使用、allowedで空候補/forced/選択、include_raw_topで診断計算を選ぶ | なし | 必須3＋任意1。生成履歴・上限・表示先を受け取らない |
+
+| 構成 | 利点 | 欠点と判断 |
 | --- | --- | --- |
-| pipeline→Dashboard | 最小の実装量だが、生成フローが端末クラスのAPIに直接結び付く | 前案。今回は採らない |
-| pipeline→小さな構造的な型契約、Dashboardが適合 | 同期の通常メソッド呼び出しを保ち、端末実装へのimportを外せる。契約の宣言は増える | 推奨 |
-| 中立データをキュー等へ送り、別処理が描画 | 生成側は受信者を知らずに済むが、配送・並行処理・終了と復帰の管理が必要 | 今回は過剰 |
-| 汎用emitやCallableを受け取る | 依存の実体と処理内容を追い直す必要があり、通知関数の名前変更にとどまる | 不採用 |
+| 明示引数＋依存はキーワード専用 | 各段階が必要なものだけ受け取る。転送も呼び出しの行で確認でき、同じdictの取り違えを避けやすい | process_promptは6引数になるが、最終コードを縦に揃えて読める。推奨 |
+| model/vocab/functions/trie/progressをContextへ再集約 | 呼び出しは短い | Runの再作成となり、使わない依存を全関数へ渡す。採らない |
+| functionsとtrieだけをCatalogへまとめる | 両方を一体として作り/切り替える不変条件を持つなら合理的 | 現状は起動時の1セットのみ。引数削減のためだけにモデル・検証・作成経路を増やさない |
+| 生成セッションが全依存と生成状態を保持 | 複数操作で生成を中断/再開し状態を共有するなら有用 | 現仕様は同期呼び出し内で完結。生成列の所有が曖昧になり、通常クラスと検証方針も増えるので採らない |
 
-共有モジュールprogress.pyに、型検査だけで使うGenerationProgressという小さなtyping.Protocolを定義する。
-実行時にインスタンス化せず、Dashboardもこれを継承しない。ABC・登録機構・イベント配送は導入しない。
-この型はモデル差し替えのためではなく、生成側が表示へ渡す最小のデータ契約を表す。
-契約に含めるものは以下だけとする。
+process_promptからの転送をなくすためにサービスロケータやモジュール変数を使わない。
+型別名はコードを短くする目的だけでは追加せず、既存のdictとModel・NameTrieをそのまま使う。
+既に検証済みの依存を引数へ展開しても、新しいPydantic検証の境界にはならない。
 
-| メソッドまたは属性 | 渡すデータ・意味 |
+### 9.7 最終提案の型付きシグネチャ
+
+以下は承認後のAPI案であり、現行APIではない。処理対象を位置引数、依存と計算要求をキーワードで明示する。
+
+```python
+def process_prompt(
+    user_prompt: str,
+    *,
+    model: Model,
+    vocab: dict[int, bytes],
+    functions: dict[str, FunctionDef],
+    trie: NameTrie,
+    progress: GenerationProgress | None = None,
+) -> FunctionCall: ...
+
+def select_name(
+    user_prompt: str,
+    *,
+    model: Model,
+    functions: dict[str, FunctionDef],
+    trie: NameTrie,
+    progress: GenerationProgress | None = None,
+) -> FunctionDef: ...
+
+def generate_parameters(
+    user_prompt: str,
+    fn: FunctionDef,
+    *,
+    model: Model,
+    vocab: dict[int, bytes],
+    progress: GenerationProgress | None = None,
+) -> str: ...
+
+def generate_value(
+    slot: ValueSlot,
+    ids: list[int],
+    *,
+    model: Model,
+    vocab: dict[int, bytes],
+    progress: GenerationProgress | None = None,
+) -> list[int]: ...
+
+def select_next_token(
+    model: Model,
+    ids: list[int],
+    allowed: list[int],
+    *,
+    include_raw_top: bool = False,
+) -> tuple[int, int | None]: ...
+
+def choose_token(
+    logits: Sequence[float], allowed: Collection[int],
+) -> int: ...
+```
+
+表示の具体クラスの構築案は`Dashboard(total: int, model: Model, vocab: Mapping[int, bytes])`で、
+__init__の戻り値はNone。progressはmainが渡すこの1インスタンスであり、Protocolのインスタンスは作らない。
+
+### 9.8 実行順序・状態・依存方向
+
+```text
+main：入力検証・出力準備 → Model → vocab → trie → Dashboardをwithで開始
+  → _process_all → process_prompt
+    → stage(select_name) → select_name
+      → 名前用入力をencode → 名前のループ
+      → function_selected → FunctionDefを返す
+    → stage(generate_parameters) → generate_parameters
+      → 引数用入力・JSON先頭をencode → Forced / ValueSlotを定義順に処理
+      → parameter_started → generate_value → 値のループ → ID列を返す
+      → 値を最終decodeしtextと入力idsへ追加
+    → stage(validate_call) → validate_call → FunctionCallを返す
+  → 成功ごとに保存 → 成功/失敗通知 → 次の入力
+with終了：端末復帰 → 要約 → mainの終了コード
+```
+
+各生成ループは次の順を明記する。
+
+1. 名前はleaf_name、値は語彙バイト列とis_value_completeで終了を確認する。完成なら返す。
+2. next_tokensまたはallowed_value_tokensを直接呼ぶ。
+3. ループ自身でlen(generated)と名前/値それぞれの上限を比較する。
+4. 必要な入力idsを準備する。複数候補のときだけprefix_ids + generatedを作り、0/1候補ならprefix_idsを渡す。
+5. select_next_tokenを通常呼び出しする。名前はprogressが利用可能なときだけinclude_raw_top=True、値は常にFalse。
+6. 採用IDをgeneratedへ追加する。
+7. 進捗が利用可能なら名前はID列とraw_top、値は連結したbytesとlen(generated)を対応メソッドへ渡す。
+8. 次の反復へ進む。値のPromptErrorには現在どおり引数名と型を付ける。
+
+終了→許可候補の計算→上限→空候補→forced/推論の順を変えない。
+上限ちょうどで完成すれば成功し、上限と空候補が同時なら上限エラーを優先する。
+forcedでは新しいモデル入力listもlogitsも作らない。制約マスク・argmax・同点規則は既存choose_tokenを維持する。
+最終値のdecode失敗は生成失敗。診断decode失敗は現行の取得不能表記、stderrのOSErrorは表示停止として扱う。
+中断は握りつぶさず、withで端末を戻す。progress=Noneでも選択・入力・forward回数は同じである。
+リダイレクトは警告を残すため、isattyだけで名前診断を止めない。
+
+| 状態・副作用 | 所有者 |
 | --- | --- |
-| stage(stage: Literal["select_name", "generate_parameters", "validate_call"]) -> None | 意味上の処理段階。引数生成開始時の表示初期化も表示側が担当 |
-| function_selected(name: str) -> None | 木から確定した名前 |
-| parameter_started(slot: ValueSlot) -> None | 既にPydantic検証した引数名・型・区切り。表示するのは名前と型 |
-| name_token(tokens: Sequence[int], raw_top: int \| None) -> None | 追加後の名前ID列と、同じ推論から取得した制約前最大ID。forcedはraw_topなし |
-| value_token(tokens: Sequence[int]) -> None | 追加後の値ID列 |
-| available: bool（読み取りのみ） | 診断の書き込みが利用可能か。生成の完了・継続は決めない |
-
-各メソッドは同期処理で、渡された生成列を変更・保持せず、その呼び出し中に文字列へ変換する。
-非同期イベントのためのsnapshot・生成列copy・履歴保持は加えない。
-公開SDKのdecodeへlist化が必要な箇所だけコピーし、既存のTokenChoice用copyより増やさない。
-これは選択後に決まった受信メソッドを通常呼び出しする契約であり、allowed_nextやon_tokenを
-選択関数へ渡して実行を委ねるものではない。選択関数はGenerationProgressを受け取らない。
-戻り値もNoneであり、受信者はトークンや継続フラグを生成へ返せない。
-
-mainはモデルと語彙を用意してからDashboardをwithで作り、GenerationProgressとしてpipelineへ渡す。
-Dashboardはtotal・Model・vocabの参照を構築時に受け取り、モデルの所有権はmain側に残す。
-Modelとvocabを表示側の属性に持たせる理由は、名前の公開decodeと警告用のトークン表記に必要なためであり、
-表示がモデル設定を変更したり推論したりするためではない。
-
-- 名前の途中のdecode、raw_topと採用末尾IDの比較、警告文・repr・件数への変換はdisplayが担当する。
-- raw_topの取得は名前ループ、警告をどう書くかはdisplayと分ける。
-- 値のバイト列の表示用decode、引数名と型の整形、初期化、件数の文字列化もdisplayが担当する。
-- pipelineの_token_textと_decodedはdisplayへ移し、Runには依存させない。
-- mainによる入力番号・成功/失敗の通知、Dashboardのfields・計時・集計・描画間隔・withによる復帰は保つ。
-  これらを新しい状態機械に作り替えない。
+| モデル資源、語彙、関数定義、名前の木 | mainで構築し共有。各関数は設定や辞書を変更しない |
+| 名前/値の生成済みIDと上限 | 各select_name / generate_valueのローカル変数。stepは独立保存しない |
+| 引数全体のモデル入力idsと最終text | generate_parameters |
+| 1回のlogits、採用ID、要求時のraw_top | select_next_token。logitsは関数外へ公開しない |
+| モデル推論 | select_next_token内のModel.logits、分岐で1回だけ |
+| 表示のfields・計時・成功/失敗の集計・端末資源 | Dashboard。生成列や選択の権限を持たない |
+| JSON検証と保存 | validate_callとmain側のsave_results。表示は保存結果を変更しない |
 
 ```text
 main ──→ pipeline ──→ decoder ──→ model_port
-  │          │
-  │          └──→ progress（型契約。schema/skeletonの既存データ型のみ参照）
-  └──→ display ──→ model_port / 既存データ型
+  │          └──→ progress（型契約。schemaのParamTypeだけを参照）
+  └──→ display ──→ model_port
 ```
 
-pipelineはdisplayをimportせず、displayはpipelineやdecoderをimportしない。
-progressはpipeline・display・SDKをimportせず、実行状態も保持しない。
-表示なしはprogress=Noneとし、利用不能でも生成の許可集合・終了条件・選択IDは変わらない。
-リダイレクト時にも制約警告が必要なので、isattyだけでraw_topを省かない。
-診断decodeのPromptErrorは現在の代替表記にし、stderrのOSErrorは現在のwriteで表示停止にする。
-最終値のdecode失敗は生成失敗とし、例外・中断時の端末復帰も維持する。
+pipelineからdisplayをimportせず、displayからpipeline/decoderをimportしない。
+型の接続はmainの呼び出しでmypyが確認し、実行は通常の同期メソッド呼び出しで追える。
+生成は受信者の返答によって終了・継続せず、汎用Callable・クロージャ・イベントバス・ジェネレータを使わない。
+_startはArgs・prompts・functionsまでを返し、mainで残りの準備を明示する。巨大な資源tupleを作らない。
 
-### 9.6 Pydanticの検証境界を入力元へ戻す
+### 9.9 Pydantic：既存の検証境界と確認できる限界
 
-前案のRunへのInstanceOfや辞書全体のstrict再検証、Dashboardでのtotal再検証は採用しない。
-起動時に一度と書いても、loaderで既に調べた同じデータを再び走査すれば重複になるためである。
-
-Runはreport/sayを除くと検証済みの4依存を束ねるだけなので、Run自体を廃止して必要な依存を関数引数へ渡す。
-通常クラスをPydanticクラスへ置換するだけ、またはSkipValidationで全内容を免除する対応はしない。
-引数が長くなる代償はあるが、各関数が使うものだけを渡し、呼び出しではキーワード名を明記する。
-
-| データ・フィールド | 現在の検証場所と目的 | 提案で追加する検証 |
+| データ・フィールド | 検証場所と目的 | この提案で追加する検証 |
 | --- | --- | --- |
-| CLIのパス | cli.ArgsのPydanticモデル。パスの型を確認し、存在と書込可否はloader/writerで実際に確認 | なし |
-| promptsの要素 | load_promptsのTypeAdapterをstrictで実行。各値がstrであることとキーを確認し、空配列を拒否 | なし。各段階では再検証しない |
-| functionsのname・description・parameters・returns | load_functionsのFunctionDefによるstrict検証とindex_functionsの空/重複拒否 | なし。辞書と各FunctionDefを再検証しない |
-| vocabのID | load_vocabでファイルのdict[str, int]をstrict検証し、非負・一意を確認 | なし |
-| vocabのbytes | load_vocabが検証済みの語彙を既存のバイト変換規則で変換。不正な文字はStartupError | なし。dict[int, bytes]全体を再走査しない |
-| trieのノード | build_name_trieがNameTrieを構築する際のPydantic検証とEOS経路の衝突確認 | なし。完成した木は再構築しない |
-| ValueSlotのname・type・terminator | build_skeletonが既存Pydanticモデルを構築 | なし。progressへ渡す際にも再検証しない |
-| SDKのlogits | choose_tokenが次元・数値変換・非有限値・許可範囲を検査 | なし。分布をPydanticでも重ねて走査しない |
-| 生成結果のprompt・name・parameters | validate_callのFunctionCallと関数別パラメータモデル。JSON・strict型・数値保持を検査 | 既存の出力境界検証を維持。制約付き生成と事後検証は役割が異なる |
-| Dashboard.total | 検証済みで空でないpromptsからlen(prompts)で算出 | なし。bool/文字列を受ける外部入力ではなく内部導出値 |
-| Dashboard.model・vocab | mainが生成した同じModelとload_vocabの戻り値への参照 | なし。辞書copy・ハンドルのPydanticモデル化をしない |
+| CLIのパス | cli.ArgsのPydanticモデル。存在と書込可否はloader/writerで実際に確認 | なし |
+| promptsの要素 | load_promptsのTypeAdapterをstrict実行。str・キー・空配列拒否 | なし。totalはその件数から導出 |
+| functionsの各FunctionDef | load_functionsのstrict検証とindex_functionsの空/重複拒否 | なし。辞書とモデルを再検証しない |
+| vocabのID・バイト列 | load_vocabで元JSONをstrict検証し、非負・一意・バイト変換を確認 | なし。完成した辞書を再走査しない |
+| trie | build_name_trieの既存NameTrie構築とEOS衝突検査 | なし。完成した木を再構築しない |
+| ValueSlot | build_skeletonの既存Pydanticモデル構築 | なし。表示へ渡すname/typeを別モデルに包まない |
+| SDKのlogits | choose_tokenの次元・数値変換・非有限値・許可ID検査 | なし。分布へのPydantic走査を追加しない |
+| 最終FunctionCallと引数 | validate_callのJSON・strict型・数値保持・スキーマ検証 | 既存の必須検証を維持。生成制約とは別の確認境界 |
+| Dashboardのtotal・model・vocab | 検証済み入力の件数、mainが構築したModel、検証済み語彙への参照 | なし。新しい外部入力ではなく、辞書copyやInstanceOfは足さない |
 
-共有の語彙・木・関数定義は変更せず、生成済みIDはループだけが更新する。
-TokenChoiceを廃止しても、外部からの観測イベントを無検証で受理するAPIは作らない。
-表示へ渡すIDは検査済み選択と現在の生成列、raw_topは同じ検査済み分布からの導出値であり、
-既に確定した内部値を表示のためだけに毎トークンPydanticへ通す必要はない。
+RunとTokenChoiceは廃止する。代わりのデータクラスやContextを作らず、内部の採用IDと任意の診断IDはtupleで返す。
+型注釈はSDKハンドルの実動作を保証しない。InstanceOf[Model]もラッパーの型一致しか調べないため、
+ロード・encode/decode・logitsの保証として追加せず、既存Modelの例外変換と回帰試験で確認する。
 
-SDKハンドルのInstanceOf[Model]検査はラッパーの型を確かめるだけで、
-重みのロード・encode/decode・logitsの正常動作を保証しない。型は注釈と具体的な生成箇所で明示し、
-動作保証の代用となる型チェックは足さない。SDKの異常は既存Modelの例外変換と回帰試験で確認する。
+新しいクラス宣言はGenerationProgressだけである。その目的は静的な表示用の契約で、検証対象の入力や状態は持たない。
+ただし「型検査専用だからPythonのクラスではない」とは解釈しない。typing.Protocolから派生した宣言も
+Pythonではクラスオブジェクトを作る。Protocol自体は直接インスタンス化できず、今回は実装クラスの継承も要求しない。
+この性質はローカルPythonでも確認した。ProtocolはPydanticによるデータ検証の代わりにはならない。
 
-Subjectは「All classes must use pydantic for validation.」とする。
-本案では外部データと検証対象の構造にPydanticを使い、SDK資源・端末資源に無意味な再検証を足さない。
-RunとTokenChoiceは役割がなくなったため除去し、GenerationProgressはインスタンスを作らない型宣言だけとする。
-ただし、ModelとDashboardという通常の資源クラスまで個別のPydantic呼び出しを必須と解釈するなら、
-本案はその逐語的解釈への対応を完了していない。Protocolのclass宣言まで対象に数える解釈にも同じ限界がある。
-これらを要件の対象外と決定したことにはせず、評価上の適合を保証しない。
-
-承認時には「検証するデータを、その入力境界でPydanticにより検証する」という解釈の採否を確認する。
-全クラスでの個別検証が必要なら、何を新たな検証対象とするかを先に決め、重複検証を足して適合と称さない。
-今回、Subjectの原文だけでこの解釈を確定できるとは扱っていない。
-
-### 9.7 最終提案のシグネチャと実行順
-
-以下は承認後の関数契約であり、現行APIではない。Vocab・Functionsという新規クラスは作らず、表の型は既存のdictを示す。
-
-| 関数 | 最終提案の入力 | 戻り値 |
-| --- | --- | --- |
-| process_prompt | user_prompt: str, model: Model, vocab: dict[int, bytes], functions: dict[str, FunctionDef], trie: NameTrie, progress: GenerationProgress \| None = None | FunctionCall |
-| select_name | user_prompt: str, model: Model, functions: dict[str, FunctionDef], trie: NameTrie, progress: GenerationProgress \| None = None | FunctionDef |
-| generate_parameters | user_prompt: str, fn: FunctionDef, model: Model, vocab: dict[int, bytes], progress: GenerationProgress \| None = None | str |
-| generate_value | slot: ValueSlot, ids: list[int], model: Model, vocab: dict[int, bytes], progress: GenerationProgress \| None = None | list[int] |
-| select_next_token | model: Model, ids: list[int], allowed: list[int] | tuple[int, list[float] \| None] |
-| choose_token | logits: Sequence[float], allowed: Collection[int] | int（現行のまま） |
-| Dashboard.__init__ | total: int, model: Model, vocab: Mapping[int, bytes] | None（既存クラスに参照を持たせる） |
-
-名前と値の各ループは同じ順序の短い骨格を明示する。
-
-1. 名前はleaf_name、値はバイト列とis_value_completeで終了を確認する。完成なら返す。
-2. 名前はnext_tokens、値はallowed_value_tokensを直接呼ぶ。
-3. 各ループでlen(generated)と自分の上限を比較し、未完成なら現在と同じ上限エラーにする。
-4. モデル入力のidsを準備してselect_next_token(model, ids, allowed)を呼ぶ。
-5. 採用IDをgeneratedへ追加する。
-6. progressが利用可能なら、名前だけ必要に応じてraw_topを計算し、対応するメソッドを直接呼ぶ。
-7. 次の反復へ進む。値ループのPromptErrorには現在どおり引数名と型を付ける。
-
-終了→候補計算→上限→空候補→forced/推論という現在の優先順を変えない。
-従って上限ちょうどで完成すれば成功し、上限到達と空候補が同時なら上限エラーが先になる。
-idsの準備は、複数候補のときだけprefix_ids + generatedの新しいlistを作る。
-0/1候補では選択関数がidsを参照しないため、既存のprefix_idsをそのまま渡せる。
-これは引数準備のための分岐であり、採用IDやforcedの選択は共通関数だけで行う。
-入力列のcopyがforcedごとに増える案や、可変のモデル入力列を新しい共有状態にする案は採らない。
-
-全体はmainの起動tryで入力検証・出力準備→Model→vocab→trieの順に用意する。
-_startはArgs・prompts・functionsまでを返し、Model以降の準備をmainで明示して、巨大な資源tupleを作らない。
-Dashboardをwithで開始し、_process_allから必要な依存とprogressをprocess_promptへ渡す。
-process_promptは名前選択→引数生成→検証、generate_parametersは既存のForced/ValueSlot順に進む。
-保存はmain側で成功ごとに行う。これらの関数は進捗の返答によって生成を継続・終了しない。
-
-### 9.8 承認後の変更・検証
-
-| 対象 | 変更内容 |
+| 確認できる事実 | そこからは断定できないこと |
 | --- | --- |
-| pipeline | 4クロージャ・Run・sayを廃止。上限は2ループで管理し、名前/値の固有判定を直接呼ぶ |
-| decoder | generateと3種のCallable引数を廃止。3引数のselect_next_tokenを追加し、TokenChoiceを廃止。choose_tokenを維持 |
-| progress.py | 上記の表示用の構造的型契約だけを追加。状態・配送・実装継承を持たない |
-| display | データの受信メソッドとmodel/vocab参照、既存の文字列変換を集約。Dashboard全体の状態管理は作り直さない |
-| __main__、tools/measure_application.py | Run構築をやめ、必要な依存を明示引数で渡す。測定・保存・終了の契約は変えない |
-| 関連テスト | 共通1選択と各ループへ移行し、generate/TokenChoice/Run用テストが守っていた動作を引き継ぐ |
+| Subjectの明文は「All classes must use pydantic for validation.」 | 型契約や検証入力を持たない資源クラスを例外扱いできるとは明記されていない |
+| ModelとDashboardは現行コードでも通常クラスで、コンストラクタにPydanticの呼び出しはない | loaderによる検証だけで、この明文の評価を必ず満たすとは断定できない |
+| Protocolの宣言もPythonのクラスであるが、実行時のデータモデルではない | 宣言だけならSubjectの対象外だという採点上の保証はない |
 
-実装前に、以下の回帰試験を先に用意する。
+推奨案は「実際のデータを入力境界で検証し、検証対象を持たない型契約や資源に架空の検証を足さない」という解釈に立つ。
+これは人間の承認を求める解釈であり、要件への適合を検証済み・解決済みとは記録しない。
+全クラス宣言への個別適用を求める場合は、案2の具体的Dashboardを渡す構成なら新規Protocolの論点を避けられる。
+ただし、その場合も既存Model・Dashboard・例外クラスの解釈リスクは残る。
+BaseModelとの多重継承、無意味なvalidate_call、SDKハンドルを入れるためだけのarbitrary_types_allowedで見かけ上対応しない。
 
-- 固定logitsで前後の選択ID・入力列・forward回数が一致する。forcedは0回、分岐は1回であり、
-  観測あり/なし・リダイレクトでも結果は一致する。返ったlogitsは同じ参照で、選択時に破壊しない。
-- 名前・値の両方について、終了/上限/空候補の優先順と、0・1・255・256・上限超過を確認する。
-  NaN・正負無限大・同点・不正配列の拒否または既存の採用規則を維持する。
-- EOS、引数順、JSON区切り、Forcedの入力IDへの追加、UTF-8、JSON/strict型/数値保持、
-  保存失敗と途中の成功結果保持を維持する。
-- 名前警告・取得不能表記・値/件数・引数表示・要約・端末復帰・stderr故障を確認する。
-  受信メソッドは生成列を書き換えず、原始データを表示状態として保持しないことを確認する。
-- TypeAdapterをRun/Dashboardへ追加しないこと、各loader/既存Pydanticモデル以外で辞書と木を
-  再検証・再構築しないことを確認する。SDKハンドルの型一致だけを動作成功として扱わない。
-- make install・make lint・make testに加え、GPUで同じ入力の前後JSONを比較し、スキーマ検証する。
-  性能は精度試験と分けて単独計時し、表示あり/なし・起動時間・ばらつきを記録する。
+### 9.10 実装後の検証と今回の承認対象
 
-3引数化は余分なforward・softmax・上位k件を必要としない。
-logitsの参照を返す間はその分布が生存するが、copyや履歴蓄積を加えず、次ステップの入力や履歴には使わない。
-PydanticとTokenChoice用のcopyを減らしても、実装前に速度改善や5分制約の達成を断定しない。
+承認後はテスト先行で次を確認する。既存generate/Run/TokenChoice向けテストは削除するだけで済ませず、守っていた契約を新APIへ移す。
 
-この改訂で承認を求めるのは、3引数とlogits付き戻り値、各ループでの上限管理、
-最小の構造的型契約、Run/TokenChoiceの廃止、入力境界での一度の検証という方針である。
-Model/Dashboard/型宣言と全クラス要件の解釈は上記の留保を含み、人間の判断前に適合済みとは扱わない。
-コード・ADRは今回変更せず、案Aの基本同意を実装全体の承認として扱わない。
+- 固定logitsで採用ID・SDK入力・forward回数・入力列の非破壊が前後一致する。
+  include_raw_topの真/偽で採用IDは変わらず、値生成・表示なしは診断計算0回、名前観測の分岐は1回、forcedは要求があっても0回。
+  Noneをforced判定や0点に誤用せず、同点・NaN・正負無限大・不正配列も既存規則で確認する。
+- 名前と値の両方で終了/上限/空候補の優先順、0・1・255・256・上限超過、EOS、UTF-8と区切り越えを確認する。
+  名前→値の順序、Forcedと全引数のids継続、JSON構造・strict型・数値保持を確認する。
+- 名前警告の出る/出ない、特殊トークンと未完成UTF-8の取得不能表記、値bytesの表示、件数と引数表示、
+  完了・失敗・中断・リダイレクト・stderr故障・端末復帰・途中保存・保存失敗を確認する。
+  表示の受信メソッドが生成列を書き換えず、選択に影響しないことも確認する。
+- mypyでDashboardからGenerationProgressへの構造的適合と、全依存のキーワード呼び出しを確認する。
+  現行と同じloader/outputの検証だけを使い、Run/Dashboardや各トークンに重複検証を足さない。
+- 実行環境でGPUを確認し、make gpu-runで同じ固定入力の前後JSONをcmpとスキーマで比較する。
+  意味精度の試験と、表示あり/なしの単独計時を分け、起動時間・全時間・ばらつきを記録する。
+  モデル推論回数の一致だけを実時間やSubjectの5分制約への適合とは扱わない。
+- make install、make lint（flake8とSubjectの必須mypy）、make test、差分レビューを行う。
 
-この改訂の確認結果（2026-11-13）: make install成功、flake8と必須mypy成功（45ソース）、
-既存188テスト成功。設計レビューでは生成制御の重大な不整合は指摘されなかった。
-表の列区切りも確認し、Dashboardのvocabは必須引数として明記した。
-変更は本書だけであり、提案したAPIの回帰・性能試験は未実施。Pydanticの解釈上の留保も未解決である。
+今回の承認対象は、必要な診断IDだけを要求時に返す選択API、上記5メソッドとavailableの型契約、
+関数ごとのキーワード依存、既存入力境界での検証である。案Aの基本構造は承認済みだが、この具体化の実装は未承認である。
+上位k件・新規依存・生成方式の変更は含めない。性能・Subject解釈の限界を含めて人間の承認を求める。
+
+この改訂の確認結果（2026-11-13）: make install成功、flake8と必須mypy成功（45ソース）、既存188テスト成功。
+設計レビューで重大な不整合なし。型付きシグネチャの構文と表の列数、変更範囲も確認した。
+docs/architecture.mdの§9だけを変更し、コード・テストは未変更、ADRは参照も変更もしていない。
+提案のAPIの回帰・性能試験は実装前なので未実施である。
 
 ## 開発専用のプロンプト改善
 
