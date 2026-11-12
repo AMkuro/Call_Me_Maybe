@@ -229,6 +229,3 @@ data/output/
 # Local make overrides
 .local.mk
 .venv-gpu/
-
-# Records of explicit CPU investigations (tools/cpu_watch.py, ADR-0025)
-research/evo-x3/watch/

@@ -19,12 +19,11 @@ The observation-boundary proposal is ADR-0024, unapproved and unimplemented;
 its ranking-related parts are superseded by ADR-0023. Earlier dated sections
 below record historical branch status, not the current checkout.
 
-`tools.cpu_watch` (ADR-0025) is available only for explicitly requested CPU
-investigations. It pauses arbitrary jobs on its documented temperature window;
-it is separate from the thermal survey's stop-and-measure workload. It does not
-change the application's default or the requirement to develop on the GPU.
-Runs are ignored under `research/evo-x3/watch/`. No real CPU load was launched
-during integration; unit tests use short jobs and synthetic sensor data.
+The legacy CPU watch on `feat/cpu-watch` is **not integrated**: review found
+that descendants can escape monitoring when their group leader exits, and
+that final paused time is omitted from summaries. Its historical design is
+preserved as ADR-0025, with adoption deferred pending a separate repair.
+The existing thermal survey remains available; GPU development remains required.
 
 The dev group pins uv 0.11.21 from feat/cpu-watch, making `.venv/bin/uv` available
 for sandbox checks when the host uv is unavailable. `make install` deletes that
