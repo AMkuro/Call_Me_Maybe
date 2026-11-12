@@ -1,0 +1,661 @@
+{
+  "date": "2026-11-10",
+  "model": "Qwen/Qwen3-0.6B",
+  "model_revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+  "sdk": "public methods; documented float32 local change; CPU",
+  "measurement_policy": "Accuracy/stress observations; timing is recorded separately. No submission-readiness claim.",
+  "threads": {
+    "sample_baseline": 8,
+    "sample_current": 4,
+    "changed_current": 4,
+    "stress": 8,
+    "stress_parallel_workers": 3
+  },
+  "current_prompt_settings": {
+    "name": "Choose the function matching the request. Reply with its exact name only. Use the descriptions to match the requested action.",
+    "parameters": "Extract arguments for the selected function; do not execute it. Keep the requested input values and strings exact. Return only a JSON object with prompt, name, parameters. Use JSON numbers, strings, true/false. Convert descriptions of patterns into actual regular expressions; do not list the matched substrings. Express replacement symbols as their literal characters. Do not add leading or trailing whitespace unless it belongs to the requested value. Preserve numeric signs and decimal points."
+  },
+  "accuracy": {
+    "sample_initial": {
+      "count": 11,
+      "schema_valid": 11,
+      "name_correct": 11,
+      "correct": 9,
+      "records": [
+        {
+          "input": 1,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 2.0,
+            "b": 3.0
+          }
+        },
+        {
+          "input": 2,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 265.0,
+            "b": 345.0
+          }
+        },
+        {
+          "input": 3,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "name": "shrek"
+          }
+        },
+        {
+          "input": 4,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "name": "john"
+          }
+        },
+        {
+          "input": 5,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "s": "hello"
+          }
+        },
+        {
+          "input": 6,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "s": "world"
+          }
+        },
+        {
+          "input": 7,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 16.0
+          }
+        },
+        {
+          "input": 8,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 144.0
+          }
+        },
+        {
+          "input": 9,
+          "name_correct": true,
+          "correct": false,
+          "parameters": {
+            "source_string": "Hello 34 I'm 233 years old",
+            "regex": "34 233",
+            "replacement": "NUMBERS"
+          }
+        },
+        {
+          "input": 10,
+          "name_correct": true,
+          "correct": false,
+          "parameters": {
+            "source_string": "Programming is fun",
+            "regex": "aeiou",
+            "replacement": "asterisk"
+          }
+        },
+        {
+          "input": 11,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "source_string": "The cat sat on the mat with another cat",
+            "regex": "cat",
+            "replacement": "dog"
+          }
+        }
+      ]
+    },
+    "sample_regex_instruction": {
+      "count": 11,
+      "schema_valid": 11,
+      "name_correct": 11,
+      "correct": 10,
+      "records": [
+        {
+          "input": 1,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 2.0,
+            "b": 3.0
+          }
+        },
+        {
+          "input": 2,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 265.0,
+            "b": 345.0
+          }
+        },
+        {
+          "input": 3,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "name": "shrek"
+          }
+        },
+        {
+          "input": 4,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "name": "john"
+          }
+        },
+        {
+          "input": 5,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "s": "hello"
+          }
+        },
+        {
+          "input": 6,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "s": "world"
+          }
+        },
+        {
+          "input": 7,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 16.0
+          }
+        },
+        {
+          "input": 8,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 144.0
+          }
+        },
+        {
+          "input": 9,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "source_string": "Hello 34 I'm 233 years old",
+            "regex": "\\d+",
+            "replacement": "NUMBERS"
+          }
+        },
+        {
+          "input": 10,
+          "name_correct": true,
+          "correct": false,
+          "parameters": {
+            "source_string": "Programming is fun",
+            "regex": "([aeiouAEIOU])",
+            "replacement": " *"
+          }
+        },
+        {
+          "input": 11,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "source_string": "The cat sat on the mat with another cat",
+            "regex": "cat",
+            "replacement": "dog"
+          }
+        }
+      ]
+    },
+    "sample_current": {
+      "count": 11,
+      "schema_valid": 11,
+      "name_correct": 11,
+      "correct": 10,
+      "records": [
+        {
+          "input": 1,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 2.0,
+            "b": 3.0
+          }
+        },
+        {
+          "input": 2,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 265.0,
+            "b": 345.0
+          }
+        },
+        {
+          "input": 3,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "name": "shrek"
+          }
+        },
+        {
+          "input": 4,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "name": "john"
+          }
+        },
+        {
+          "input": 5,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "s": "hello"
+          }
+        },
+        {
+          "input": 6,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "s": "world"
+          }
+        },
+        {
+          "input": 7,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 16.0
+          }
+        },
+        {
+          "input": 8,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "a": 144.0
+          }
+        },
+        {
+          "input": 9,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "source_string": "Hello 34 I'm 233 years old",
+            "regex": "34|233",
+            "replacement": "NUMBERS"
+          }
+        },
+        {
+          "input": 10,
+          "name_correct": true,
+          "correct": false,
+          "parameters": {
+            "source_string": "Programming is fun",
+            "regex": "([aeiouAEIOU])",
+            "replacement": " *"
+          }
+        },
+        {
+          "input": 11,
+          "name_correct": true,
+          "correct": true,
+          "parameters": {
+            "source_string": "The cat sat on the mat with another cat",
+            "regex": "cat",
+            "replacement": "dog"
+          }
+        }
+      ]
+    },
+    "changed_current": {
+      "count": 5,
+      "schema_valid": 5,
+      "name_correct": 4,
+      "correct": 3,
+      "records": [
+        {
+          "id": "changed-1",
+          "repeat": 1,
+          "status": "completed",
+          "call": {
+            "prompt": "Record number -12.75.",
+            "name": "record",
+            "parameters": {
+              "number": 12.75
+            }
+          },
+          "correct": false,
+          "generated_value_tokens": {
+            "number (number)": 6
+          }
+        },
+        {
+          "id": "changed-2",
+          "repeat": 1,
+          "status": "completed",
+          "call": {
+            "prompt": "Record text exactly: \"José あ 🙂\"",
+            "name": "record_text",
+            "parameters": {
+              "text": "José あ 🙂"
+            }
+          },
+          "correct": true,
+          "generated_value_tokens": {
+            "text (string)": 25
+          }
+        },
+        {
+          "id": "changed-3",
+          "repeat": 1,
+          "status": "completed",
+          "call": {
+            "prompt": "Disable the feature: set enabled to false.",
+            "name": "set_enabled",
+            "parameters": {
+              "enabled": false
+            }
+          },
+          "correct": true,
+          "generated_value_tokens": {
+            "enabled (boolean)": 2
+          }
+        },
+        {
+          "id": "changed-4",
+          "repeat": 1,
+          "status": "completed",
+          "call": {
+            "prompt": "Enable the feature.",
+            "name": "heartbeat",
+            "parameters": {}
+          },
+          "correct": false,
+          "generated_value_tokens": {}
+        },
+        {
+          "id": "changed-5",
+          "repeat": 1,
+          "status": "completed",
+          "call": {
+            "prompt": "Run a heartbeat health check.",
+            "name": "heartbeat",
+            "parameters": {}
+          },
+          "correct": true,
+          "generated_value_tokens": {}
+        }
+      ]
+    }
+  },
+  "stress": {
+    "fixture": "tests/fixtures/generation_limit_cases.json",
+    "prompt_snapshot": "\"\"\"Replaceable instruction settings and Qwen's non-thinking chat format.\"\"\"\n\nimport json\n\nfrom .schema import FunctionDef\n\nNAME_INSTRUCTIONS = (\n    \"Choose the function matching the request. Reply with its exact name only.\"\n)\nPARAMETER_INSTRUCTIONS = (\n    \"Extract arguments for the selected function; do not execute it. \"\n    \"Keep the requested input values and strings exact. Return only a JSON \"\n    \"object with prompt, name, parameters. \"\n    \"Use JSON numbers, strings, true/false.\"\n    \" Convert descriptions of patterns into actual regular expressions; \"\n    \"do not list the matched substrings. Express replacement symbols as \"\n    \"their literal characters.\"\n    \" Do not add leading or trailing whitespace unless it belongs to the \"\n    \"requested value.\"\n)\n\n\ndef _chat(instructions: str, content: str) -> str:\n    \"\"\"Use the installed tokenizer's non-thinking ChatML completion prefix.\"\"\"\n    return (\n        f\"<|im_start|>system\\n{instructions}<|im_end|>\\n\"\n        f\"<|im_start|>user\\n{content}<|im_end|>\\n\"\n        \"<|im_start|>assistant\\n<think>\\n\\n</think>\\n\\n\"\n    )\n\n\ndef build_name_prompt(\n    user_prompt: str, functions: list[FunctionDef]\n) -> str:\n    \"\"\"Prompt for choosing the function name.\"\"\"\n    definitions = json.dumps([fn.model_dump() for fn in functions],\n                             ensure_ascii=False, separators=(\",\", \":\"))\n    return _chat(\n        NAME_INSTRUCTIONS,\n        f\"Functions: {definitions}\\nRequest: {json.dumps(user_prompt)}\",\n    )\n\n\ndef build_parameters_prompt(user_prompt: str, fn: FunctionDef) -> str:\n    \"\"\"Prompt for generating the parameter values of ``fn``.\"\"\"\n    definition = json.dumps(fn.model_dump(), ensure_ascii=False,\n                            separators=(\",\", \":\"))\n    return _chat(PARAMETER_INSTRUCTIONS,\n                 f\"Function: {definition}\\nRequest: {json.dumps(user_prompt)}\")\n",
+    "runs": [
+      {
+        "measurement": "accuracy/stress; no timing measurements",
+        "model": "Qwen/Qwen3-0.6B",
+        "value_token_limit": 256,
+        "repetitions": 1,
+        "results": [
+          {
+            "id": "text-32-chars",
+            "repeat": 1,
+            "status": "completed",
+            "call": {
+              "prompt": "Store this exact text, keeping spaces and case: \"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 \"",
+              "name": "store_text",
+              "parameters": {
+                "text": "Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7"
+              }
+            },
+            "correct": false,
+            "generated_value_tokens": {
+              "text (string)": 22
+            }
+          },
+          {
+            "id": "text-128-chars",
+            "repeat": 1,
+            "status": "completed",
+            "call": {
+              "prompt": "Store this exact text, keeping spaces and case: \"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 \"",
+              "name": "store_text",
+              "parameters": {
+                "text": "\"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7\""
+              }
+            },
+            "correct": false,
+            "generated_value_tokens": {
+              "text (string)": 73
+            }
+          },
+          {
+            "id": "text-512-chars",
+            "repeat": 1,
+            "status": "error",
+            "error": "parameter 'text' (string): token limit 256 reached before a terminator",
+            "correct": false,
+            "generated_value_tokens": {
+              "text (string)": 256
+            }
+          }
+        ],
+        "interrupted_case": "text-2048-chars",
+        "interruption_reason": "Stopped by the executor due to high cost of redundant cap testing after the 512-character case hit the same 256-token cap in all three runs. Not a product PromptError or a completed case."
+      },
+      {
+        "measurement": "accuracy/stress; no timing measurements",
+        "model": "Qwen/Qwen3-0.6B",
+        "value_token_limit": 256,
+        "repetitions": 1,
+        "results": [
+          {
+            "id": "text-32-chars",
+            "repeat": 1,
+            "status": "completed",
+            "call": {
+              "prompt": "Store this exact text, keeping spaces and case: \"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 \"",
+              "name": "store_text",
+              "parameters": {
+                "text": "Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7"
+              }
+            },
+            "correct": false,
+            "generated_value_tokens": {
+              "text (string)": 22
+            }
+          },
+          {
+            "id": "text-128-chars",
+            "repeat": 1,
+            "status": "completed",
+            "call": {
+              "prompt": "Store this exact text, keeping spaces and case: \"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 \"",
+              "name": "store_text",
+              "parameters": {
+                "text": "\"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7\""
+              }
+            },
+            "correct": false,
+            "generated_value_tokens": {
+              "text (string)": 73
+            }
+          },
+          {
+            "id": "text-512-chars",
+            "repeat": 1,
+            "status": "error",
+            "error": "parameter 'text' (string): token limit 256 reached before a terminator",
+            "correct": false,
+            "generated_value_tokens": {
+              "text (string)": 256
+            }
+          }
+        ],
+        "interrupted_case": "text-2048-chars",
+        "interruption_reason": "Stopped by the executor due to high cost of redundant cap testing after the 512-character case hit the same 256-token cap in all three runs. Not a product PromptError or a completed case."
+      },
+      {
+        "measurement": "accuracy/stress; no timing measurements",
+        "model": "Qwen/Qwen3-0.6B",
+        "value_token_limit": 256,
+        "repetitions": 1,
+        "results": [
+          {
+            "id": "text-32-chars",
+            "repeat": 1,
+            "status": "completed",
+            "call": {
+              "prompt": "Store this exact text, keeping spaces and case: \"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 \"",
+              "name": "store_text",
+              "parameters": {
+                "text": "Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7"
+              }
+            },
+            "correct": false,
+            "generated_value_tokens": {
+              "text (string)": 22
+            }
+          },
+          {
+            "id": "text-128-chars",
+            "repeat": 1,
+            "status": "completed",
+            "call": {
+              "prompt": "Store this exact text, keeping spaces and case: \"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 \"",
+              "name": "store_text",
+              "parameters": {
+                "text": "\"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7\""
+              }
+            },
+            "correct": false,
+            "generated_value_tokens": {
+              "text (string)": 73
+            }
+          },
+          {
+            "id": "text-512-chars",
+            "repeat": 1,
+            "status": "error",
+            "error": "parameter 'text' (string): token limit 256 reached before a terminator",
+            "correct": false,
+            "generated_value_tokens": {
+              "text (string)": 256
+            }
+          }
+        ],
+        "interrupted_case": "text-2048-chars",
+        "interruption_reason": "Stopped by the executor due to high cost of redundant cap testing after the 512-character case hit the same 256-token cap in all three runs. Not a product PromptError or a completed case."
+      }
+    ],
+    "remaining_cases": "The 2048-character runs were intentionally interrupted due to high cost after the 512-character cap was reproduced three times. Many-escape, 100-digit and 400-digit original cases were not executed. The 17-digit decimal was executed three times separately.",
+    "precision_run": {
+      "measurement": "accuracy/stress; no timing measurements",
+      "model": "Qwen/Qwen3-0.6B",
+      "value_token_limit": 256,
+      "repetitions": 3,
+      "results": [
+        {
+          "id": "fraction-17-digits",
+          "repeat": 1,
+          "requested_number_literal": "0.12345678901234567",
+          "status": "completed",
+          "call": {
+            "prompt": "Store this number: 0.12345678901234567",
+            "name": "store_number",
+            "parameters": {
+              "number": 0.12345678901234566
+            }
+          },
+          "correct": false,
+          "normalized_agreement": true,
+          "exact_numeric_agreement": false,
+          "generated_value_tokens": {
+            "number (number)": 20
+          }
+        },
+        {
+          "id": "fraction-17-digits",
+          "repeat": 2,
+          "requested_number_literal": "0.12345678901234567",
+          "status": "completed",
+          "call": {
+            "prompt": "Store this number: 0.12345678901234567",
+            "name": "store_number",
+            "parameters": {
+              "number": 0.12345678901234566
+            }
+          },
+          "correct": false,
+          "normalized_agreement": true,
+          "exact_numeric_agreement": false,
+          "generated_value_tokens": {
+            "number (number)": 20
+          }
+        },
+        {
+          "id": "fraction-17-digits",
+          "repeat": 3,
+          "requested_number_literal": "0.12345678901234567",
+          "status": "completed",
+          "call": {
+            "prompt": "Store this number: 0.12345678901234567",
+            "name": "store_number",
+            "parameters": {
+              "number": 0.12345678901234566
+            }
+          },
+          "correct": false,
+          "normalized_agreement": true,
+          "exact_numeric_agreement": false,
+          "generated_value_tokens": {
+            "number (number)": 20
+          }
+        }
+      ]
+    }
+  },
+  "tui": {
+    "returncode": 0,
+    "terminal_restored": true,
+    "token_frames": 35,
+    "output": [
+      {
+        "prompt": "Record number -12.75.",
+        "name": "record",
+        "parameters": {
+          "number": 12.75
+        }
+      },
+      {
+        "prompt": "Record text exactly: \"José あ 🙂\"",
+        "name": "record_text",
+        "parameters": {
+          "text": "José あ 🙂"
+        }
+      }
+    ]
+  }
+}

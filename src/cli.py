@@ -1,5 +1,6 @@
 """Command-line arguments."""
 
+import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -11,6 +12,7 @@ class Args(BaseModel):
 
     Judgment: the defaults follow the Subject (default input and output
     live under data/). The default output path is ADR-0011.
+    Path fields validate types only; loaders and prepare_output check I/O.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -25,4 +27,13 @@ def parse_args(argv: Sequence[str] | None = None) -> Args:
 
     Effect: reads sys.argv when ``argv`` is None.
     """
-    raise NotImplementedError
+    parser = argparse.ArgumentParser(
+        description="Generate JSON function calls with constrained decoding.",
+        allow_abbrev=False,
+    )
+    defaults = Args()
+    parser.add_argument("--functions_definition", type=Path,
+                        default=defaults.functions_definition)
+    parser.add_argument("--input", type=Path, default=defaults.input)
+    parser.add_argument("--output", type=Path, default=defaults.output)
+    return Args.model_validate(vars(parser.parse_args(argv)))

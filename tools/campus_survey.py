@@ -18,7 +18,6 @@ import hashlib
 import hmac
 import importlib.metadata
 import importlib.util
-import json
 import multiprocessing
 import os
 import platform
@@ -35,6 +34,12 @@ import traceback
 from pathlib import Path
 from multiprocessing.connection import Connection
 from typing import Callable
+
+# Preserve direct script invocation as well as python -m tools.<name>.
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.json_io import loads  # noqa: E402
 
 SCHEMA_VERSION = '1'
 BENCH_PROFILE = 'v1'
@@ -373,7 +378,7 @@ def uv_version() -> str:
 
 def sdk_matches_baseline() -> str:
     """配布 SDK が CI のレビュー済みハッシュと一致するか確かめる。"""
-    baseline = json.loads(read(REPO_ROOT / '.github/ci/sdk-baseline.json'))
+    baseline = loads(read(REPO_ROOT / '.github/ci/sdk-baseline.json'))
     for name, expected in baseline['files'].items():
         actual = hashlib.sha256((REPO_ROOT / name).read_bytes()).hexdigest()
         if actual != expected:
@@ -603,7 +608,7 @@ def linear_fit(points: list[tuple[int, float]]) -> tuple[float, float]:
 def estimate(points: list[tuple[int, float]], load_s: float) -> Report:
     """実測点から推定値を作る。前提はすべてレポートに記録する。"""
     intercept, slope = linear_fit(points)
-    n_prompts = len(json.loads(read(
+    n_prompts = len(loads(read(
         REPO_ROOT / 'data/input/function_calling_tests.json')))
     # SDK は KV キャッシュを持たないため、各生成ステップで全文を再計算する。
     per_prompt = sum(intercept + slope * (ASSUMED_PROMPT_TOKENS + step)

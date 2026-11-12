@@ -65,10 +65,12 @@ class PipelineTests(unittest.TestCase):
                 })
 
                 def complete(
-                    written: str, kind: str, terminator: str = '',
+                    written: bytes, kind: str, terminator: str = '',
                 ) -> bool:
                     """Implement the documented completion contract as data."""
-                    if not written or not written.endswith(terminator):
+                    if not written or not written.endswith(
+                        terminator.encode()
+                    ):
                         return False
                     value = written[:-1] if terminator else written
                     try:
@@ -77,7 +79,7 @@ class PipelineTests(unittest.TestCase):
                         return False
 
                 def allowed(
-                    vocab: dict[int, str], kind: str, written: str,
+                    vocab: dict[int, bytes], kind: str, written: bytes,
                     terminator: str = '',
                 ) -> list[int]:
                     """Offer the fixture continuation and another digit."""
@@ -100,7 +102,10 @@ class PipelineTests(unittest.TestCase):
                             lambda scores, permitted:
                             max(permitted, key=scores.__getitem__)
                         )):
-                    result = pipeline.generate_value(slot, [127], model, {})
+                    result = pipeline.generate_value(
+                        slot, [127], model,
+                        {token: bytes([token]) for token in range(128)},
+                    )
                 self.assertEqual(decode(result), target)
 
     def test_names_and_delimiters_round_trip_through_json(self) -> None:
@@ -187,7 +192,7 @@ class MainTests(unittest.TestCase):
         model = object.__new__(Model)
         fixtures = {
             'parse_args': Args(output=self.output),
-            'load_functions': [definition()], 'Model': model,
+            'load_functions': {'f': definition()}, 'Model': model,
             'load_vocab': {}, 'build_name_trie': NameTrie(),
         }
         for name, result in fixtures.items():
@@ -228,21 +233,17 @@ class MainTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertIn('disk full', self.stderr.getvalue())
 
-    def test_zero_results_replace_the_previous_run(self) -> None:
-        """Empty input and all-failed input save an empty result array."""
-        for prompts, results, status in (
-            ([], [], 0), (['x'], [PromptError('failed')], 1),
-        ):
-            with self.subTest(prompts=prompts):
-                self.output.write_text('[{"prompt":"previous run"}]')
-                self.assertEqual(self.run_main(prompts, results), status)
-                self.assertEqual(json.loads(self.output.read_text()), [])
+    def test_all_failed_results_replace_the_previous_run(self) -> None:
+        """A nonempty input with no successful calls saves an empty array."""
+        self.output.write_text('[{"prompt":"previous run"}]')
+        self.assertEqual(self.run_main(['x'], [PromptError('failed')]), 1)
+        self.assertEqual(json.loads(self.output.read_text()), [])
 
     def test_empty_result_save_error_is_reported(self) -> None:
         """Saving an empty array uses the same error handling."""
         with patch.object(entry, 'save_results',
                           side_effect=OSError('permission denied')):
-            self.assertEqual(self.run_main([], []), 1)
+            self.assertEqual(self.run_main(['x'], [PromptError('failed')]), 1)
         self.assertIn('permission denied', self.stderr.getvalue())
 
     def test_partial_success_keeps_each_successful_result(self) -> None:

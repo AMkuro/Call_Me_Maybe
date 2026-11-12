@@ -1,9 +1,13 @@
 # 設計記録(docs/design)
 
-状態: **下書き**。2026-11-08 にユーザーが決めた内容を記録した。ユーザーのレビュー前で、実装はまだ始めない
-(`AGENTS.md` の「Design and implementation process」)。
+状態: **スケルトン承認済み**(2026-11-10、PR #43)。ユーザーから本実装への着手指示を受けた。
+ADR-0013 の詳細をユーザーが承認した。トークン単位の TUI 表示は ADR-0014 に記録した。
+改行区切り・桁区切り数値・引用符内改行の最新設計はADR-0015と設計書の本文へ反映した。
+LF方式のコード・テストは未変更で、過去の検証記録と分けて扱う。
+JSON解析・strict型・数値保持の実装はADR-0017に記録する。
 
-ファイル構成の案、実行順、Subject のコード規則は [../architecture.md](../architecture.md) にある。
+要求・要件から処理への対応、データの受け渡し、失敗時の動作、部品の変更条件は
+[基盤実装の設計](../architecture.md) にある。最初にこの設計を読み、判断の理由は下の ADR を参照する。
 
 記号は `docs/subject-v1.7.md` と同じ。
 
@@ -17,17 +21,25 @@
 | ADR | 題 | 状態 |
 |---|---|---|
 | [0001](adr/0001-function-name-selection.md) | 関数名の選び方 | 決定(精度は要検証) |
-| [0002](adr/0002-argument-generation.md) | 引数の作り方 | 決定 |
-| [0003](adr/0003-string-values.md) | 文字列の値 | **保留** |
-| [0004](adr/0004-numbers-and-types.md) | 数値と型 | 決定(見直しの条件つき) |
+| [0002](adr/0002-argument-generation.md) | 引数の作り方 | 改行とForcedの分離をADR-0015に反映。コード未変更 |
+| [0003](adr/0003-string-values.md) | 文字列の値 | 引用符内の実LFを許す設計へ更新。意味上の追加制約は保留 |
+| [0004](adr/0004-numbers-and-types.md) | 数値と型 | 数値の一律float化と暗黙変換はADR-0017へ更新。LF方式は未実装 |
 | [0005](adr/0005-prompt-and-tuning.md) | プロンプトと調整 | 決定 |
 | [0006](adr/0006-no-matching-function.md) | 該当する関数がないとき | 決定 |
-| [0007](adr/0007-error-policy-and-model-check.md) | エラー方針とモデルの確認 | 決定(2026-11-09 更新あり。ファイルの確認は取りやめ) |
+| [0007](adr/0007-error-policy-and-model-check.md) | エラー方針とモデルの確認 | モデルのハッシュ確認は取りやめ。出力先の書き込み確認はモデル起動前に行う |
 | [0008](adr/0008-dependencies-and-sdk.md) | 依存関係と配布 SDK | 決定(2026-11-09 更新あり) |
 | [0009](adr/0009-environment-and-config.md) | 環境と設定 | 決定(未確定の細部あり) |
 | [0010](adr/0010-measurement-policy.md) | 測定の方針 | 決定 |
 | [0011](adr/0011-name-trie-and-output-path.md) | 関数名の木、出力先、モデルのラッパーの形 | 決定(サンプル 5 名のみ確認) |
-| [0012](adr/0012-skeleton-review-corrections.md) | 値の終了、JSON の組み立て、結果の保存 | 修正方針をユーザー承認済み(2026-11-09) |
+| [0012](adr/0012-skeleton-review-corrections.md) | 値の終了、JSON の組み立て、結果の保存 | 値の新設計はADR-0015。空入力・保存の実装済み契約は維持 |
+| [0013](adr/0013-implementation-details.md) | 名前の終端、語彙、生成上限、警告 | ユーザー承認済み(2026-11-10) |
+| [0014](adr/0014-terminal-progress.md) | 選択・生成を追うトークン単位の TUI | ユーザー承認済み(2026-11-10) |
+| [0015](adr/0015-value-records.md) | 改行で区切る引数の中間表現と正規化 | LF方式は未実装。数値保持条件をADR-0017へ更新 |
+| [0016](adr/0016-function-registry.md) | 関数名から定義を取り出す辞書 | ユーザー決定。入力順と重複拒否を保ち、名前で直接参照 |
+| [0017](adr/0017-json-validation-and-precision.md) | JSONの重複・型変換・数値精度 | 修正要求を実装。整数保持、検査済み小数、strict型、空のメタデータ警告 |
+| [0018](adr/0018-local-prompt-experiments.md) | 隔離したローカルLLMのプロンプト改善 | 設計承認済み。ツール・単体検証・9Bロード確認済み。精度探索は別に記録 |
+| [0019](adr/0019-optimizer-kv-cache.md) | 既存OSSハーネスによる改善側の実行 | OpenCodeの設定・2ツール・作業領域。対象SDKは固定 |
+| [0020](adr/0020-few-shot-and-relay.md) | 引数生成の例示と、Claude Code・大きいローカルモデルのリレー | 提案。方向はユーザー承認済み、細部6点は未決 |
 | [0022](adr/0022-campus-runtime-calibration.md) | 校舎CPUでの所要時間を検証する方法 | 自動連続負荷と安全停止を承認。VM/cgroupの採用は未決 |
 
 ## 未解決の一覧
@@ -42,5 +54,4 @@
    (`docs/subject-v1.7.md` の第9章)。
 8. (解決済み、2026-11-09)`pyproject.toml` の構成は確定した(ADR-0008、0009 の「2026-11-09 の更新」)。
    残りは、手元の Mac が Intel の場合の torch の制約。(提出前に `llm_sdk/` を戻す確認は、仕組みにしない。)
-9. 案 B の終端の形(`",` か、別の記号か。ADR-0011)。`",` は、全文の中での分割が、単独のエンコードとずれる恐れが
-   ある(測ったのは 5 名の、閉じ引用符 `"` まで)。実トークナイザーで測ってから決める。
+9. (暫定解決、2026-11-10)名前の終端は EOS を採用(ADR-0013)。障害となれば見直す。

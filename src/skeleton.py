@@ -1,5 +1,6 @@
 """The forced part of the output and the places the model fills in."""
 
+import json
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -38,4 +39,15 @@ def build_skeleton(fn: FunctionDef) -> list[Forced | ValueSlot]:
     for the last slot. Forced text must not repeat that delimiter
     (ADR-0012). With no parameters, force ``, "parameters": {}}``.
     """
-    raise NotImplementedError
+    if not fn.parameters:
+        return [Forced(text=', "parameters": {}}')]
+    parts: list[Forced | ValueSlot] = []
+    for index, (name, spec) in enumerate(fn.parameters.items()):
+        prefix = ', "parameters": {' if index == 0 else ' '
+        parts.append(Forced(text=prefix + json.dumps(name) + ': '))
+        parts.append(ValueSlot(
+            name=name, type=spec.type,
+            terminator='}' if index == len(fn.parameters) - 1 else ',',
+        ))
+    parts.append(Forced(text='}'))
+    return parts

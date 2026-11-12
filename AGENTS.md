@@ -21,8 +21,27 @@ settings. The repository copy of llm_sdk has one documented local change
 the distributed version from llm_sdk.zip (or SDK_ZIP=<zip>). Do not
 otherwise edit llm_sdk. Development checks are not a submission certificate.
 
-Create or update a PR with only the authorized task's changes. After inspecting
-its diff and required checks, opt in ONLY that intended integration PR using:
+Use the GPU for real-model development runs through make gpu-run and the
+separate .venv-gpu environment (owner instruction, 2026-11-10). Reserve CPU
+runs for explicit CPU measurements or submission checks; do not default to
+four CPU threads for development inference. Verify GPU availability in the
+actual execution environment, since the sandbox can hide GPU device nodes.
+
+For provisional campus application-time estimates, use the measured phys16-t6
+total application time plus 8 seconds (owner decision, 2026-11-11; ADR-0010). Preserve raw
+measurements separately; add no actual sleep and do not apply the offset per
+prompt/token/forward or to hardware-probe kernels. This is based on the known 11
+inputs, not inference-profile equivalence. The SDK phys16-t8 default is separate.
+
+Remote publication is separate from local edits, verification and commits.
+A request to fix something does not authorize a push or a PR mutation: obtain
+a separate explicit instruction before pushing, creating/updating a PR, or
+enabling its merge. Remote history persists and is costly to revise; do not
+publish intermediate local work automatically.
+
+When publication and integration are explicitly authorized, create or update
+a PR with only the authorized task's changes. After inspecting its diff and
+required checks, opt in ONLY that intended integration PR using:
 
     gh pr merge NUMBER --repo AMkuro/Call_Me_Maybe --auto --squash --match-head-commit SHA
 
@@ -55,6 +74,23 @@ otherwise equal options.
    mechanisms or checks that nothing needs.
 
 # Design and implementation process
+
+Apply the owner's three scope rules:
+
+- For documentation edits, update the related documents together and resolve
+  contradictions between them. Do not automatically expand into code changes.
+- For code edits, include the necessary tests and verification in that request.
+- The owner normally handles push and PR operations. Perform them only when
+  explicitly requested; local edits and commits do not authorize publication.
+
+For each request that changes files, complete the authorized work and checks, then
+make a local commit before the final response that ends that request. Do not
+wait for another commit instruction or for the whole project to finish, unless
+the owner explicitly requests otherwise for that request.
+Local commits and remote publication are separate: do not infer permission to
+push or mutate PRs from a correction or local commit.
+Ask only when a material decision is missing, and preserve the owner's
+design-approval rules.
 
 Do not start implementing from a vague request. Design first.
 

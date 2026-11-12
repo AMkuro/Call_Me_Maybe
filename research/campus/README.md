@@ -1,5 +1,12 @@
 # 校舎PC調査（Call Me Maybe 実行環境）
 
+CPUとメモリの負荷特性を開発機と比較する調査には、モデル不要の
+[hardware_probe](../../docs/research/hardware-probe.md)を使う。
+ユーザーから提供されたアプリ3回の時間は
+[提供情報としての記録](../../docs/measurements/2026-11-11-campus-application-reported.json)へ保存した。
+原票・使用commitなどは未確認で、以下のSDK benchmarkレポートへ混ぜていない。
+下記の環境一覧・SDK benchmark・アプリ全体の実行時間とは、測る対象が異なる。
+
 連続実行で温まる過程と処理時間を自動で測る場合は、
 [thermalモードの手順](../../docs/research/safe-thermal-survey.md)を使う。
 thermalは既存のHMAC鍵からPC IDを自動生成するため、`--pc-id`は不要。

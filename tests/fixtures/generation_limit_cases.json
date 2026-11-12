@@ -1,0 +1,98 @@
+{
+  "status": "Prepared; real-model runs pending implementation and unresolved design choices.",
+  "repetitions": 3,
+  "provisional_value_token_limit": 256,
+  "policy": "Record completion, validation, semantic correctness, generated token count and explicit failure reason. Never silently truncate, force a fabricated end, round or change number notation to fit a limit.",
+  "functions": [
+    {
+      "name": "store_text",
+      "description": "Store the supplied text unchanged.",
+      "parameters": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "store_number",
+      "description": "Store the supplied number unchanged.",
+      "parameters": {
+        "number": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "text-32-chars",
+      "prompt": "Store this exact text, keeping spaces and case: \"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 \"",
+      "expected_name": "store_text",
+      "expected_parameters": {
+        "text": "Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 "
+      }
+    },
+    {
+      "id": "text-128-chars",
+      "prompt": "Store this exact text, keeping spaces and case: \"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 \"",
+      "expected_name": "store_text",
+      "expected_parameters": {
+        "text": "Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 "
+      }
+    },
+    {
+      "id": "text-512-chars",
+      "prompt": "Store this exact text, keeping spaces and case: \"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 \"",
+      "expected_name": "store_text",
+      "expected_parameters": {
+        "text": "Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 "
+      }
+    },
+    {
+      "id": "text-2048-chars",
+      "prompt": "Store this exact text, keeping spaces and case: \"Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 \"",
+      "expected_name": "store_text",
+      "expected_parameters": {
+        "text": "Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 Ab9 xY7 "
+      }
+    },
+    {
+      "id": "many-json-escapes",
+      "prompt": "Store this exact JSON string value: \"a\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\na\\\"b\\\\c\\n\"",
+      "expected_name": "store_text",
+      "expected_parameters": {
+        "text": "a\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\na\"b\\c\n"
+      }
+    },
+    {
+      "id": "negative-decimal",
+      "prompt": "Store this number: -0.25",
+      "expected_name": "store_number",
+      "requested_number_literal": "-0.25"
+    },
+    {
+      "id": "fraction-17-digits",
+      "prompt": "Store this number: 0.12345678901234567",
+      "expected_name": "store_number",
+      "requested_number_literal": "0.12345678901234567"
+    },
+    {
+      "id": "integer-100-digits",
+      "prompt": "Store this number: 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+      "expected_name": "store_number",
+      "requested_number_literal": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+    },
+    {
+      "id": "integer-over-float-range",
+      "prompt": "Store this number: 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+      "expected_name": "store_number",
+      "requested_number_literal": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+    }
+  ]
+}

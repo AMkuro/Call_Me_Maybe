@@ -1,0 +1,4 @@
+wall_s=82.03 max_rss_kib=4889896
+exit_code=0
+temp_start_mc=83000 temp_end_mc=82000
+profile=phys16-t5 mem_max=16G swap=0 cpus=0-15 omp=5

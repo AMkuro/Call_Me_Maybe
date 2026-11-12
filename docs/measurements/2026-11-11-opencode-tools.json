@@ -1,0 +1,11 @@
+{
+  "harness": "OpenCode",
+  "version": "1.15.10",
+  "enabled_tools": [
+    "run",
+    "write_prompt"
+  ],
+  "default_permissions": "deny",
+  "cloud_providers_enabled": false,
+  "source": "opencode debug agent prompt-improver"
+}

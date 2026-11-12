@@ -1,10 +1,12 @@
 """Entry point: ``uv run python -m src``."""
 
+import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from .cli import parse_args
+from .display import terminal_progress
 from .errors import PromptError, StartupError
 from .loader import load_functions, load_prompts
 from .model_port import Model
@@ -12,11 +14,11 @@ from .name_trie import build_name_trie
 from .pipeline import process_prompt
 from .schema import FunctionCall
 from .vocab import load_vocab
-from .writer import save_results
+from .writer import prepare_output, save_results
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the flow of docs/architecture.md section 4; return the exit code.
+    """Validate inputs and output readiness before loading the model.
 
     Non-zero when a startup step fails or any prompt was skipped.
 
@@ -26,9 +28,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = parse_args(argv)
         functions = load_functions(args.functions_definition)
         prompts = load_prompts(args.input)
+        prepare_output(args.output)
         model = Model()
         vocab = load_vocab(Path(model.vocab_path()))
-        trie = build_name_trie([fn.name for fn in functions], model.encode)
+        trie = build_name_trie(list(functions), model.encode)
     except StartupError as e:
         print(e, file=sys.stderr)
         return 1
@@ -36,19 +39,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     calls: list[FunctionCall] = []
     skipped = False
     try:
-        for user_prompt in prompts:
-            try:
-                call = process_prompt(
-                    user_prompt, functions, model, trie, vocab,
-                )
-            except PromptError as e:
-                print(f"skipped: {e}", file=sys.stderr)
-                skipped = True
-                continue
-            calls.append(call)
-            save_results(args.output, calls)
-        if not calls:
-            save_results(args.output, calls)
+        with terminal_progress(len(prompts)) as report:
+            for index, user_prompt in enumerate(prompts, 1):
+                report("input", f"{index}/{len(prompts)}")
+                report("prompt", user_prompt)
+                try:
+                    call = process_prompt(
+                        user_prompt, functions, model, trie, vocab, report,
+                    )
+                except PromptError as e:
+                    report("error", f"skipped: {e}")
+                    skipped = True
+                    continue
+                calls.append(call)
+                save_results(args.output, calls)
+                report("result", f"{call.name} " + json.dumps(call.parameters))
+            if not calls:
+                save_results(args.output, calls)
     except OSError as e:
         print(f"cannot save output to {args.output}: {e}", file=sys.stderr)
         return 1

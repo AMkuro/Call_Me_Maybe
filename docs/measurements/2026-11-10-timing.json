@@ -1,0 +1,18 @@
+{
+  "measurement": "isolated serial CLI timing; separate from accuracy runs",
+  "model": "Qwen/Qwen3-0.6B",
+  "device": "CPU, float32",
+  "threads": 4,
+  "prompts": 11,
+  "cache": "model already downloaded; OS page cache may be warm",
+  "seconds_startup_to_exit": 98.93741811800282,
+  "returncode": 0,
+  "timed_out_at_300_seconds": false,
+  "under_300_seconds": true,
+  "own_concurrent_model_runs": 0,
+  "completed_outputs": 11,
+  "cpu_model": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "logical_cpus": 32,
+  "runs": 1,
+  "other_system_load": "Not controlled; no concurrent model jobs from this task."
+}

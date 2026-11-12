@@ -1,0 +1,88 @@
+{
+  "functions": [
+    {
+      "name": "record",
+      "description": "Record one number unchanged.",
+      "parameters": {
+        "number": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "record_text",
+      "description": "Record the supplied text unchanged.",
+      "parameters": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "set_enabled",
+      "description": "Set whether the feature is enabled.",
+      "parameters": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "returns": {
+        "type": "boolean"
+      }
+    },
+    {
+      "name": "heartbeat",
+      "description": "Run a heartbeat health check.",
+      "parameters": {},
+      "returns": {
+        "type": "boolean"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "changed-1",
+      "prompt": "Record number -12.75.",
+      "expected_name": "record",
+      "expected_parameters": {
+        "number": -12.75
+      }
+    },
+    {
+      "id": "changed-2",
+      "prompt": "Record text exactly: \"José あ 🙂\"",
+      "expected_name": "record_text",
+      "expected_parameters": {
+        "text": "José あ 🙂"
+      }
+    },
+    {
+      "id": "changed-3",
+      "prompt": "Disable the feature: set enabled to false.",
+      "expected_name": "set_enabled",
+      "expected_parameters": {
+        "enabled": false
+      }
+    },
+    {
+      "id": "changed-4",
+      "prompt": "Enable the feature.",
+      "expected_name": "set_enabled",
+      "expected_parameters": {
+        "enabled": true
+      }
+    },
+    {
+      "id": "changed-5",
+      "prompt": "Run a heartbeat health check.",
+      "expected_name": "heartbeat",
+      "expected_parameters": {}
+    }
+  ]
+}
