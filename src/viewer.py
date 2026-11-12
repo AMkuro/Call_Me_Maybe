@@ -159,7 +159,7 @@ def _frame(state: dict[str, Any], phase: str,
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Replay the live trace in a separate terminal, at a human-readable pace."""
+    """Replay the live trace at a human-readable pace."""
     parser = argparse.ArgumentParser(description="Slow visual token debugger")
     parser.add_argument("--events", required=True, type=Path)
     parser.add_argument("--delay", type=float, default=0.35,
@@ -200,7 +200,8 @@ def main(argv: list[str] | None = None) -> int:
                     decision = None
                 elif kind == "state":
                     new_stage = event.get("stage")
-                    if new_stage is not None and new_stage != state.get("stage"):
+                    if (new_stage is not None and
+                            new_stage != state.get("stage")):
                         decision = None
                     if new_stage is not None:
                         state["stage"] = new_stage
@@ -216,7 +217,8 @@ def main(argv: list[str] | None = None) -> int:
                     for phase in phases:
                         if phase in ("select", "forced"):
                             state["preview"] = event.get("preview", "")
-                        live.update(_frame(state, phase, decision), refresh=True)
+                        live.update(_frame(state, phase, decision),
+                                    refresh=True)
                         time.sleep(args.delay)
                     continue
                 elif kind == "end":
