@@ -3,16 +3,16 @@
 この文書は、自然言語の依頼を関数呼び出しの JSON に変換する要求を、
 どのデータと処理で実現するか説明する。現行設計の正本は本書であり、要件は
 [Subject v1.7 の要約](subject-v1.7.md)とユーザーの指示に従う。
-現行実装は§1〜8、新しい生成制御の未実装提案は§9、今回対象外の旧提案は§10に分ける。
+現行実装は§1〜9、今回対象外の未実装の旧提案は§10に分ける。
 実行結果は[検証記録](implementation-verification.md)を参照する。
 
 開発用の[連続負荷・熱監視](superpowers/specs/2026-11-11-safe-thermal-survey.md)は、
 CLIのthermal入口、親の安全監視、公開SDKだけを使う子の連続負荷、JSONL記録で構成する。
 アプリ本体・SDKの実装は変更せず、温まる過程の調査とSubjectの実アプリ5分判定を分ける。
 
-現行構造はローカルdevelopの`15f9ab2372e9b76a669f29c8edf0c65dc94915a4`で確認した（2026-11-13）。
+案Aは設計コミット`42a1f8b`に対するユーザーの実装承認を受け、ローカルdevelopで実装した（2026-11-13）。
 本書に残っていた未実装のLF区切り方式は、現行のJSON区切り方式と区別して§10へ移した。
-今回の変更は設計文書だけであり、生成ループや表示のコードは変更していない。
+§9.1は変更前の構造を比較用に残し、現行の呼び出し順と所有関係は§9.8に記す。
 
 ## 1. 要求から処理上の条件へ
 
@@ -93,7 +93,7 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 
 [全体図の D2](diagrams/skeleton-flow.d2)
 
-1件の処理の現行の呼び出し順は§9.1に記す。既存の詳細図はLF方式の未実装案なので§10へ分離する。
+1件の処理の現行の呼び出し順は§9.8に記す。既存の詳細図はLF方式の未実装案なので§10へ分離する。
 
 ### 3.1 関数の説明と依頼から、定義にある名前を選ぶ
 
@@ -101,7 +101,7 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 意味の選択にはモデルの点数を使い、名前として許す経路は入力された関数定義から制約する。
 
 `build_name_prompt`は辞書の`values()`から全関数の名前・説明・引数名と型を入力順に列挙する。
-利用者の依頼を添え、関数名だけを応答するよう指示する。`select_name`はこれをencodeし、`decoder.generate`に渡す。
+利用者の依頼を添え、関数名だけを応答するよう指示する。`select_name`はこれをencodeし、自分の明示ループで木を照会して`select_next_token`を呼ぶ。
 生成中は `next_tokens` で現在の経路の子を取得し、その ID だけを次の候補にする。
 名前とEOSの後ろの葉に到達したら`leaf_name`で元の名前を取得し、`functions[name]`で定義を返す。
 読み込み時に作った辞書を使い、選択のたびに関数の配列を再走査しない（ADR-0016）。
@@ -115,9 +115,7 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 引数値の生成列に流用せず、選んだ名前を最終出力の JSON 文字列として組み立てる。
 EOS はユーザーが承認した暫定方式で、障害となった場合に見直す（ADR-0013）。
 
-![名前の候補を制約する処理](diagrams/select-name.svg)
-
-[select_name の D2](diagrams/select-name.d2)
+変更前の共通ループの図は§9.1に比較資料として残す。現行の順序は§9.8を参照する。
 
 ### 3.2 決まったJSON構造と引数値を順に組み立てる（現行実装）
 
@@ -166,10 +164,11 @@ BeforeValidatorとして適用し、有限のfloat候補を`json.dumps`→Decima
 
 ## 4. 候補トークンの判定と終了条件
 
-`decoder.generate` は、生成済みの ID 列を終了・候補判定用の関数に渡す。
-名前を選ぶ段階では木、値を生成する段階では型の文法を使い、同じループからそれぞれを呼ぶ。
+`select_name`と`generate_value`が自分の生成列と上限を所有する。
+名前は木、値は型の文法を直接照会し、共通の`select_next_token(model, ids, allowed)`で1トークンを選ぶ。
+制約判定・終了判定・採用後の処理をコールバックへ渡さない。
 
-1. 完了なら生成 ID 列を返す。上限ちょうどの位置で完了した場合も成功する。
+1. 完了なら名前は元のFunctionDef、値は生成ID列を返す。上限ちょうどの完了も成功する。
 2. 未完了で生成上限に達していたら、終端未到達を示す PromptError にする。
 3. 続けられる候補がなければ PromptError にする。
 4. 候補が1個ならその ID を強制する。複数なら logits を一度取得する。
@@ -181,7 +180,7 @@ BeforeValidatorとして適用し、有限のfloat候補を`json.dumps`→Decima
 
 ### 値の文法とバイト列の扱い（現行実装）
 
-`generate_value`内の`allowed_next`が、語彙から生成済みのバイト列を連結する。
+`generate_value`のループ先頭で、語彙から生成済みのバイト列を連結する。
 `is_value_complete(written, slot.type, slot.terminator)`が真なら完了し、
 偽なら`allowed_value_tokens`で次のIDを求める。トークン全体を加えた接頭辞が正当か確認し、
 区切りを越えて次の値や余分な文章を含むトークンを拒否する。
@@ -224,18 +223,19 @@ SDK 呼び出しの例外は `Model` が起動時または1件の失敗へ変換
 
 ## 6. 選択を観察し、調整へつなげる
 
-以下は現在の実装の説明である。今回の生成制御・表示境界の提案は§9に分離する。
+以下は現在の実装の説明である。生成制御・表示境界の採用理由と検証は§9に記す。
 過去の未承認案は採用根拠にせず、現行コードから比較した。
 
 ユーザーがプロンプトや部品を調整するとき、どの入力のどの段階で何が選ばれたかを見られるようにする。
-`decoder` は選択のたびに `TokenChoice` を任意の通知関数へ渡す。
-`pipeline` は関数・引数・値の文脈を付け、`main` と `display` は入力位置と画面表示を担当する。
-実行中に変わらないもの(モデル・語彙・関数定義・名前の木・通知関数)は `pipeline.Run` に
-まとめて渡す。通知関数がなければ、`decoder` は診断値を計算しない。
+`decoder.select_next_token`は採用ID・選択方式・要求時だけraw_topを返す。
+`pipeline`の名前/値ループはID追加後にGenerationProgressへ同期通知し、表示から制御判断を受け取らない。
+共有資源はGenerationResourcesが保持し、mainが具体的なDashboardを別引数で接続する。
+通知先の後付け代入、Run.say、TokenChoice、生成制御コールバックは廃止した。
 
-表示するのは、入力番号、処理段階、依頼、選択済みの関数、現在の引数と型、生成中の値と、
-トークン数である。候補ランキングは[ADR-0023](design/adr/0023-remove-token-ranking.md)に従い削除した。
-トークンごとの途中経過の通知は維持する。候補表専用のlogit・allowed_mass・gapは計算しない。
+入力番号、段階、依頼、関数、引数と型、途中の値・件数に加え、名前/値とも現在の採用IDとforced/greedyを表示する。
+名前のID列はSequenceとして借り、表示は変更・保持せず同期的に整形する。
+トークンごとに通知するが、描画は既存の間隔で最新状態を表示する。全ステップの履歴保存は行わない。
+候補ランキング、候補表専用のlogit・allowed_mass・gap、値生成のraw_top計算は存在しない。
 
 名前選択で制約前のargmaxが採用IDと異なる場合は警告する。これは制約前の最大値がマスクされたことを示す。
 該当関数なしとは判定せず、許可候補から最大のものを選ぶ。
@@ -260,23 +260,24 @@ stderr への書き込みで OSError が起きたら表示を止め、生成と�
 | --- | --- | --- |
 | モデルへ与える説明・形式 | `prompt.py` の設定値と組み立て関数 | 名前段階・引数段階それぞれの文字列を返す。名前の応答形式は EOS の木と整合させる |
 | 関数を選ぶ処理 | `pipeline.select_name`、`name_trie.py` | 入力された定義の `FunctionDef` を返す |
-| トークンを選ぶ方法 | `decoder.py` | 渡された許可 ID から選び、生成列を返す。観察の有無で選択を変えない |
+| トークンを選ぶ方法 | `decoder.py` | 許可IDから1つ選び、ID・方式・任意診断を返す。列や上限は管理せず、観察で選択を変えない |
 | 引数値の許可文法・終了条件 | `values.py`、`generate_value` | 値とスロットのJSON区切りのID列を返す。文字列の中の区切り文字では終了しない |
 | JSON全文の組み立て | `generate_parameters`、`skeleton.py` | 値のdecode結果とForcedを最終文字列へ追加し、両方のID列をモデル入力へ継続する |
 | 値の生成上限 | `pipeline.MAX_VALUE_STEPS` | 超過を値の短縮で隠さず、理由付きの PromptError にする |
 | 引数の型と数値の扱い | `schema.py`、値の文法、保存 | 定義のキーを保持し、検証後の値を出力する。変更時は生成と検証の双方を確認する |
 | SDK との接続 | `model_port.py` の具体的な `Model` | 公開 API だけを使い、encode と logits は普通のリスト、decode は文字列を返す |
-| 表示とログの形式 | `display.py`、通知の整形 | 選択結果と保存データを変えない |
+| 表示とログの形式 | `display.py`の同期受信・整形 | 選択結果と保存データを変えない |
 
 実装上の制約は、Python 3.10以上、型注釈・docstring、Subject の flake8/mypy の条件、
 許可された依存関係、SDK の公開 API の利用である（Subject 要約 §1・3）。
-検証するデータにはPydanticを使う。現行のModel・Dashboardは通常クラス、Runは通常dataclassである。
-Subjectの全クラス要件についての解釈上の限界と、今回提案する検証境界は§9.6に記す。
+検証するデータにはPydanticを使い、GenerationResourcesはInstanceOfで参照型を検証する。
+Model・Dashboardは既存の通常クラス、GenerationProgressは静的なProtocolである。
+Subjectの全クラス要件の解釈上の留保と、検証境界は§9.9に記す。
 SDKの既存のfloat32変更と復元手順は開発文書を参照する。
 
 ## 8. 要件を実現できているかの確認
 
-以下は現行実装の確認条件である。§9・10の提案を検証済みという意味には使わない。
+以下は現行実装の確認条件である。§10の旧提案を検証済みという意味には使わない。
 
 | 設計で確かめる条件 | 確認方法 |
 | --- | --- |
@@ -300,20 +301,19 @@ SDKの既存のfloat32変更と復元手順は開発文書を参照する。
 本実装のレビューでは、各処理がこの条件を守り、部品の調整を観察・検証できるかを確認する。
 EOS、暫定上限、数値の精度、未対応の型などを変更するときは、要件と本書の該当箇所を見直す。
 
-D2図はTUIへの通知と整形を省略している。§3.1の名前図は現行の共通ループ、
-§10のLF方式の図は未実装の旧提案を示し、§9の案Aを実装済みと示す図ではない。
+D2図はTUIへの通知と整形を省略している。§9.1の名前図は変更前の共通ループ、
+§10のLF方式の図は未実装の旧提案を示す。現行案Aの具体的な呼び出し順は§9.8を参照する。
 配色は [workflow-style.d2](diagrams/workflow-style.d2)、生成方法と余白の指定は各 D2 ソースにある。
 
-## 9. 未実装提案：明示的な生成ループと1トークン選択（承認待ち）
+## 9. 実装済み：明示的な生成ループと1トークン選択（案A）
 
-この節は2026-11-12の依頼と2026-11-13の再検討指示に対する提案であり、§1〜8の現行実装を変更したものではない。
-案Aの基本構造と、上位で共有資源を束ね下位へ必要な依存を渡す案Cはユーザー承認済み。
-acff8d9を対象とした今回の改訂では、具体的な資源構造体と両段階の採用ID/選択方式の観測を提案する。実装は承認待ちである。
+設計コミット42a1f8bの案A・共有資源の案C・トークン観測契約をユーザーが承認し、実装した。
+この節は採用理由・代替案・検証境界を含む現行設計である。§9.1だけは変更前の比較記録である。
 選択関数に上限を持たせず、資源に表示先や生成途中の状態を含めない。検証済みの辞書や木の再走査も行わない。
 過去の未承認案・履歴文書を根拠に採用せず、現行コード・Subject要約・既存テストから比較した。
 ランキング、LF方式、プロンプト調整、Dashboard全体の状態モデル再設計は対象外とする。
 
-### 9.1 現行の呼び出し順と隠れた依存
+### 9.1 変更前の呼び出し順と隠れた依存（42a1f8bまで）
 
 ```text
 main → _start → 入力検証・出力準備 → Model・語彙・名前の木・Runの構築
@@ -347,14 +347,20 @@ main → _start → 入力検証・出力準備 → Model・語彙・名前の�
 | decoder.next_logits | 入力ID列→logits | 通常はModel.logitsの束縛メソッド。クロージャではないが推論先の間接化である |
 | Run.report / say | label・text→戻り値なし | mainが後から代入した通知先。生成制御ではなく表示資源への間接経路 |
 
-現行のループは、`generate`から判定関数へ戻り、また`generate`から観測関数へ戻る。
+変更前のループは、`generate`から判定関数へ戻り、また`generate`から観測関数へ戻る。
 呼び出し元を読むだけでは、完了・上限・推論・追加・通知の実行順が並んで見えない。
-TokenChoiceは現在観測時だけPydantic検証され、生成ID列のcopyも観測時だけ作られる。
-名前警告でしか使わないraw_topは、現状では観測付きの値生成でも計算されている。
+TokenChoiceは変更前には観測時だけPydantic検証され、生成ID列のcopyも観測時だけ作られる。
+名前警告でしか使わないraw_topは、変更前は観測付きの値生成でも計算されている。
+
+変更前の名前生成図（現行インターフェースを表す図ではない）:
+
+![名前の候補を制約する処理](diagrams/select-name.svg)
+
+[select_name の D2](diagrams/select-name.d2)
 
 ### 9.2 共通処理と段階固有の処理
 
-| 処理 | 名前の生成 | 値の生成 | 提案する所有者 |
+| 処理 | 名前の生成 | 値の生成 | 現行の所有者 |
 | --- | --- | --- | --- |
 | プロンプト・初期ID | 関数一覧から名前用入力 | 選択関数と固定JSONを含む入力 | 各pipeline関数 |
 | 終了判定 | leaf_nameでEOS後の葉を確認 | バイト列とslot.type・terminatorでis_value_complete | 各ループに直接記載 |
@@ -378,9 +384,9 @@ TokenChoiceは現在観測時だけPydantic検証され、生成ID列のcopyも�
 今回の順読みを優先して案Aを選ぶ基本方針が承認された。
 以下は基本構造を再選択するものではなく、案Cの具体化と、ID/方式を両段階で観測する契約の承認前レビューである。
 
-### 9.4 不足していた観測情報と、確定する場所
+### 9.4 観測情報と、確定する場所
 
-現行decoder.TokenChoiceにはtokenとforcedがある。一方、acff8d9の提案では選択結果が
+変更前のdecoder.TokenChoiceにはtokenとforcedがあった。一方、acff8d9の提案では選択結果が
 (token, raw_top)だけになり、値の表示にはbytesと件数しか渡していなかった。
 名前のIDはID列の末尾から読めるが、値の末尾トークンIDはbytesから一意に復元できない。
 またraw_top=Noneはforcedだけでなく「greedyだが診断未要求」でも起こる。選択方式の代用にはならない。
@@ -393,7 +399,7 @@ TokenChoiceは現在観測時だけPydantic検証され、生成ID列のcopyも�
 | 名前の途中・ステップ数 | 名前ループのgenerated | 名前の公開decode、末尾ID、lenによる件数と警告のstep |
 | 値の途中・ステップ数 | 値ループのgeneratedとvocab | 表示するbytesとlen。IDはbytesから逆引きせず選択結果を渡す |
 
-選択関数の戻り値を次の3値にする。新しい結果クラスは作らない。
+選択関数の戻り値は次の3値である。新しい結果クラスは作らない。
 
 ```python
 # decoder.pyに置く、選択方式そのものの型別名
@@ -495,7 +501,7 @@ ProtocolのPythonクラスとしての性質とSubjectの留保は§9.9に記す
 値はbytes・整数・文字列Literalを渡す。全メソッドの戻り値はNoneであり、生成制御には使用しない。
 
 Sequenceはcollections.abcからimportする。表示側のdecode補助関数もSequence[int]を受け取り、
-既存Model.decodeのlist[int]境界でのみ`tokens if isinstance(tokens, list) else list(tokens)`とする案とする。
+既存Model.decodeのlist[int]境界でのみ`tokens if isinstance(tokens, list) else list(tokens)`とする。
 通常の生成listにはコピーが発生せず、tuple等の場合だけこの境界でO(n)のlistコピーが1回発生する。
 Model.decodeと配布SDKの公開decode実装を確認したところ、listはそのまま下位のtokenizerへ渡される。
 下位実装内部のメモリ確保までゼロとは主張しない。入力listの非変更は実装後のSDK回帰試験でも確認する。
@@ -518,7 +524,7 @@ stderrのOSError後はavailableを偽にして表示と追加診断を省くが�
 ### 9.6 案C：上位で共有資源をまとめ、下位へ必要な依存を渡す
 
 案Cはユーザーが採用した管理方針である。全依存を個別引数にする前案は上位処理について撤回する。
-具体的な構造体をGenerationResourcesとし、pipeline.pyの上位処理入口の近くに定義する案とする。
+具体的な構造体をGenerationResourcesとし、pipeline.pyの上位処理入口の近くに定義する。
 生成サービスやFactory階層は作らず、既存_startが組み立てる。
 
 ```python
@@ -581,7 +587,7 @@ Modelの所有権をDashboardへ移すわけではなく、表示メソッドで
 
 ### 9.7 更新した型付きシグネチャ
 
-以下は未実装の提案である。GenerationResourcesの具体定義は§9.6、GenerationProgressは§9.5を使う。
+以下は実装したインターフェースである。GenerationResourcesの具体定義は§9.6、GenerationProgressは§9.5を使う。
 
 ```python
 def process_prompt(
@@ -631,7 +637,7 @@ def choose_token(
 ) -> int: ...
 ```
 
-_startは`tuple[Args, list[str], GenerationResources]`を返す。Dashboardの構築案は引き続き
+_startは`tuple[Args, list[str], GenerationResources]`を返す。Dashboardの構築は
 `Dashboard(total: int, model: Model, vocab: Mapping[int, bytes])`で、__init__はNoneを返す。
 具体的なDashboardはmainが持ち、生成へ渡すのは別引数のGenerationProgressだけである。
 
@@ -836,19 +842,19 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
 資源の型確認がSDKの動作を保証した、または新しい構造体により全クラス要件を解決したとは記録しない。
 無意味なvalidate_callやBaseModelとの多重継承をProtocolへ足して、形式的に解決したことにもしない。
 
-### 9.10 変更対象・実装後の検証・承認対象
+### 9.10 実装対象・回帰検証・制約
 
-| 対象ファイル・関数 | 承認後の変更 |
+| 対象ファイル・関数 | 実装した変更 |
 | --- | --- |
 | pipeline.py | Run/report/sayと4クロージャを廃止。GenerationResources、上位だけの資源受け取り、下位の明示依存、各ループと同期借用の観測契約を設ける |
 | decoder.py | generate/TokenChoiceを廃止。SelectionMode型別名と、選択ID・方式・任意診断IDを返す1選択関数を設ける。choose_tokenを維持 |
 | progress.py | 上記の5メソッド・availableだけの型契約。コールバック・配送・実行状態は持たない |
 | display.py | name_token/value_tokenで採用IDと方式を整形し、途中内容と一緒に現在トークン欄を更新。元の描画・集計・復帰は維持 |
 | __main__.py | _startで資源を一度組み立て、_process_allへ渡す。Dashboardへは必要な参照と語彙の読み取り専用viewだけを接続 |
-| tools/measure_application.py | 同じ関数セットの評価バッチで資源を一度作り、process_promptへ渡す。測定方式を変えない |
+| tools/measure_application.py | 評価バッチで資源を一度作る。MeasurementProgress(BaseModel)がケースごとの引数名と件数を保持し、従来のレポートキーと計測方式を維持。クロージャobserve/nonlocalを廃止 |
 | 関連テスト | 共通選択と名前/値のループへ既存契約を移し、両段階のID/方式・非変更/非保持の通知・浅い資源検証を追加 |
 
-承認後、少なくとも以下をテスト先行で確認する。
+以下の回帰条件を維持する。実行済みの範囲と未検証条件は末尾に分ける。
 
 1. 名前と値の両方で、1候補はforced・推論0回、複数候補はgreedy・推論1回となる。
    greedyでinclude_raw_top=Falseならraw_top=Noneだが方式はgreedy。forcedはTrue指定でも診断0回。
@@ -869,13 +875,42 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
    forward回数不変だけを性能・5分制約への適合とみなさない。
 8. make install・make lint（Subjectのflake8/mypy）・make test、構造的な型適合と差分レビューを行う。
 
-案Aの基本構造と案Cの管理方針は承認済み。今回承認を求めるのは、具体的な資源構造体と浅い検証、
-選択方式の明示返却、両段階の観測契約、Sequenceの非変更・非保持と描画更新の方針である。
-コード・テスト・ADRは変更せず、§9の設計更新だけを行う。実装・GPU回帰・モデル性能の試験はまだ行わない。
+今回の実装では、選択APIを先に独立させ、次に生成ループ・表示・起動処理・測定呼び出し元を移行した。
+測定ツールのMeasurementProgressは既存の件数収集に必要な状態を持つPydanticモデルであり、
+新しい生成サービス・イベントバスではない。countsの辞書とparameter名を初期構築時に検証し、
+内部の同期通知でプリミティブを更新する。名前のID列は変更・保持しない。
 
-今回の確認結果（2026-11-13）: make install成功、flake8と必須mypy成功（45ソース）、既存188テスト成功。
-設計レビューで重大な不整合なし。宣言のPython構文、表の列数、§9以外を変えていないことを確認した。
-資源のスキーマだけの小規模確認は上記に記録したが、提案APIを実装しての回帰・GPU・性能試験ではない。
+検証結果（2026-11-13）:
+
+- make install成功。変更前は必須lint/mypyと188テスト、選択API追加時は192テスト成功。
+- 旧generateのテストは名前/値の実ループと1選択関数へ移行した。境界0/1/255/256/超過、
+  forced/greedy、固定logits・同点・不正値・マスク、名前警告、JSON検証、保存失敗の保証を維持する。
+  TokenChoiceのsnapshot検査は借用Sequenceの非変更・非保持と整形済み文字列の独立性へ置き換えた。
+- 観測なし・リダイレクト・利用不能・stderrのOSErrorで、固定入力の生成JSONとモデル入力・推論回数が一致。
+  名前のforced→greedy、値のforced、同一bytesを持つ複数ID、UTF-8途中・特殊トークンを検査した。
+- GenerationResourcesの4資源と内部FunctionDefの参照同一性、不正な外側型・必須/extra拒否、
+  内部辞書の非再検証、frozenの代入/削除拒否と浅い可変性をテストした。
+- 実GPU（Radeon 8060S、ROCm環境）でmake gpu-runの既知11入力を前後各1回、直列実行。
+  両方11件完了・失敗0。JSONはcmpでバイト単位一致。11件すべての生成結果を既存validate_callで各関数スキーマへ再照合し成功した。
+
+| 同じ既知11入力・stderrリダイレクト | 変更前42a1f8b | 変更後案A |
+| --- | --- | --- |
+| make gpu-run全体の実時間（秒） | 25.95 | 25.46 |
+| Dashboardのアプリ時間（モデルロードを含まない、秒） | 19.7 | 19.3 |
+
+生データは/tmp/cmm-a-before.json・after.json、各log・seconds.txtに保存した。
+各1回で分散は測っていないため、高速化の根拠やSubjectの提出環境5分証明とはしない。
+精度の一致と計時を分けて扱い、GPU時間へCPU向け暫定8秒を加算しない。
+実GPUでの全forward数の計装比較、全ステップの実端末録画、追加fixtureの精度評価は未実施。
+通常のテストでは実際の疑似端末で例外とKeyboardInterrupt後の復帰を確認する。
+最終make lintはflake8・Subject必須mypyとも成功（48ソース）、make testは197テスト成功。
+独立した差分レビューでも新規の重大不具合・設計逸脱・重大なテスト保証喪失は見つからなかった。
+生成2モジュールにネストした関数・lambdaがないことと、設計書のPython例の構文も確認した。
+既存の留保として、Dashboard.writeが停止扱いにするのはOSErrorであり、閉じたPython streamの
+ValueError等は対象外である。今回の変更で新たに発生した回帰ではなく、全例外の吸収へは広げていない。
+
+Subjectの全クラス要件は未解決の解釈リスクとして残る。資源の型検証を、SDK動作保証や
+既存Model/Dashboard/Protocolを含む全クラス要件の解決と偽らない。
 
 ## 開発専用のプロンプト改善
 
