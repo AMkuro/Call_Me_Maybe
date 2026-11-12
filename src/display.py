@@ -52,7 +52,7 @@ def render_progress(fields: dict[str, str], width: int, height: int) -> str:
 
 @contextmanager
 def terminal_progress(
-    total: int,
+    total: int, live: bool = True,
 ) -> Generator[Callable[[str, str], None], None, None]:
     """Yield a reporter and restore the terminal even after an exception.
 
@@ -62,7 +62,7 @@ def terminal_progress(
     Redirected stderr gets function choices, warnings and final results.
     """
     stream = sys.stderr
-    interactive = stream.isatty() and os.environ.get("TERM") != "dumb"
+    interactive = live and stream.isatty() and os.environ.get("TERM") != "dumb"
     fields = {"input": f"0/{total}"}
     summaries: list[str] = []
     last_frame = 0.0
