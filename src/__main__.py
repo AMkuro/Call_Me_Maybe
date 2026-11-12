@@ -13,6 +13,7 @@ from .model_port import Model
 from .name_trie import build_name_trie
 from .pipeline import process_prompt
 from .schema import FunctionCall
+from .trace import event_log
 from .vocab import load_vocab
 from .writer import prepare_output, save_results
 
@@ -39,23 +40,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     calls: list[FunctionCall] = []
     skipped = False
     try:
-        with terminal_progress(len(prompts)) as report:
-            for index, user_prompt in enumerate(prompts, 1):
-                report("input", f"{index}/{len(prompts)}")
-                report("prompt", user_prompt)
-                try:
-                    call = process_prompt(
-                        user_prompt, functions, model, trie, vocab, report,
-                    )
-                except PromptError as e:
-                    report("error", f"skipped: {e}")
-                    skipped = True
-                    continue
-                calls.append(call)
-                save_results(args.output, calls)
-                report("result", f"{call.name} " + json.dumps(call.parameters))
-            if not calls:
-                save_results(args.output, calls)
+        with event_log() as trace:
+            with terminal_progress(len(prompts), live=trace is None) as report:
+                for index, user_prompt in enumerate(prompts, 1):
+                    if trace is not None:
+                        trace({"type": "input", "index": index,
+                               "total": len(prompts), "prompt": user_prompt})
+                    report("input", f"{index}/{len(prompts)}")
+                    report("prompt", user_prompt)
+                    try:
+                        if trace is None:
+                            call = process_prompt(
+                                user_prompt, functions, model, trie, vocab,
+                                report,
+                            )
+                        else:
+                            call = process_prompt(
+                                user_prompt, functions, model, trie, vocab,
+                                report, trace,
+                            )
+                    except PromptError as e:
+                        if trace is not None:
+                            trace({"type": "state", "stage": "error",
+                                   "error": str(e)})
+                        report("error", f"skipped: {e}")
+                        skipped = True
+                        continue
+                    calls.append(call)
+                    save_results(args.output, calls)
+                    report("result", f"{call.name} " + json.dumps(call.parameters))
+                if not calls:
+                    save_results(args.output, calls)
     except OSError as e:
         print(f"cannot save output to {args.output}: {e}", file=sys.stderr)
         return 1
