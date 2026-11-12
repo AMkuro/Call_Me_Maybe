@@ -9,7 +9,7 @@ from unittest.mock import patch
 import numpy as np
 
 from src import decoder, pipeline
-from src.display import render_progress, terminal_progress
+from src.display import Dashboard, render_progress
 from src.model_port import Model
 from src.name_trie import NameTrie
 
@@ -123,7 +123,8 @@ class DashboardTests(unittest.TestCase):
         """Done/failed and seconds per prompt, then a total line."""
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
-            with terminal_progress(2) as report:
+            with Dashboard(2) as dashboard:
+                report = dashboard.report
                 report("input", "1/2")
                 report("function", "fn_a")
                 report("candidates", "> 1 'a' 1.000")

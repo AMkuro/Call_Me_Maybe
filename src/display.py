@@ -9,8 +9,6 @@ import os
 import sys
 import time
 import unicodedata
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
 
 _ROWS = (
     ("input", "Input"), ("stage", "Stage"), ("prompt", "Prompt"),
@@ -64,26 +62,16 @@ def render_progress(fields: dict[str, str], width: int, height: int) -> str:
     return "\n".join(_clip(line, width) for line in lines[:max(height - 1, 1)])
 
 
-@contextmanager
-def terminal_progress(
-    total: int,
-) -> Generator[Callable[[str, str], None], None, None]:
-    """Yield a reporter and restore the terminal even after an exception.
+class Dashboard:
+    """The stderr output of one run; ``report`` is what callers get.
+
+    Use it in ``with``: leaving the block restores the terminal and prints
+    the summary, even after an exception or Ctrl-C.
 
     Effect: writes stderr; reads its terminal size and the terminal type.
 
     Judgment: observe without keyboard interaction or extra model calls.
     """
-    output = _Output(total)
-    try:
-        output.start()
-        yield output.report
-    finally:
-        output.finish()
-
-
-class _Output:
-    """The stderr state of one run; ``report`` is what callers get."""
 
     def __init__(self, total: int) -> None:
         """Nothing written yet."""
@@ -98,10 +86,26 @@ class _Output:
         self.last_frame = 0.0
         self.available = True
 
-    def start(self) -> None:
+    def __enter__(self) -> "Dashboard":
         """Switch a terminal to the dashboard screen."""
         if self.interactive:
             self.write(_ENTER)
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        """Restore the terminal, then print the summary and the total."""
+        if self.interactive:
+            self.write(_LEAVE)
+            for line in self.summary:
+                self.write(line)
+        done, failed = self.counts["done"], self.counts["failed"]
+        left = self.total - done - failed  # an interrupted run
+        self.write(
+            f"{self.total} prompt{'' if self.total == 1 else 's'}: "
+            f"{done} done, {failed} failed, "
+            + (f"{left} not finished, " if left else "")
+            + f"{time.monotonic() - self.started:.1f} s\n"
+        )
 
     def report(self, label: str, text: str) -> None:
         """Record one observation; ``input`` starts a new prompt."""
@@ -142,21 +146,6 @@ class _Output:
             width, height = _FALLBACK_SIZE
         self.write(_CLEAR + render_progress(self.fields, width, height))
         self.last_frame = now
-
-    def finish(self) -> None:
-        """Restore the terminal, then print the summary and the total."""
-        if self.interactive:
-            self.write(_LEAVE)
-            for line in self.summary:
-                self.write(line)
-        done, failed = self.counts["done"], self.counts["failed"]
-        left = self.total - done - failed  # an interrupted run
-        self.write(
-            f"{self.total} prompt{'' if self.total == 1 else 's'}: "
-            f"{done} done, {failed} failed, "
-            + (f"{left} not finished, " if left else "")
-            + f"{time.monotonic() - self.started:.1f} s\n"
-        )
 
     def write(self, text: str) -> None:
         """A closed diagnostic stream must not discard generated results."""

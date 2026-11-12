@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .cli import Args, parse_args
-from .display import terminal_progress
+from .display import Dashboard
 from .errors import PromptError, StartupError
 from .loader import load_functions, load_prompts
 from .model_port import Model
@@ -29,8 +29,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(e, file=sys.stderr)
         return 1
     try:
-        with terminal_progress(len(prompts)) as report:
-            run.report = report
+        with Dashboard(len(prompts)) as dashboard:
+            run.report = dashboard.report
             all_done = _process_all(prompts, run, args.output)
     except OSError as e:
         print(f"cannot save output to {args.output}: {e}", file=sys.stderr)

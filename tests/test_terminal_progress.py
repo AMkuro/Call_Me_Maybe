@@ -80,11 +80,12 @@ class TerminalTests(unittest.TestCase):
 
     def test_redirected_output_has_no_control_sequences(self) -> None:
         """Files receive readable result and warning lines, not ANSI frames."""
-        from src.display import terminal_progress
+        from src.display import Dashboard
 
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
-            with terminal_progress(2) as report:
+            with Dashboard(2) as dashboard:
+                report = dashboard.report
                 report('input', '1/2')
                 report('prompt', 'request\x1b[2J')
                 report('function', 'store_text')
@@ -99,7 +100,7 @@ class TerminalTests(unittest.TestCase):
 
     def test_pseudo_terminal_restores_cursor_after_exception(self) -> None:
         """The live view is cleaned up even when a prompt fails."""
-        from src.display import terminal_progress
+        from src.display import Dashboard
 
         master, slave = os.openpty()
         try:
@@ -107,9 +108,9 @@ class TerminalTests(unittest.TestCase):
                 with contextlib.redirect_stderr(output):
                     with patch.dict(os.environ, {'TERM': 'xterm'}):
                         with self.assertRaisesRegex(RuntimeError, 'test'):
-                            with terminal_progress(1) as report:
-                                report('input', '1/1')
-                                report('function', 'store_number')
+                            with Dashboard(1) as dashboard:
+                                dashboard.report('input', '1/1')
+                                dashboard.report('function', 'store_number')
                                 raise RuntimeError('test')
             chunks = []
             while True:
