@@ -38,8 +38,7 @@ class ObservationTests(unittest.TestCase):
         self.assertEqual(calls, [[9]])
 
         first, second = observed
-        self.assertTrue(first.constrained)
-        self.assertEqual(first.raw_top, 0)
+        self.assertEqual(first.top[0], (0, 3.0, False))  # constrained
         self.assertEqual(first.token, 2)
         expected = (math.exp(1) + math.exp(2)) / sum(
             math.exp(score) for score in [3, 1, 2]
@@ -65,13 +64,13 @@ class ObservationTests(unittest.TestCase):
         with patch.object(Model, 'encode', return_value=[9]), \
                 patch.object(Model, 'decode',
                              side_effect=PromptError('diagnostic decode')):
-            plain = pipeline.select_name('request', {fn.name: fn}, model,
-                                         trie)
+            run = pipeline.Run(model, {}, {fn.name: fn}, trie)
+            plain = pipeline.select_name('request', run)
             events: list[tuple[str, str]] = []
-            observed = pipeline.select_name(
-                'request', {fn.name: fn}, model, trie,
+            observed = pipeline.select_name('request', pipeline.Run(
+                model, {}, {fn.name: fn}, trie,
                 lambda label, text: events.append((label, text)),
-            )
+            ))
         self.assertEqual(observed, plain)
         self.assertTrue(any('unavailable' in text for _, text in events))
 

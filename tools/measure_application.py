@@ -13,7 +13,7 @@ from src.json_io import loads
 from src.loader import index_functions
 from src.model_port import Model
 from src.name_trie import build_name_trie
-from src.pipeline import MAX_VALUE_STEPS, process_prompt
+from src.pipeline import MAX_VALUE_STEPS, Run, process_prompt
 from src.schema import FunctionCall, FunctionDef
 from src.vocab import load_vocab
 
@@ -95,8 +95,8 @@ def main() -> int:
                         case["requested_number_literal"]
                     )
                 try:
-                    call = process_prompt(case["prompt"], functions, model,
-                                          trie, vocab, observe)
+                    call = process_prompt(case["prompt"], Run(
+                        model, vocab, functions, trie, observe))
                     result.update(status="completed", call=call.model_dump(),
                                   correct=assess_call(case, call))
                     if "requested_number_literal" in case:

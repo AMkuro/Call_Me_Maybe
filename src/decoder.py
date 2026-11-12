@@ -20,11 +20,10 @@ class TokenChoice(BaseModel):
     token: int
     tokens: list[int]
     forced: bool
-    raw_top: int | None = None
-    allowed_mass: float | None = None
-    margin: float | None = None
-    constrained: bool = False
-    logit: float | None = None
+    # Computed only for a model-chosen token, from the same logits:
+    logit: float | None = None  # of the chosen token
+    allowed_mass: float | None = None  # softmax share of allowed tokens
+    margin: float | None = None  # logit gap of the two best allowed
     # Highest raw logits, best first: (id, logit, allowed by the mask).
     top: list[tuple[int, float, bool]] = []
 
@@ -109,14 +108,11 @@ def generate(
                 unique = set(allowed)
                 indices = list(unique)
                 ordered = np.sort(scores[indices])
-                raw_top = int(np.argmax(scores))
                 diagnostics = {
-                    "raw_top": raw_top,
+                    "logit": float(scores[token]),
                     "allowed_mass": float(weights[indices].sum()
                                           / weights.sum()),
                     "margin": float(ordered[-1] - ordered[-2]),
-                    "constrained": raw_top not in allowed,
-                    "logit": float(scores[token]),
                     "top": _top(scores, unique),
                 }
         generated.append(token)

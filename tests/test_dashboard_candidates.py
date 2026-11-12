@@ -11,6 +11,7 @@ import numpy as np
 from src import decoder, pipeline
 from src.display import render_progress, terminal_progress
 from src.model_port import Model
+from src.name_trie import NameTrie
 
 
 class CandidateTests(unittest.TestCase):
@@ -64,43 +65,43 @@ class CandidateTextTests(unittest.TestCase):
     """The table the pipeline hands to the dashboard."""
 
     def setUp(self) -> None:
-        """A model whose decode is used only for tokens outside vocab."""
-        self.model = object.__new__(Model)
-        self.vocab = {1: b',"', 2: b'\x1b[2J', 3: b'\xe6', 4: b'\xe6\x9d\xb1'}
+        """A run whose model decode is used only for tokens outside vocab."""
+        self.shown: dict[str, str] = {}
+        self.context = pipeline.Run(
+            object.__new__(Model),
+            {1: b',"', 2: b'\x1b[2J', 3: b'\xe6', 4: b'\xe6\x9d\xb1'},
+            {}, NameTrie(), self.shown.__setitem__,
+        )
 
     def test_selected_below_top_ten_is_added_and_marked(self) -> None:
         """Masked rows say so; the selected token always shows."""
         choice = decoder.TokenChoice(
             step=1, token=50, tokens=[50], forced=False, logit=0.5,
+            allowed_mass=0.25, margin=1.5,
             top=[(i, 9.0 - i, False) for i in range(10)],
         )
         with patch.object(Model, "decode", return_value="x"):
-            lines = pipeline._candidates(choice, self.model,
-                                         self.vocab).splitlines()
-        self.assertEqual(len(lines), 11)
-        self.assertTrue(all("masked" in line for line in lines[:10]))
-        self.assertTrue(lines[10].startswith(">"))
-        self.assertIn("50", lines[10])
+            pipeline._show_choice(choice, self.context)
+        header, *rows = self.shown["candidates"].splitlines()
+        self.assertEqual(header, "allowed_mass=0.25  gap=1.5")
+        self.assertEqual(len(rows), 11)
+        self.assertTrue(all("masked" in row for row in rows[:10]))
+        self.assertTrue(rows[10].startswith(">"))
+        self.assertIn("50", rows[10])
 
     def test_token_text_is_unambiguous(self) -> None:
         """Quotes, controls and partial UTF-8 are visible as such."""
         with patch.object(Model, "decode", return_value="<|im_end|>"):
-            text = pipeline._token_text(self.model, self.vocab, 1)
-            self.assertEqual(text, "',\"'")
-            self.assertEqual(pipeline._token_text(self.model, self.vocab, 2),
-                             "'\\x1b[2J'")
-            self.assertEqual(pipeline._token_text(self.model, self.vocab, 3),
-                             "b'\\xe6'")
-            self.assertEqual(pipeline._token_text(self.model, self.vocab, 4),
-                             "'東'")
-            self.assertEqual(pipeline._token_text(self.model, self.vocab, 9),
-                             "'<|im_end|>'")
+            texts = [pipeline._token_text(token, self.context)
+                     for token in range(1, 6)]
+        self.assertEqual(texts, ["',\"'", "'\\x1b[2J'", "b'\\xe6'", "'東'",
+                                 "'<|im_end|>'"])
 
     def test_forced_token_text(self) -> None:
         """No logits are shown for a forced token."""
         choice = decoder.TokenChoice(step=1, token=1, tokens=[1], forced=True)
-        self.assertIn("forced", pipeline._candidates(choice, self.model,
-                                                     self.vocab))
+        pipeline._show_choice(choice, self.context)
+        self.assertIn("forced", self.shown["candidates"])
 
 
 class DashboardTests(unittest.TestCase):

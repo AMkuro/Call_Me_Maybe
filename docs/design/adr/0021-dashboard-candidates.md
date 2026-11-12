@@ -82,6 +82,14 @@ logit 上位 10 件を取り出す(`np.argpartition`)。各行に Token ID・ト
   リダイレクト時に要約の行が出て ESC を含まない。疑似端末で終了時に要約の行が残る。
 - 実モデル: 既知の 11 入力で出力 JSON が今と同じ。計時は ADR-0010 に従い精度と分けて記録する。
 
+### 整理(ユーザー決定、2026-11-12)
+
+- ADR-0014 の「Token choice」と「Diagnostics」の行(`raw_top` を含む)は候補表と重なるので、候補表に
+  まとめた。候補表の 1 行目に `allowed_mass` と `gap` を出す。`TokenChoice.raw_top`・`constrained` は外した。
+- 実行中に変わらないもの(モデル・語彙・関数定義・名前の木・通知関数)を `pipeline.Run` にまとめ、
+  `process_prompt(user_prompt, run)` のように渡す。`__main__` は「起動(`_start`)→ 全件の処理
+  (`_process_all`)→ 終了コード」に分けた。
+
 ### 検証結果(2026-11-12)
 
 - 固定データ: `tests/test_dashboard_candidates.py` と既存のテスト、全体 188 件が通過。

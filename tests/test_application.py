@@ -20,6 +20,7 @@ from src.decoder import choose_token, generate
 from src.errors import PromptError, StartupError
 from src.loader import load_functions, load_prompts
 from src.model_port import Model
+from src.name_trie import NameTrie
 from src import pipeline
 from src.pipeline import validate_call
 from src.schema import FunctionCall, FunctionDef, build_parameters_model
@@ -284,7 +285,8 @@ class DecoderTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 PromptError, r"source_string.*string.*token limit 256",
             ):
-                pipeline.generate_value(slot, [], model, {})
+                pipeline.generate_value(slot, [], pipeline.Run(
+                    model, {}, {}, NameTrie()))
 
 
 class WriterTests(unittest.TestCase):

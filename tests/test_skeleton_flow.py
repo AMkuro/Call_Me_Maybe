@@ -102,10 +102,10 @@ class PipelineTests(unittest.TestCase):
                             lambda scores, permitted:
                             max(permitted, key=scores.__getitem__)
                         )):
-                    result = pipeline.generate_value(
-                        slot, [127], model,
-                        {token: bytes([token]) for token in range(128)},
-                    )
+                    result = pipeline.generate_value(slot, [127], pipeline.Run(
+                        model, {token: bytes([token]) for token in range(128)},
+                        {}, NameTrie(),
+                    ))
                 self.assertEqual(decode(result), target)
 
     def test_names_and_delimiters_round_trip_through_json(self) -> None:
@@ -141,7 +141,8 @@ class PipelineTests(unittest.TestCase):
                             encode('12,'), encode('true}'),
                         ]):
                     text = pipeline.generate_parameters(
-                        'a "quoted" prompt', fn, model, {},
+                        'a "quoted" prompt', fn,
+                        pipeline.Run(model, {}, {}, NameTrie()),
                     )
                 try:
                     record = json.loads(text)
