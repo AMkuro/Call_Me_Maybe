@@ -85,7 +85,6 @@ def _score(value: Any) -> str:
 def _frame(state: dict[str, Any], phase: str,
            decision: dict[str, Any] | None) -> Any:
     """Construct the latest screen. There is intentionally no event history."""
-    from rich.columns import Columns
     from rich.console import Group
     from rich.panel import Panel
     from rich.table import Table
@@ -154,8 +153,11 @@ def _frame(state: dict[str, Any], phase: str,
     if state.get("error"):
         footer.append(f"   · ERROR: {_safe(str(state['error']))}",
                       style="bold red")
-    return Group(header, prompt, Columns([json_panel, right], expand=True,
-                                       equal=True), footer)
+    columns = Table.grid(expand=True, padding=(0, 1))
+    columns.add_column(ratio=3)
+    columns.add_column(ratio=2)
+    columns.add_row(json_panel, right)
+    return Group(header, prompt, columns, footer)
 
 
 def main(argv: list[str] | None = None) -> int:
