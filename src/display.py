@@ -109,7 +109,7 @@ def terminal_progress(
             return
         now = time.monotonic()
         if now - last_frame < 0.05 and label not in (
-            "function", "result", "error",
+            "function", "result", "error", "candidates",  # last per token
         ):
             return
         try:
@@ -130,6 +130,8 @@ def terminal_progress(
             write("\x1b[?25h\x1b[?1049l")
             for summary in summaries:
                 write(summary)
+        left = total - counts["done"] - counts["failed"]  # interrupted run
+        unfinished = f"{left} not finished, " if left else ""
         write(f"{total} prompt{'' if total == 1 else 's'}: "
               f"{counts['done']} done, {counts['failed']} failed, "
-              f"{time.monotonic() - started:.1f} s\n")
+              f"{unfinished}{time.monotonic() - started:.1f} s\n")

@@ -125,7 +125,7 @@ class TerminalTests(unittest.TestCase):
             self.assertIn('\x1b[?25l', text)
             self.assertIn('\x1b[?25h', text)
             self.assertIn('store_number', text)
-            self.assertIn('1 prompt: 0 done, 0 failed', text)
+            self.assertIn('1 prompt: 0 done, 0 failed, 1 not finished', text)
         finally:
             os.close(master)
 
