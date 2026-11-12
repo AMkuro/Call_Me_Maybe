@@ -2,7 +2,7 @@
 name = 'Call_Me_Maybe'
 version = '0.1.0'
 requires-python = '>=3.10'
-dependencies = ['numpy>=1.26', 'pydantic>=2,<3', 'llm-sdk']
+dependencies = ['numpy>=1.26', 'pydantic>=2,<3', 'rich>=13', 'llm-sdk']
 
 [dependency-groups]
 dev = [
