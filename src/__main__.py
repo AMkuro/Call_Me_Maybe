@@ -68,7 +68,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         continue
                     calls.append(call)
                     save_results(args.output, calls)
-                    report("result", f"{call.name} " + json.dumps(call.parameters))
+                    report("result", f"{call.name} " +
+                           json.dumps(call.parameters))
                 if not calls:
                     save_results(args.output, calls)
     except OSError as e:
