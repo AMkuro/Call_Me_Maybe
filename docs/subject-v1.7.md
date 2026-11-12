@@ -169,6 +169,9 @@ Subjectは以下をどれも定義していない。ここに書くのは解釈�
 （`encode`/`decode` を使わず `get_logits_from_input_ids` と `get_path_to_vocab_file` を使う）、
 高度なエラー回復、性能最適化（caching、batching）、包括的テスト、生成過程の可視化、入れ子引数、
 `encode`/`decode` の公開実装、それらとconstrained decodingの統合の実演。
+ボーナスには他の関数・ライブラリを使ってよい。ただし評価時に使った理由を説明できること
+(原文: "You are allowed to use other functions and libraries to complete the bonus part, as long
+as their use is justified during your evaluation.")。
 
 ## 9. 現時点で未確定な解釈
 
