@@ -3,6 +3,9 @@
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from types import MappingProxyType
+
+from pydantic import ValidationError
 
 from .cli import Args, parse_args
 from .display import Dashboard
@@ -10,7 +13,7 @@ from .errors import PromptError, StartupError
 from .loader import load_functions, load_prompts
 from .model_port import Model
 from .name_trie import build_name_trie
-from .pipeline import Run, process_prompt
+from .pipeline import GenerationResources, process_prompt
 from .schema import FunctionCall
 from .vocab import load_vocab
 from .writer import prepare_output, save_results
@@ -24,21 +27,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     Effect: reads and writes files, loads the model, prints to stderr.
     """
     try:
-        args, prompts, run = _start(argv)
+        args, prompts, resources = _start(argv)
     except StartupError as e:
         print(e, file=sys.stderr)
         return 1
     try:
-        with Dashboard(len(prompts)) as dashboard:
-            run.report = dashboard.report
-            all_done = _process_all(prompts, run, args.output)
+        with Dashboard(len(prompts), resources.model,
+                       MappingProxyType(resources.vocab)) as dashboard:
+            all_done = _process_all(prompts, resources, args.output, dashboard)
     except OSError as e:
         print(f"cannot save output to {args.output}: {e}", file=sys.stderr)
         return 1
     return 0 if all_done else 1
 
 
-def _start(argv: Sequence[str] | None) -> tuple[Args, list[str], Run]:
+def _start(
+    argv: Sequence[str] | None,
+) -> tuple[Args, list[str], GenerationResources]:
     """Check the inputs and the output path, then load the model.
 
     The model is loaded last, so a bad file fails fast. Raises
@@ -53,10 +58,18 @@ def _start(argv: Sequence[str] | None) -> tuple[Args, list[str], Run]:
     model = Model()
     vocab = load_vocab(Path(model.vocab_path()))
     trie = build_name_trie(list(functions), model.encode)
-    return args, prompts, Run(model, vocab, functions, trie)
+    try:
+        resources = GenerationResources(model=model, vocab=vocab,
+                                        functions=functions, trie=trie)
+    except ValidationError as e:
+        raise StartupError(f"invalid generation resources: {e}") from e
+    return args, prompts, resources
 
 
-def _process_all(prompts: list[str], run: Run, output: Path) -> bool:
+def _process_all(
+    prompts: list[str], resources: GenerationResources, output: Path,
+    dashboard: Dashboard,
+) -> bool:
     """Process every prompt; True when none failed.
 
     A failed prompt is reported and skipped. The results so far are saved
@@ -67,15 +80,16 @@ def _process_all(prompts: list[str], run: Run, output: Path) -> bool:
     """
     calls: list[FunctionCall] = []
     for index, user_prompt in enumerate(prompts, 1):
-        run.say("input", f"{index}/{len(prompts)}")
-        run.say("prompt", user_prompt)
+        dashboard.report("input", f"{index}/{len(prompts)}")
+        dashboard.report("prompt", user_prompt)
         try:
-            calls.append(process_prompt(user_prompt, run))
+            calls.append(process_prompt(user_prompt, resources,
+                                        progress=dashboard))
         except PromptError as e:
-            run.say("error", str(e))
+            dashboard.report("error", str(e))
             continue
         save_results(output, calls)
-        run.say("result", calls[-1].name)
+        dashboard.report("result", calls[-1].name)
     if not calls:
         save_results(output, calls)  # all failed: still write "[]"
     return len(calls) == len(prompts)

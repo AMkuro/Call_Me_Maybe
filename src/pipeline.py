@@ -1,105 +1,102 @@
-"""Handle one prompt: name -> skeleton -> values -> check."""
+"""Handle one prompt: name -> skeleton -> values -> validation."""
 
 import json
-from collections.abc import Callable
-from dataclasses import dataclass
 
-from .decoder import TokenChoice, generate
+from pydantic import BaseModel, ConfigDict, InstanceOf
+
+from .decoder import select_next_token
 from .errors import PromptError
 from .json_io import loads
 from .model_port import Model
 from .name_trie import NameTrie, leaf_name, max_name_steps, next_tokens
+from .progress import GenerationProgress
 from .prompt import build_name_prompt, build_parameters_prompt
 from .schema import FunctionCall, FunctionDef, build_parameters_model
 from .skeleton import Forced, ValueSlot, build_skeleton
 from .values import allowed_value_tokens, is_value_complete
 
-# Provisional value cap, to be re-evaluated with stress cases (ADR-0013).
 MAX_VALUE_STEPS = 256
 
 
-@dataclass
-class Run:
-    """What stays the same for every prompt of one run.
+class GenerationResources(BaseModel):
+    """Hold already validated resources by reference for one application run.
 
-    Judgment: a plain dataclass, not pydantic: it holds the model handle
-    and a callback, nothing to validate (as ``Model``, ADR-0011).
-    ``report`` receives dashboard observations (ADR-0014/0021); without it
-    the decoder computes no diagnostics. It is set once the dashboard
-    exists, after the model is loaded.
+    Validate reference types, not dictionary contents or SDK initialization.
+    Frozen prevents field replacement; shared dictionaries remain mutable
+    and must not be changed after startup.
     """
 
-    model: Model
-    vocab: dict[int, bytes]
-    functions: dict[str, FunctionDef]
-    trie: NameTrie
-    report: Callable[[str, str], None] | None = None
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
-    def say(self, label: str, text: str) -> None:
-        """Report one observation, if anyone is listening."""
-        if self.report is not None:
-            self.report(label, text)
+    model: InstanceOf[Model]
+    vocab: InstanceOf[dict[int, bytes]]
+    functions: InstanceOf[dict[str, FunctionDef]]
+    trie: InstanceOf[NameTrie]
 
 
-def process_prompt(user_prompt: str, run: Run) -> FunctionCall:
-    """Run the whole flow for one prompt. Raises PromptError on failure.
-
-    Effect: uses the model.
-    """
-    run.say("stage", "select_name")
-    fn = select_name(user_prompt, run)
-    run.say("stage", "generate_parameters")
-    run.say("value", "")
-    text = generate_parameters(user_prompt, fn, run)
-    run.say("stage", "validate_call")
+def process_prompt(
+    user_prompt: str,
+    resources: GenerationResources,
+    *,
+    progress: GenerationProgress | None = None,
+) -> FunctionCall:
+    """Select a name, generate parameters, then validate one JSON record."""
+    if progress is not None and progress.available:
+        progress.stage("select_name")
+    fn = select_name(user_prompt, model=resources.model,
+                     functions=resources.functions, trie=resources.trie,
+                     progress=progress)
+    if progress is not None and progress.available:
+        progress.stage("generate_parameters")
+    text = generate_parameters(user_prompt, fn, model=resources.model,
+                               vocab=resources.vocab, progress=progress)
+    if progress is not None and progress.available:
+        progress.stage("validate_call")
     return validate_call(text, fn)
 
 
-def select_name(user_prompt: str, run: Run) -> FunctionDef:
-    """Let the model choose a function, limited by the name tree.
+def select_name(
+    user_prompt: str,
+    *,
+    model: Model,
+    functions: dict[str, FunctionDef],
+    trie: NameTrie,
+    progress: GenerationProgress | None = None,
+) -> FunctionDef:
+    """Follow the name tree until a leaf, selecting one token at a time."""
+    prompt_ids = model.encode(build_name_prompt(user_prompt, functions))
+    generated: list[int] = []
+    limit = max_name_steps(trie)
+    while True:
+        name = leaf_name(trie, generated)
+        if name is not None:
+            if progress is not None and progress.available:
+                progress.function_selected(name)
+            return functions[name]
+        allowed = next_tokens(trie, generated)
+        if len(generated) >= limit:
+            raise PromptError(
+                f"token limit {limit} reached before a terminator"
+            )
+        ids = prompt_ids + generated if len(allowed) > 1 else prompt_ids
+        token, mode, raw_top = select_next_token(
+            model, ids, allowed,
+            include_raw_top=progress is not None and progress.available,
+        )
+        generated.append(token)
+        if progress is not None and progress.available:
+            progress.name_token(generated, mode=mode, raw_top=raw_top)
 
-    Effect: uses the model.
-    """
-    trie = run.trie
 
-    def allowed_next(generated: list[int]) -> list[int] | None:
-        if leaf_name(trie, generated) is not None:
-            return None
-        return next_tokens(trie, generated)
-
-    def observed(choice: TokenChoice) -> None:
-        run.say("value", _decoded(run.model, choice.tokens))
-        if choice.raw_top is not None and choice.raw_top != choice.token:
-            raw_top = _token_text(choice.raw_top, run)
-            selected = _token_text(choice.token, run)
-            run.say("warning", f"name_selection_constrained: step="
-                    f"{choice.step} raw_top={raw_top} selected={selected}")
-
-    prompt_ids = run.model.encode(build_name_prompt(user_prompt,
-                                                    run.functions))
-    generated = generate(
-        run.model.logits, prompt_ids, allowed_next, max_name_steps(trie),
-        on_token=observed if run.report is not None else None,
-    )
-    name = leaf_name(trie, generated)
-    if name is None:
-        raise PromptError("name generation ended without a function name")
-    run.say("function", name)
-    return run.functions[name]
-
-
-def generate_parameters(user_prompt: str, fn: FunctionDef, run: Run) -> str:
-    """Generate the parameters, forcing the skeleton.
-
-    Returns the full JSON text of the record.
-
-    Effect: uses the model.
-
-    Judgment: this function builds the head ``{"prompt": ..., "name": "..."``
-    itself and adds the rest from the skeleton and the generated values.
-    Open: should the skeleton include the head?
-    """
-    model = run.model
+def generate_parameters(
+    user_prompt: str,
+    fn: FunctionDef,
+    *,
+    model: Model,
+    vocab: dict[int, bytes],
+    progress: GenerationProgress | None = None,
+) -> str:
+    """Append the forced JSON skeleton and each generated value in order."""
     ids = model.encode(build_parameters_prompt(user_prompt, fn))
     text = (
         f'{{"prompt": {json.dumps(user_prompt)}, '
@@ -111,38 +108,44 @@ def generate_parameters(user_prompt: str, fn: FunctionDef, run: Run) -> str:
             text = text + part.text
             ids = ids + model.encode(part.text)
         else:
-            run.say("parameter", f"{part.name} ({part.type})")
-            run.say("value", "")
-            run.say("value_tokens", "0")
-            value_ids = generate_value(part, ids, run)
+            if progress is not None and progress.available:
+                progress.parameter_started(part.name, part.type)
+            value_ids = generate_value(part, ids, model=model, vocab=vocab,
+                                       progress=progress)
             text = text + model.decode(value_ids)
             ids = ids + value_ids
     return text
 
 
-def generate_value(slot: ValueSlot, ids: list[int], run: Run) -> list[int]:
-    """Generate one parameter value and its following JSON delimiter.
-
-    Effect: uses the model.
-    """
-    vocab = run.vocab
-
-    def allowed_next(generated: list[int]) -> list[int] | None:
-        written = b"".join(vocab[token] for token in generated)
-        if is_value_complete(written, slot.type, slot.terminator):
-            return None
-        return allowed_value_tokens(vocab, slot.type, written, slot.terminator)
-
-    def observed(choice: TokenChoice) -> None:
-        written = b"".join(vocab[token] for token in choice.tokens)
-        run.say("value", written.decode("utf-8", errors="ignore"))
-        run.say("value_tokens", str(choice.step))
-
+def generate_value(
+    slot: ValueSlot,
+    ids: list[int],
+    *,
+    model: Model,
+    vocab: dict[int, bytes],
+    progress: GenerationProgress | None = None,
+) -> list[int]:
+    """Generate one value and delimiter, checking completion before the cap."""
+    generated: list[int] = []
     try:
-        return generate(
-            run.model.logits, ids, allowed_next, MAX_VALUE_STEPS,
-            on_token=observed if run.report is not None else None,
-        )
+        while True:
+            written = b"".join(vocab[token] for token in generated)
+            if is_value_complete(written, slot.type, slot.terminator):
+                return generated
+            allowed = allowed_value_tokens(vocab, slot.type, written,
+                                           slot.terminator)
+            if len(generated) >= MAX_VALUE_STEPS:
+                raise PromptError(
+                    f"token limit {MAX_VALUE_STEPS} "
+                    "reached before a terminator"
+                )
+            context = ids + generated if len(allowed) > 1 else ids
+            token, mode, _ = select_next_token(model, context, allowed)
+            generated.append(token)
+            if progress is not None and progress.available:
+                written = b"".join(vocab[item] for item in generated)
+                progress.value_token(written, len(generated),
+                                     token=token, mode=mode)
     except PromptError as e:
         raise PromptError(
             f"parameter {slot.name!r} ({slot.type}): {e}"
@@ -165,26 +168,3 @@ def validate_call(text: str, fn: FunctionDef) -> FunctionCall:
         prompt=call.prompt, name=call.name,
         parameters=parameters.model_dump(by_alias=True),
     )
-
-
-def _token_text(token: int, run: Run) -> str:
-    """Quote one token so spaces, quotes and controls are visible.
-
-    Partial UTF-8 shows as bytes (``b'\\xe6'``); tokens outside the byte
-    vocabulary (special tokens) use the SDK's text.
-    """
-    data = run.vocab.get(token)
-    if data is None:
-        return repr(_decoded(run.model, [token]))
-    try:
-        return repr(data.decode("utf-8"))
-    except UnicodeDecodeError:
-        return repr(data)
-
-
-def _decoded(model: Model, ids: list[int]) -> str:
-    """SDK text of ``ids``; a failure becomes a placeholder, not an error."""
-    try:
-        return model.decode(ids) or "<EOS/special>"
-    except PromptError:
-        return f"<text unavailable; ids={ids}>"

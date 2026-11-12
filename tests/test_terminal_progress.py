@@ -4,10 +4,12 @@ import contextlib
 import io
 import os
 import unittest
+from collections.abc import Sequence
 from unittest.mock import patch
 
-from src import decoder
 from src import pipeline
+from src.decoder import SelectionMode
+from src.display import Dashboard
 from src.errors import PromptError
 from src.model_port import Model
 from src.name_trie import build_name_trie
@@ -17,36 +19,6 @@ from test_application import definition
 class ObservationTests(unittest.TestCase):
     """Observing scores must never change greedy selection or model calls."""
 
-    def test_token_diagnostics_preserve_decoding(self) -> None:
-        """Raw preference and forced steps do not change selection."""
-        observed: list[decoder.TokenChoice] = []
-        calls: list[list[int]] = []
-
-        def scores(ids: list[int]) -> list[float]:
-            """Return one vocabulary distribution, including an invalid max."""
-            calls.append(ids)
-            return [3.0, 1.0, 2.0]
-
-        def allowed(ids: list[int]) -> list[int] | None:
-            """Use an actual branch followed by a forced token."""
-            return [[1, 2], [1], None][len(ids)]
-
-        result = decoder.generate(scores, [9], allowed, 2,
-                                  on_token=observed.append)
-        self.assertEqual(result, [2, 1])
-        self.assertEqual(calls, [[9]])
-
-        first, second = observed
-        self.assertEqual(first.raw_top, 0)
-        self.assertEqual(first.token, 2)
-        self.assertTrue(second.forced)
-        self.assertIsNone(second.raw_top)
-        self.assertEqual(first.tokens, [2])
-
-        calls.clear()
-        self.assertEqual(decoder.generate(scores, [9], allowed, 2), result)
-        self.assertEqual(calls, [[9]])
-
     def test_diagnostic_decode_failure_preserves_name_selection(self) -> None:
         """A display-text failure cannot change a valid selected function."""
         fn = definition()
@@ -55,18 +27,20 @@ class ObservationTests(unittest.TestCase):
         with patch.object(Model, 'encode', return_value=[9]), \
                 patch.object(Model, 'decode',
                              side_effect=PromptError('diagnostic decode')):
-            run = pipeline.Run(model, {}, {fn.name: fn}, trie)
-            plain = pipeline.select_name('request', run)
-            events: list[tuple[str, str]] = []
-            observed = pipeline.select_name('request', pipeline.Run(
-                model, {}, {fn.name: fn}, trie,
-                lambda label, text: events.append((label, text)),
-            ))
+            plain = pipeline.select_name('request', model=model,
+                                         functions={fn.name: fn}, trie=trie)
+            with contextlib.redirect_stderr(io.StringIO()):
+                dashboard = Dashboard(1, model, {})
+                observed = pipeline.select_name(
+                    'request', model=model, functions={fn.name: fn},
+                    trie=trie, progress=dashboard,
+                )
         self.assertEqual(observed, plain)
-        self.assertTrue(any('unavailable' in text for _, text in events))
+        self.assertIn('unavailable', dashboard.fields['value'])
+        self.assertEqual(dashboard.fields['token'], '2 (forced)')
 
     def test_name_warning_and_progress_without_ranking(self) -> None:
-        """Warn only for a masked raw preference; keep token progress."""
+        """Warn only for a masked raw preference; keep ID/mode progress."""
         first = definition().model_copy(update={'name': 'fn_a'})
         second = definition().model_copy(update={'name': 'fn_b'})
         functions = {first.name: first, second.name: second}
@@ -76,53 +50,73 @@ class ObservationTests(unittest.TestCase):
         model = object.__new__(Model)
         for scores, warned in (([3.0, 1.0, 2.0], True),
                                ([0.0, 1.0, 2.0], False)):
-            with self.subTest(scores=scores):
-                events: list[tuple[str, str]] = []
-                with patch.object(Model, 'encode', return_value=[9]), \
-                        patch.object(Model, 'decode', return_value='b'), \
-                        patch.object(Model, 'logits', return_value=scores):
-                    result = pipeline.select_name('request', pipeline.Run(
-                        model, {0: b'x', 1: b'a', 2: b'b'}, functions, trie,
-                        lambda label, text: events.append((label, text)),
-                    ))
-                self.assertEqual(result, second)
-                self.assertIn(('value', 'b'), events)
-                self.assertIn(('function', 'fn_b'), events)
-                self.assertEqual(any(label == 'warning'
-                                     for label, _ in events), warned)
-                self.assertFalse(any(label == 'candidates'
-                                     for label, _ in events))
+            output = io.StringIO()
+            with self.subTest(scores=scores), \
+                    contextlib.redirect_stderr(output), \
+                    patch.object(Model, 'encode', return_value=[9]), \
+                    patch.object(Model, 'decode', return_value='b'), \
+                    patch.object(Model, 'logits', return_value=scores) as llm:
+                dashboard = Dashboard(1, model, {0: b'x', 1: b'a', 2: b'b'})
+                result = pipeline.select_name(
+                    'request', model=model, functions=functions,
+                    trie=trie, progress=dashboard,
+                )
+            self.assertEqual(result, second)
+            self.assertEqual(dashboard.fields['value'], 'b')
+            self.assertEqual(dashboard.fields['function'], 'fn_b')
+            self.assertEqual(dashboard.fields['token'], '2 (greedy)')
+            self.assertEqual('warning' in dashboard.fields, warned)
+            self.assertEqual('name_selection_constrained' in output.getvalue(),
+                             warned)
+            self.assertNotIn('candidates', dashboard.fields)
+            llm.assert_called_once_with([9])
 
     def test_complete_call_and_value_progress_with_observation(self) -> None:
-        """Real masks and validation produce the same JSON in both modes."""
+        """Real masks/validation keep JSON and model inputs in all modes."""
         fn = definition(a='number').model_copy(update={'name': 'f'})
         trie = build_name_trie(['f'], lambda text: [7])
         model = object.__new__(Model)
         vocab = {1: b'1', 2: b'2', 3: b'}', 7: b'f'}
-        events: list[tuple[str, str]] = []
+        resource = pipeline.GenerationResources(
+            model=model, vocab=vocab, functions={'f': fn}, trie=trie,
+        )
         results = []
-        for observe in (False, True):
-            with patch.object(Model, 'encode', return_value=[]), \
+        inputs = []
+        for mode in ('none', 'redirected', 'unavailable', 'broken'):
+            output = io.StringIO()
+            with contextlib.redirect_stderr(output), \
+                    patch.object(Model, 'encode', return_value=[]), \
                     patch.object(Model, 'decode', side_effect=lambda ids:
                                  b''.join(vocab[i] for i in ids).decode()), \
                     patch.object(Model, 'logits', side_effect=[
                         [0.0, 3.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0],
                         [0.0, 1.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0],
-                    ]):
-                results.append(pipeline.process_prompt(
-                    'request', pipeline.Run(
-                        model, vocab, {'f': fn}, trie,
-                        (lambda label, text: events.append((label, text)))
-                        if observe else None,
-                    ),
-                ).model_dump())
+                    ]) as llm:
+                dashboard = Dashboard(1, model, vocab)
+                dashboard.available = mode != 'unavailable'
+                dashboard.interactive = mode == 'broken'
+                with patch.object(dashboard, 'value_token',
+                                  wraps=dashboard.value_token) as values, \
+                        patch.object(output, 'write',
+                                     side_effect=OSError('closed')) if (
+                            mode == 'broken') else contextlib.nullcontext():
+                    results.append(pipeline.process_prompt(
+                        'request', resource,
+                        progress=None if mode == 'none' else dashboard,
+                    ).model_dump())
+                    inputs.append(llm.call_args_list)
+                if mode == 'redirected':
+                    self.assertEqual([c.args for c in values.call_args_list],
+                                     [(b'1', 1), (b'1}', 2)])
+                    self.assertEqual([c.kwargs for c in values.call_args_list],
+                                     [dict(token=1, mode='greedy'),
+                                      dict(token=3, mode='greedy')])
+                    self.assertEqual(dashboard.fields['token'], '3 (greedy)')
         self.assertEqual(results, [{
             'prompt': 'request', 'name': 'f', 'parameters': {'a': 1},
-        }] * 2)
-        self.assertIn(('value', '1'), events)
-        self.assertIn(('value', '1}'), events)
-        self.assertIn(('value_tokens', '1'), events)
-        self.assertIn(('value_tokens', '2'), events)
+        }] * 4)
+        self.assertTrue(all(item == inputs[0] for item in inputs))
+        self.assertEqual(len(inputs[0]), 2)
 
 
 class TerminalTests(unittest.TestCase):
@@ -134,7 +128,7 @@ class TerminalTests(unittest.TestCase):
 
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
-            with Dashboard(2) as dashboard:
+            with Dashboard(2, object.__new__(Model), {}) as dashboard:
                 report = dashboard.report
                 report('input', '1/2')
                 report('prompt', 'request\x1b[2J')
@@ -153,32 +147,39 @@ class TerminalTests(unittest.TestCase):
         """The live view is cleaned up even when a prompt fails."""
         from src.display import Dashboard
 
-        master, slave = os.openpty()
-        try:
-            with os.fdopen(slave, 'w', encoding='utf-8') as output:
-                with contextlib.redirect_stderr(output):
-                    with patch.dict(os.environ, {'TERM': 'xterm'}):
-                        with self.assertRaisesRegex(RuntimeError, 'test'):
-                            with Dashboard(1) as dashboard:
-                                dashboard.report('input', '1/1')
-                                dashboard.report('function', 'store_number')
-                                raise RuntimeError('test')
-            chunks = []
-            while True:
-                try:
-                    chunk = os.read(master, 65536)
-                except OSError:
-                    break
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            text = b''.join(chunks).decode()
-            self.assertIn('\x1b[?25l', text)
-            self.assertIn('\x1b[?25h', text)
-            self.assertIn('store_number', text)
-            self.assertIn('1 prompt: 0 done, 0 failed, 1 not finished', text)
-        finally:
-            os.close(master)
+        for error in (RuntimeError('test'), KeyboardInterrupt('test')):
+            master, slave = os.openpty()
+            try:
+                with os.fdopen(slave, 'w', encoding='utf-8') as output:
+                    with contextlib.redirect_stderr(output):
+                        with patch.dict(os.environ, {'TERM': 'xterm'}):
+                            with self.assertRaisesRegex(type(error), 'test'):
+                                with Dashboard(
+                                    1, object.__new__(Model), {},
+                                ) as dashboard:
+                                    dashboard.report('input', '1/1')
+                                    dashboard.report(
+                                        'function', 'store_number',
+                                    )
+                                    raise error
+                chunks = []
+                while True:
+                    try:
+                        chunk = os.read(master, 65536)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                text = b''.join(chunks).decode()
+                self.assertIn('\x1b[?25l', text)
+                self.assertIn('\x1b[?25h', text)
+                self.assertIn('store_number', text)
+                self.assertIn(
+                    '1 prompt: 0 done, 0 failed, 1 not finished', text,
+                )
+            finally:
+                os.close(master)
 
     def test_frame_escapes_input_controls_and_fits_small_width(self) -> None:
         """Prompt text cannot inject terminal commands or break the layout."""
@@ -189,3 +190,72 @@ class TerminalTests(unittest.TestCase):
         self.assertNotIn('\x1b', frame)
         self.assertIn('\\u001b', frame)
         self.assertTrue(all(len(line) <= 35 for line in frame.splitlines()))
+
+
+class LoopObservationTests(unittest.TestCase):
+    """Stage loops expose actual decisions without taking control from data."""
+
+    def test_name_forced_then_greedy_uses_same_borrowed_list(self) -> None:
+        """A leaf at the name cap succeeds; only branching calls logits."""
+        from src.name_trie import NameTrie
+
+        first = definition().model_copy(update={'name': 'a'})
+        second = definition().model_copy(update={'name': 'b'})
+        trie = NameTrie(children={1: NameTrie(children={
+            2: NameTrie(name='a'), 3: NameTrie(name='b'),
+        })})
+        model = object.__new__(Model)
+        with contextlib.redirect_stderr(io.StringIO()):
+            dashboard = Dashboard(1, model, {1: b'x', 2: b'a', 3: b'b'})
+        seen: list[tuple[int, tuple[int, ...], str]] = []
+        original = dashboard.name_token
+
+        def observe(
+            tokens: Sequence[int], *, mode: SelectionMode,
+            raw_top: int | None,
+        ) -> None:
+            """Capture copies for assertions, then use the real receiver."""
+            seen.append((id(tokens), tuple(tokens), mode))
+            original(tokens, mode=mode, raw_top=raw_top)
+
+        with patch.object(Model, 'encode', return_value=[9]), \
+                patch.object(Model, 'decode', return_value='b'), \
+                patch.object(Model, 'logits',
+                             return_value=[9.0, 0.0, 1.0, 2.0]) as llm, \
+                patch.object(dashboard, 'name_token', side_effect=observe):
+            selected = pipeline.select_name(
+                'request', model=model, functions={'a': first, 'b': second},
+                trie=trie, progress=dashboard,
+            )
+        self.assertIs(selected, second)
+        llm.assert_called_once_with([9, 1])
+        self.assertEqual([item[1:] for item in seen],
+                         [((1,), 'forced'), ((1, 3), 'greedy')])
+        self.assertEqual(seen[0][0], seen[1][0])
+        self.assertEqual(dashboard.fields['token'], '3 (greedy)')
+        self.assertIn('step=2', dashboard.fields['warning'])
+
+    def test_value_forced_and_duplicate_bytes_keep_actual_id(self) -> None:
+        """Mode and selected ID are not inferred from displayed bytes."""
+        from src.skeleton import ValueSlot
+
+        model = object.__new__(Model)
+        slot = ValueSlot(name='flag', type='boolean', terminator='}')
+        for vocab, expected, mode in (
+            ({1: b'true}'}, 1, 'forced'),
+            ({1: b'true}', 2: b'true}'}, 2, 'greedy'),
+        ):
+            with self.subTest(mode=mode), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                dashboard = Dashboard(1, model, vocab)
+                with patch.object(Model, 'logits',
+                                  return_value=[0.0, 1.0, 2.0]) as llm:
+                    result = pipeline.generate_value(
+                        slot, [9], model=model, vocab=vocab,
+                        progress=dashboard,
+                    )
+                self.assertEqual(result, [expected])
+                self.assertEqual(llm.call_count, int(mode == 'greedy'))
+                self.assertEqual(dashboard.fields['value'], 'true}')
+                self.assertEqual(dashboard.fields['token'],
+                                 f'{expected} ({mode})')

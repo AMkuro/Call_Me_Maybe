@@ -9,11 +9,19 @@ import os
 import sys
 import time
 import unicodedata
+from collections.abc import Mapping, Sequence
+
+from .decoder import SelectionMode
+from .errors import PromptError
+from .model_port import Model
+from .progress import Stage
+from .schema import ParamType
 
 _ROWS = (
     ("input", "Input"), ("stage", "Stage"), ("prompt", "Prompt"),
     ("function", "Function"), ("parameter", "Parameter"),
     ("value", "Value"), ("value_tokens", "Value tokens"),
+    ("token", "Token"),
     ("warning", "Warning"), ("result", "Result"), ("error", "Error"),
 )
 _FRAME_SECONDS = 0.05  # at most one redraw per interval ...
@@ -48,7 +56,7 @@ def _clip(text: str, width: int) -> str:
 
 
 def render_progress(fields: dict[str, str], width: int, height: int) -> str:
-    """Render validated runtime observations as a compact, safe frame."""
+    """Render runtime progress as a compact, safe frame."""
     lines = ["Call Me Maybe — generation"]
     for key, label in _ROWS:
         if key not in fields:
@@ -58,7 +66,7 @@ def render_progress(fields: dict[str, str], width: int, height: int) -> str:
 
 
 class Dashboard:
-    """The stderr output of one run; ``report`` is what callers get.
+    """Own one run's terminal state and consume synchronous progress.
 
     Use it in ``with``: leaving the block restores the terminal and prints
     the summary, even after an exception or Ctrl-C.
@@ -68,8 +76,12 @@ class Dashboard:
     Judgment: observe without keyboard interaction or extra model calls.
     """
 
-    def __init__(self, total: int) -> None:
+    def __init__(
+        self, total: int, model: Model, vocab: Mapping[int, bytes],
+    ) -> None:
         """Nothing written yet."""
+        self.model = model
+        self.vocab = vocab
         self.stream = sys.stderr
         self.interactive = (self.stream.isatty()
                             and os.environ.get("TERM") != "dumb")
@@ -101,6 +113,48 @@ class Dashboard:
             + (f"{left} not finished, " if left else "")
             + f"{time.monotonic() - self.started:.1f} s\n"
         )
+
+    def stage(self, stage: Stage) -> None:
+        """Update the stage and clear the name token before parameters."""
+        if stage == "generate_parameters":
+            self.fields.update(value="", token="")
+        self.report("stage", stage)
+
+    def function_selected(self, name: str) -> None:
+        """Display the selected function, forcing a completed-name frame."""
+        self.report("function", name)
+
+    def parameter_started(self, name: str, param_type: ParamType) -> None:
+        """Clear the previous value before showing this parameter."""
+        self.fields.update(value="", value_tokens="0", token="")
+        self.report("parameter", f"{name} ({param_type})")
+
+    def name_token(
+        self, tokens: Sequence[int], *, mode: SelectionMode,
+        raw_top: int | None,
+    ) -> None:
+        """Decode borrowed IDs now; never change or retain the sequence."""
+        token = tokens[-1]
+        self.fields.update(value=_decoded(self.model, tokens),
+                           value_tokens=str(len(tokens)),
+                           token=f"{token} ({mode})")
+        if mode == "greedy" and raw_top is not None and raw_top != token:
+            raw = _token_text(raw_top, self.model, self.vocab)
+            selected = _token_text(token, self.model, self.vocab)
+            self.report("warning", "name_selection_constrained: "
+                        f"step={len(tokens)} raw_top={raw} "
+                        f"selected={selected}")
+        elif self.interactive:
+            self.draw("token")
+
+    def value_token(
+        self, written: bytes, step: int, *, token: int, mode: SelectionMode,
+    ) -> None:
+        """Update all fields for one step before drawing its latest frame."""
+        self.fields.update(value=written.decode("utf-8", errors="ignore"),
+                           value_tokens=str(step), token=f"{token} ({mode})")
+        if self.interactive:
+            self.draw("token")
 
     def report(self, label: str, text: str) -> None:
         """Record one observation; ``input`` starts a new prompt."""
@@ -150,3 +204,23 @@ class Dashboard:
                 self.stream.flush()
             except OSError:
                 self.available = False
+
+
+def _token_text(token: int, model: Model, vocab: Mapping[int, bytes]) -> str:
+    """Quote token bytes, preserving partial UTF-8 and special-token text."""
+    data = vocab.get(token)
+    if data is None:
+        return repr(_decoded(model, [token]))
+    try:
+        return repr(data.decode("utf-8"))
+    except UnicodeDecodeError:
+        return repr(data)
+
+
+def _decoded(model: Model, tokens: Sequence[int]) -> str:
+    """Decode synchronously; only non-list inputs need a boundary copy."""
+    ids = tokens if isinstance(tokens, list) else list(tokens)
+    try:
+        return model.decode(ids) or "<EOS/special>"
+    except PromptError:
+        return f"<text unavailable; ids={ids}>"

@@ -12,7 +12,7 @@ from src.errors import StartupError
 from src.loader import load_functions
 from src.model_port import Model
 from src.name_trie import build_name_trie
-from src.pipeline import Run, select_name
+from src.pipeline import select_name
 from src.prompt import build_name_prompt
 from src.schema import FunctionDef
 from tools import measure_application
@@ -66,8 +66,8 @@ class FunctionRegistryTests(unittest.TestCase):
         scores[ord('a')] = 1.0
         with patch.object(Model, 'encode', return_value=[255]), \
                 patch.object(Model, 'logits', return_value=scores):
-            selected = select_name('choose second',
-                                   Run(model, {}, functions, trie))
+            selected = select_name('choose second', model=model,
+                                   functions=functions, trie=trie)
         self.assertIs(selected, second)
 
     def test_measurement_rejects_duplicate_names_before_model(self) -> None:

@@ -29,3 +29,26 @@ class NumericOracleTests(unittest.TestCase):
         self.assertFalse(assess_call(
             {'expected_name': 'other', 'expected_parameters': {}}, call,
         ))
+
+
+class ProgressMeasurementTests(unittest.TestCase):
+    """The new synchronous sink preserves the existing report's count keys."""
+
+    def test_counts_reset_per_parameter_and_keep_no_name_history(self) -> None:
+        """One case owns its counts; name notifications do not retain IDs."""
+        from tools.measure_application import MeasurementProgress
+
+        progress = MeasurementProgress()
+        ids = [1]
+        progress.stage('select_name')
+        progress.name_token(ids, mode='forced', raw_top=None)
+        progress.function_selected('f')
+        progress.parameter_started('a', 'number')
+        progress.value_token(b'12,', 2, token=3, mode='greedy')
+        progress.parameter_started('b', 'boolean')
+        self.assertEqual(progress.counts,
+                         {'a (number)': 2, 'b (boolean)': 0})
+        self.assertTrue(progress.available)
+        self.assertFalse(any(value is ids
+                             for value in vars(progress).values()))
+        self.assertEqual(MeasurementProgress().counts, {})

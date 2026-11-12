@@ -4,18 +4,58 @@ import argparse
 import json
 import math
 import sys
+from collections.abc import Sequence
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field
+
+from src.decoder import SelectionMode
+from src.progress import Stage
 from src.errors import PromptError, StartupError
 from src.json_io import loads
 from src.loader import index_functions
 from src.model_port import Model
 from src.name_trie import build_name_trie
-from src.pipeline import MAX_VALUE_STEPS, Run, process_prompt
-from src.schema import FunctionCall, FunctionDef
+from src.pipeline import MAX_VALUE_STEPS, GenerationResources, process_prompt
+from src.schema import FunctionCall, FunctionDef, ParamType
 from src.vocab import load_vocab
+
+
+class MeasurementProgress(BaseModel):
+    """Collect per-parameter token counts for one accuracy case."""
+
+    counts: dict[str, int] = Field(default_factory=dict)
+    parameter: str = ""
+
+    @property
+    def available(self) -> bool:
+        """This in-memory diagnostic sink remains available."""
+        return True
+
+    def stage(self, stage: Stage) -> None:
+        """Stage changes need no measurement."""
+
+    def function_selected(self, name: str) -> None:
+        """Function correctness is assessed from the completed call."""
+
+    def parameter_started(self, name: str, param_type: ParamType) -> None:
+        """Start the counter under the existing report's parameter key."""
+        self.parameter = f"{name} ({param_type})"
+        self.counts[self.parameter] = 0
+
+    def name_token(
+        self, tokens: Sequence[int], *, mode: SelectionMode,
+        raw_top: int | None,
+    ) -> None:
+        """Name observations are not retained by this measurement."""
+
+    def value_token(
+        self, written: bytes, step: int, *, token: int, mode: SelectionMode,
+    ) -> None:
+        """Record the actual count without retaining token histories."""
+        self.counts[self.parameter] = step
 
 
 def assess_call(case: dict[str, Any], call: FunctionCall) -> bool:
@@ -69,6 +109,8 @@ def main() -> int:
         model = Model()
         vocab = load_vocab(Path(model.vocab_path()))
         trie = build_name_trie(list(functions), model.encode)
+        resources = GenerationResources(model=model, vocab=vocab,
+                                        functions=functions, trie=trie)
         results: list[dict[str, Any]] = []
         report: dict[str, Any] = {
             "measurement": "accuracy/stress; no timing measurements",
@@ -78,16 +120,7 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         for repeat in range(1, args.repeat + 1):
             for case in fixture["cases"]:
-                counts: dict[str, int] = {}
-                parameter = ""
-
-                def observe(label: str, text: str) -> None:
-                    """Collect actual generated counts from pipeline events."""
-                    nonlocal parameter
-                    if label == "parameter":
-                        parameter = text
-                    elif label == "value_tokens":
-                        counts[parameter] = int(text)
+                progress = MeasurementProgress()
 
                 result: dict[str, Any] = {"id": case["id"], "repeat": repeat}
                 if "requested_number_literal" in case:
@@ -95,15 +128,15 @@ def main() -> int:
                         case["requested_number_literal"]
                     )
                 try:
-                    call = process_prompt(case["prompt"], Run(
-                        model, vocab, functions, trie, observe))
+                    call = process_prompt(case["prompt"], resources,
+                                          progress=progress)
                     result.update(status="completed", call=call.model_dump(),
                                   correct=assess_call(case, call))
                     if "requested_number_literal" in case:
                         result["exact_numeric_agreement"] = result["correct"]
                 except PromptError as e:
                     result.update(status="error", error=str(e), correct=False)
-                result["generated_value_tokens"] = counts
+                result["generated_value_tokens"] = progress.counts
                 results.append(result)
                 args.output.write_text(json.dumps(report, indent=2,
                                                   allow_nan=False) + "\n",

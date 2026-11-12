@@ -6,58 +6,9 @@ import re
 import unittest
 from unittest.mock import patch
 
-import numpy as np
-
-from src import decoder, pipeline
+from src import display
 from src.display import Dashboard, render_progress
 from src.model_port import Model
-from src.name_trie import NameTrie
-
-
-class DecisionTests(unittest.TestCase):
-    """Observe decisions without ranking or probability work."""
-
-    def test_no_ranking_or_probability_calculation(self) -> None:
-        """Observations do not need top-k, sorting or softmax."""
-        seen: list[decoder.TokenChoice] = []
-        with patch.object(np, "argpartition", side_effect=AssertionError), \
-                patch.object(np, "sort", side_effect=AssertionError), \
-                patch.object(np, "exp", side_effect=AssertionError):
-            result = decoder.generate(
-                lambda ids: [3.0, 1.0, 2.0], [],
-                lambda ids: None if ids else [1, 2], 1,
-                on_token=seen.append,
-            )
-        self.assertEqual(result, [2])
-        self.assertEqual(seen[0].raw_top, 0)
-
-    def test_fixed_scores_preserve_selection_and_calls(self) -> None:
-        """Ties, masked maxima and -inf preserve greedy/forced behavior."""
-        for scores, allowed, expected, raw in (
-            ([3.0, 1.0, 2.0], [1, 2], 2, 0),
-            ([2.0, 2.0, 0.0], [1, 0], 0, 0),
-            ([-np.inf, 1.0, -np.inf], [0, 1], 1, 1),
-        ):
-            with self.subTest(scores=scores):
-                calls: list[list[int]] = []
-
-                def logits(ids: list[int]) -> list[float]:
-                    calls.append(ids.copy())
-                    return scores
-
-                def permitted(ids: list[int]) -> list[int] | None:
-                    return [allowed, [1], None][len(ids)]
-
-                seen: list[decoder.TokenChoice] = []
-                for observe in (None, seen.append):
-                    calls.clear()
-                    self.assertEqual(decoder.generate(
-                        logits, [9], permitted, 2, on_token=observe,
-                    ), [expected, 1])
-                    self.assertEqual(calls, [[9]])
-                self.assertEqual(seen[0].raw_top, raw)
-                self.assertTrue(seen[1].forced)
-                self.assertIsNone(seen[1].raw_top)
 
 
 class CandidateTextTests(unittest.TestCase):
@@ -65,17 +16,14 @@ class CandidateTextTests(unittest.TestCase):
 
     def setUp(self) -> None:
         """A run whose model decode is used only for tokens outside vocab."""
-        self.shown: dict[str, str] = {}
-        self.context = pipeline.Run(
-            object.__new__(Model),
-            {1: b',"', 2: b'\x1b[2J', 3: b'\xe6', 4: b'\xe6\x9d\xb1'},
-            {}, NameTrie(), self.shown.__setitem__,
-        )
+        self.model = object.__new__(Model)
+        self.vocab = {1: b',"', 2: b'\x1b[2J', 3: b'\xe6',
+                      4: b'\xe6\x9d\xb1'}
 
     def test_token_text_is_unambiguous(self) -> None:
         """Quotes, controls and partial UTF-8 are visible as such."""
         with patch.object(Model, "decode", return_value="<|im_end|>"):
-            texts = [pipeline._token_text(token, self.context)
+            texts = [display._token_text(token, self.model, self.vocab)
                      for token in range(1, 6)]
         self.assertEqual(texts, ["',\"'", "'\\x1b[2J'", "b'\\xe6'", "'東'",
                                  "'<|im_end|>'"])
@@ -100,7 +48,7 @@ class DashboardTests(unittest.TestCase):
         """Done/failed and seconds per prompt, then a total line."""
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
-            with Dashboard(2) as dashboard:
+            with Dashboard(2, object.__new__(Model), {}) as dashboard:
                 report = dashboard.report
                 report("input", "1/2")
                 report("function", "fn_a")
@@ -117,3 +65,53 @@ class DashboardTests(unittest.TestCase):
             r"^2 prompts: 1 done, 1 failed, \d+\.\d s$", re.M))
         self.assertNotIn('{"a"', text)
         self.assertNotIn("'a'", text)
+
+
+class BorrowedProgressTests(unittest.TestCase):
+    """Synchronous progress borrows IDs and keeps only rendered strings."""
+
+    def test_name_sequence_is_unchanged_not_retained_and_only_list_when_needed(
+        self,
+    ) -> None:
+        """Lists pass through; only other sequences need a decode copy."""
+        model = object.__new__(Model)
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            dashboard = Dashboard(1, model, {})
+        ids = [1]
+        with patch.object(Model, 'decode', return_value='first') as decode:
+            dashboard.name_token(ids, mode='forced', raw_top=None)
+            self.assertIs(decode.call_args.args[0], ids)
+            self.assertEqual(ids, [1])
+            self.assertFalse(any(value is ids
+                                 for value in vars(dashboard).values()))
+            ids.append(2)
+            self.assertEqual(dashboard.fields['value'], 'first')
+            self.assertEqual(dashboard.fields['token'], '1 (forced)')
+            dashboard.name_token((1, 2), mode='greedy', raw_top=None)
+            self.assertIsInstance(decode.call_args.args[0], list)
+            self.assertEqual(decode.call_args.args[0], [1, 2])
+
+    def test_atomic_token_fields_and_stage_reset(self) -> None:
+        """Each draw sees the ID, mode, count and value from the same step."""
+        with contextlib.redirect_stderr(io.StringIO()):
+            dashboard = Dashboard(1, object.__new__(Model), {})
+        dashboard.interactive = True
+        frames: list[dict[str, str]] = []
+        with patch.object(dashboard, 'draw', side_effect=(
+            lambda _: frames.append(dashboard.fields.copy())
+        )):
+            dashboard.value_token(b'\xe6', 1, token=42, mode='forced')
+            dashboard.value_token(b'\xe6\x9d\xb1', 2, token=43, mode='greedy')
+            dashboard.stage('generate_parameters')
+            dashboard.parameter_started('x', 'string')
+        self.assertEqual(frames[0]['token'], '42 (forced)')
+        self.assertEqual(frames[0]['value_tokens'], '1')
+        self.assertEqual(frames[1]['token'], '43 (greedy)')
+        self.assertEqual(frames[1]['value'], '東')
+        self.assertEqual(frames[2]['token'], '')
+        self.assertEqual(frames[3]['value_tokens'], '0')
+        self.assertEqual(frames[3]['token'], '')
+        self.assertEqual(frames[3]['parameter'], 'x (string)')
+        self.assertIn('Token: 43 (greedy)',
+                      render_progress(frames[1], 80, 30))

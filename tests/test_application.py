@@ -16,11 +16,10 @@ from pydantic import ValidationError
 
 from src import __main__ as entry
 from src.cli import parse_args
-from src.decoder import choose_token, generate
+from src.decoder import choose_token
 from src.errors import PromptError, StartupError
 from src.loader import load_functions, load_prompts
 from src.model_port import Model
-from src.name_trie import NameTrie
 from src import pipeline
 from src.pipeline import validate_call
 from src.schema import FunctionCall, FunctionDef, build_parameters_model
@@ -235,58 +234,72 @@ class DecoderTests(unittest.TestCase):
                     choose_token(logits, [0])
 
     def test_forcing_completion_limit_and_input_preservation(self) -> None:
-        """Forced tokens need no inference; completion wins at the limit."""
-        calls: list[list[int]] = []
-
-        def logits(ids: list[int]) -> list[float]:
-            """Supply fixed scores and record the actual input sequence."""
-            calls.append(ids)
-            return [20.0, 1.0, 3.0]
-
-        def allowed(ids: list[int]) -> list[int] | None:
-            """Force one token, then choose, then terminate."""
-            return [[1], [1, 2], None][len(ids)]
-
+        """Explicit loops preserve forced calls, inputs and limit ordering."""
+        model = object.__new__(Model)
         prefix = [7]
-        self.assertEqual(generate(logits, prefix, allowed, 2), [1, 2])
-        self.assertEqual(calls, [[7, 1]])
+        slot = ValueSlot(name='x', type='string', terminator='}')
+        with patch.object(Model, 'logits',
+                          return_value=[20.0, 1.0, 3.0]) as llm, \
+                patch.object(pipeline, 'MAX_VALUE_STEPS', 2), \
+                patch.object(pipeline, 'is_value_complete',
+                             side_effect=lambda data, *_: data == b'ab'), \
+                patch.object(pipeline, 'allowed_value_tokens',
+                             side_effect=[[1], [1, 2]]):
+            self.assertEqual(pipeline.generate_value(
+                slot, prefix, model=model, vocab={1: b'a', 2: b'b'},
+            ), [1, 2])
+        llm.assert_called_once_with([7, 1])
         self.assertEqual(prefix, [7])
-        with self.assertRaises(PromptError):
-            generate(logits, prefix, lambda ids: [1], 2)
-        with self.assertRaises(PromptError):
-            generate(logits, prefix, lambda ids: [], 2)
+        for cap, allowed, message in ((2, [1], 'token limit 2'),
+                                      (2, [], 'no allowed'),
+                                      (0, [], 'token limit 0')):
+            with self.subTest(cap=cap, allowed=allowed), \
+                    patch.object(pipeline, 'MAX_VALUE_STEPS', cap), \
+                    patch.object(pipeline, 'is_value_complete',
+                                 return_value=False), \
+                    patch.object(pipeline, 'allowed_value_tokens',
+                                 return_value=allowed):
+                with self.assertRaisesRegex(PromptError, message):
+                    pipeline.generate_value(slot, prefix, model=model,
+                                            vocab={1: b'a'})
 
     def test_repeated_boundary_cases_have_clear_limit_errors(self) -> None:
         """A value may finish at the cap; unfinished values fail explicitly."""
-        for length in [1, 255, 256, 257, 1024]:
+        model = object.__new__(Model)
+        slot = ValueSlot(name='x', type='string', terminator='}')
+        for length in [0, 1, 255, 256, 257, 1024]:
             for repeat in range(3):
-                with self.subTest(length=length, repeat=repeat):
-                    def allowed(ids: list[int]) -> list[int] | None:
-                        """Complete only after the target's actual length."""
-                        return None if len(ids) == length else [0, 1]
-
+                with self.subTest(length=length, repeat=repeat), \
+                        patch.object(Model, 'logits',
+                                     return_value=[0.0, 1.0]), \
+                        patch.object(pipeline, 'is_value_complete',
+                                     side_effect=lambda data, *_:
+                                     len(data) == length), \
+                        patch.object(pipeline, 'allowed_value_tokens',
+                                     return_value=[0, 1]):
                     if length <= 256:
-                        result = generate(lambda ids: [0.0, 1.0], [],
-                                          allowed, 256)
+                        result = pipeline.generate_value(
+                            slot, [], model=model, vocab={0: b'a', 1: b'b'},
+                        )
                         self.assertEqual(len(result), length)
                     else:
                         with self.assertRaisesRegex(
                             PromptError, r'token limit 256.*terminator',
                         ):
-                            generate(lambda ids: [0.0, 1.0], [], allowed, 256)
+                            pipeline.generate_value(
+                                slot, [], model=model,
+                                vocab={0: b'a', 1: b'b'},
+                            )
 
     def test_value_errors_identify_the_parameter(self) -> None:
         """Limit errors explain which typed parameter could not complete."""
         model = object.__new__(Model)
         slot = ValueSlot(name='source_string', type='string', terminator='}')
-        with patch.object(pipeline, 'generate', side_effect=PromptError(
-            'token limit 256 reached before a terminator'
-        )):
+        with patch.object(pipeline, 'MAX_VALUE_STEPS', 0):
             with self.assertRaisesRegex(
-                PromptError, r"source_string.*string.*token limit 256",
+                PromptError, r"source_string.*string.*token limit 0",
             ):
-                pipeline.generate_value(slot, [], pipeline.Run(
-                    model, {}, {}, NameTrie()))
+                pipeline.generate_value(slot, [], model=model, vocab={})
 
 
 class WriterTests(unittest.TestCase):
