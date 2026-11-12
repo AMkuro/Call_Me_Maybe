@@ -20,8 +20,11 @@ def _read_events(path: Path) -> Iterator[dict[str, Any]]:
         time.sleep(0.05)
     with path.open("r", encoding="utf-8") as stream:
         while True:
+            position = stream.tell()
             line = stream.readline()
-            if not line:
+            if not line or not line.endswith("\n"):
+                # A growing file can expose a partial final line at EOF.
+                stream.seek(position)
                 time.sleep(0.05)
                 continue
             try:
