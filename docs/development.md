@@ -143,6 +143,15 @@ four CPU threads are not the default development profile. Verify that the
 execution environment exposes the GPU before running: this sandbox hides
 `/dev/kfd` and `/dev/dri`, so GPU runs require host execution.
 
+[Campus runtime feasibility and proposed measurements](research/campus-runtime-feasibility.md)
+records the CPU/memory reports pulled from `feat/implementation` on 2026-11-11.
+The measured workload ratios do not establish a reproduced campus machine or
+the Subject's five-minute result. The owner approved automated continuous SDK
+work with safety stops. See [thermal survey](research/safe-thermal-survey.md)
+and ADR-0022. VM configuration management is a selection criterion alongside
+cgroup calibration; the VM choice remains open. The AMD development host has
+no readable thermal counters, so this tool refuses to load the model there.
+
 - `make install` recreates `.venv` from `uv.lock` (CPU torch). `uv sync` alone
   also works, as the reviewers require. torch comes from the default `cpu`
   dependency group, which uses the PyTorch CPU index.
@@ -208,7 +217,9 @@ in to native Auto-merge per PR; no custom merger or release branches.
 
 Static import checks cannot prove that every SDK attribute used is public or
 that every runtime class uses Pydantic; those remain explicit review
-requirements. Accuracy, generation speed and CPU benchmarks are unmeasured.
+requirements. Application accuracy and completion time are not established for
+this integration baseline. Recorded SDK and NumPy benchmarks do not certify
+the application's runtime.
 A complete submission needs unseen prompts/functions, 90%+ semantic accuracy,
 100% schema-valid JSON and the Subject's runtime evaluation, measured on a
 separately provisioned, recorded model benchmark.

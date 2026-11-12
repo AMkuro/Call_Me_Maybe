@@ -40,6 +40,7 @@ JSON解析・strict型・数値保持の実装はADR-0017に記録する。
 | [0018](adr/0018-local-prompt-experiments.md) | 隔離したローカルLLMのプロンプト改善 | 設計承認済み。ツール・単体検証・9Bロード確認済み。精度探索は別に記録 |
 | [0019](adr/0019-optimizer-kv-cache.md) | 既存OSSハーネスによる改善側の実行 | OpenCodeの設定・2ツール・作業領域。対象SDKは固定 |
 | [0020](adr/0020-few-shot-and-relay.md) | 引数生成の例示と、Claude Code・大きいローカルモデルのリレー | 提案。方向はユーザー承認済み、細部6点は未決 |
+| [0022](adr/0022-campus-runtime-calibration.md) | 校舎CPUでの所要時間を検証する方法 | 自動連続負荷と安全停止を承認。VM/cgroupの採用は未決 |
 
 ## 未解決の一覧
 1. 関数が増えたときの関数選択の精度(ADR-0001)。関数セットを変えたテストで測る。

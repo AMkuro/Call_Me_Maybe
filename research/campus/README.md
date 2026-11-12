@@ -7,9 +7,18 @@ CPUとメモリの負荷特性を開発機と比較する調査には、モデ�
 原票・使用commitなどは未確認で、以下のSDK benchmarkレポートへ混ぜていない。
 下記の環境一覧・SDK benchmark・アプリ全体の実行時間とは、測る対象が異なる。
 
+連続実行で温まる過程と処理時間を自動で測る場合は、
+[thermalモードの手順](../../docs/research/safe-thermal-survey.md)を使う。
+thermalは既存のHMAC鍵からPC IDを自動生成するため、`--pc-id`は不要。
+熱スロットリング・温度上限・監視不能等で停止し、途中結果も残す。
+
+2026-11-11に取得した校舎・開発機のCPU／メモリ比較は、
+[性能再現の診断と追加調査案](../../docs/research/campus-runtime-feasibility.md)に記録した。
+原記録と調査器は同書が指定する`feat/implementation`のcommitにある。
+このSDK benchmarkと実アプリの5分判定は測定対象が異なり、温度や性能を再現できたとは扱わない。
 
 42 校舎の複数PCで実行環境を同じ方法で調べて比較し、レビュー基準PCの選定と、
-「CPU で 5 分以内」という実行時間要件の実現可能性の評価に使う。
+「標準的なハードウェアで全テストプロンプトを5分未満」という要件を、校舎CPUで確認するために使う。
 スクリプト: [`tools/campus_survey.py`](../../tools/campus_survey.py)（標準ライブラリのみ、Python 3.10+）。
 
 このディレクトリは公開リポジトリの `develop` に置く。`main` には入れない。
