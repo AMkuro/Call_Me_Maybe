@@ -5,6 +5,14 @@ submission artifact and must not carry any of it: this file is removed or kept
 out of the submitted version. Read it (and `docs/ci-auto-integration.md`)
 before changing CI, the build environment or the SDK.
 
+## Token progress update (2026-11-12)
+
+The token ranking and candidate table have been removed at the owner's request
+([ADR-0023](design/adr/0023-remove-token-ranking.md)). Token-by-token value
+progress, constrained-name warnings, completion/failure summaries and terminal
+restoration remain. Diagnostics no longer compute softmax, allowed logit gaps
+or top-k rankings. This does not change constrained argmax selection or the CLI.
+
 ## Status (2026-11-10)
 
 The design now describes LF-terminated typed value records, quoted newlines and

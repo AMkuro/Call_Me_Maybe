@@ -15,11 +15,10 @@ _ROWS = (
     ("function", "Function"), ("parameter", "Parameter"),
     ("value", "Value"), ("value_tokens", "Value tokens"),
     ("warning", "Warning"), ("result", "Result"), ("error", "Error"),
-    ("candidates", "Candidates"),  # last: a small terminal cuts it first
 )
 _FRAME_SECONDS = 0.05  # at most one redraw per interval ...
-# ... except for these; candidates come last for each token.
-_DRAW_NOW = ("function", "result", "error", "candidates")
+# ... except for completed selections and prompt outcomes.
+_DRAW_NOW = ("function", "result", "error")
 _FALLBACK_SIZE = (100, 24)
 _ENTER, _LEAVE = "\x1b[?1049h\x1b[?25l", "\x1b[?25h\x1b[?1049l"
 _CLEAR = "\x1b[H\x1b[2J"
@@ -54,11 +53,7 @@ def render_progress(fields: dict[str, str], width: int, height: int) -> str:
     for key, label in _ROWS:
         if key not in fields:
             continue
-        if key == "candidates":
-            lines.append(f"{label}:")
-            lines += ["  " + _visible(row) for row in fields[key].split("\n")]
-        else:
-            lines.append(f"{label}: {_visible(fields[key])}")
+        lines.append(f"{label}: {_visible(fields[key])}")
     return "\n".join(_clip(line, width) for line in lines[:max(height - 1, 1)])
 
 

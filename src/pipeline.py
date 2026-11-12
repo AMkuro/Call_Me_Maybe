@@ -69,9 +69,8 @@ def select_name(user_prompt: str, run: Run) -> FunctionDef:
 
     def observed(choice: TokenChoice) -> None:
         run.say("value", _decoded(run.model, choice.tokens))
-        _show_choice(choice, run)
-        if choice.top and not choice.top[0][2]:  # raw best was masked
-            raw_top = _token_text(choice.top[0][0], run)
+        if choice.raw_top is not None and choice.raw_top != choice.token:
+            raw_top = _token_text(choice.raw_top, run)
             selected = _token_text(choice.token, run)
             run.say("warning", f"name_selection_constrained: step="
                     f"{choice.step} raw_top={raw_top} selected={selected}")
@@ -138,7 +137,6 @@ def generate_value(slot: ValueSlot, ids: list[int], run: Run) -> list[int]:
         written = b"".join(vocab[token] for token in choice.tokens)
         run.say("value", written.decode("utf-8", errors="ignore"))
         run.say("value_tokens", str(choice.step))
-        _show_choice(choice, run)
 
     try:
         return generate(
@@ -167,28 +165,6 @@ def validate_call(text: str, fn: FunctionDef) -> FunctionCall:
         prompt=call.prompt, name=call.name,
         parameters=parameters.model_dump(by_alias=True),
     )
-
-
-# Dashboard text for one token decision (ADR-0021). Display only: a failure
-# here must never discard a generated result.
-
-def _show_choice(choice: TokenChoice, run: Run) -> None:
-    """Report the candidate table of an already-computed decision."""
-    if choice.forced:
-        run.say("candidates", "forced: the only allowed token "
-                f"{_token_text(choice.token, run)}; the model is not called")
-        return
-    rows = list(choice.top)
-    if choice.token not in [token for token, _, _ in rows]:
-        rows.append((choice.token, choice.logit or 0.0, True))
-    lines = [f"allowed_mass={choice.allowed_mass:.3g}  "
-             f"gap={choice.margin:.3g}"]
-    for token, logit, allowed in rows:
-        mark = ">" if token == choice.token else " "
-        masked = "" if allowed else "  masked"
-        lines.append(f"{mark} {token:>6} {_token_text(token, run):<16} "
-                     f"{logit:9.3f}{masked}")
-    run.say("candidates", "\n".join(lines))
 
 
 def _token_text(token: int, run: Run) -> str:

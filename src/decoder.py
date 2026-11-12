@@ -7,12 +7,9 @@ from pydantic import BaseModel, ConfigDict
 
 from .errors import PromptError
 
-# Raw candidates per model-chosen token shown on the dashboard (ADR-0021).
-TOP_CANDIDATES = 10
-
 
 class TokenChoice(BaseModel):
-    """One observed token decision; uncomputed diagnostics stay None."""
+    """One observed token decision; forced steps have no raw preference."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -20,24 +17,8 @@ class TokenChoice(BaseModel):
     token: int
     tokens: list[int]
     forced: bool
-    # Computed only for a model-chosen token, from the same logits:
-    logit: float | None = None  # of the chosen token
-    allowed_mass: float | None = None  # softmax share of allowed tokens
-    margin: float | None = None  # logit gap of the two best allowed
-    # Highest raw logits, best first: (id, logit, allowed by the mask).
-    top: list[tuple[int, float, bool]] = []
-
-
-def _top(
-    scores: np.ndarray, allowed: set[int],
-) -> list[tuple[int, float, bool]]:
-    """The ``TOP_CANDIDATES`` highest finite raw logits, best first."""
-    ids = np.flatnonzero(np.isfinite(scores))
-    if len(ids) > TOP_CANDIDATES:
-        ids = ids[np.argpartition(-scores[ids], TOP_CANDIDATES - 1)
-                  [:TOP_CANDIDATES]]
-    best = sorted(ids.tolist(), key=lambda i: (-scores[i], i))
-    return [(i, float(scores[i]), i in allowed) for i in best]
+    # Unconstrained argmax, only to warn when name selection is masked.
+    raw_top: int | None = None
 
 
 def choose_token(logits: Sequence[float], allowed: Collection[int]) -> int:
@@ -73,9 +54,9 @@ def generate(
     Returns only the generated tokens. ``next_logits`` is the model's
     ``logits``. ``allowed_next`` gets the tokens generated so far. One
     allowed token is forced without asking the model. Raises PromptError
-    after ``max_steps`` tokens. With ``on_token``, a model-chosen token
-    also reports its logit and the raw top candidates from the same
-    logits; they are not used for selection.
+    after ``max_steps`` tokens. With ``on_token``, report each selected
+    token and the unconstrained argmax from the same logits for warnings.
+    Observations are not used for selection.
 
     Effect: calls ``next_logits`` and the optional observation callback.
 
@@ -95,30 +76,18 @@ def generate(
             )
         if not allowed:
             raise PromptError("no allowed token can continue this value")
+        raw_top = None
         if len(allowed) == 1:
             token = allowed[0]
-            diagnostics: dict[str, object] = {}
         else:
             logits = next_logits(ids + generated)
             token = choose_token(logits, allowed)
-            diagnostics = {}
             if on_token is not None:
-                scores = np.asarray(logits, dtype=float)
-                weights = np.exp(scores - np.max(scores))
-                unique = set(allowed)
-                indices = list(unique)
-                ordered = np.sort(scores[indices])
-                diagnostics = {
-                    "logit": float(scores[token]),
-                    "allowed_mass": float(weights[indices].sum()
-                                          / weights.sum()),
-                    "margin": float(ordered[-1] - ordered[-2]),
-                    "top": _top(scores, unique),
-                }
+                raw_top = int(np.argmax(logits))
         generated.append(token)
         if on_token is not None:
             on_token(TokenChoice.model_validate({
                 "step": len(generated), "token": token,
                 "tokens": generated.copy(), "forced": len(allowed) == 1,
-                **diagnostics,
+                "raw_top": raw_top,
             }))
