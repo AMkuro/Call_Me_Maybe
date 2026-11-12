@@ -84,7 +84,8 @@ class TraceTests(unittest.TestCase):
                         if emit is not None:
                             emit({"type": "input", "prompt": "東京"})
                         raise ValueError("stop")
-            events = [json.loads(line) for line in path.read_text().splitlines()]
+            events = [json.loads(line) for line in
+                      path.read_text().splitlines()]
             self.assertEqual(events[0]["prompt"], "東京")
             self.assertEqual(events[-1], {"type": "end"})
 
