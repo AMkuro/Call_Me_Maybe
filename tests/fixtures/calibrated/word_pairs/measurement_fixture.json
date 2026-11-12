@@ -1,0 +1,213 @@
+{
+  "functions": [
+    {
+      "name": "fn_join_words",
+      "description": "Join two text strings together in the given order.",
+      "parameters": {
+        "first": {
+          "type": "string"
+        },
+        "second": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_greet_friend",
+      "description": "Generate a greeting message for a friend by name.",
+      "parameters": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_reverse_letters",
+      "description": "Reverse the characters in a string.",
+      "parameters": {
+        "s": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_get_square_root",
+      "description": "Calculate the square root of a number.",
+      "parameters": {
+        "a": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "fn_replace_regex",
+      "description": "Replace all occurrences matching a regex pattern in a string.",
+      "parameters": {
+        "source_string": {
+          "type": "string"
+        },
+        "regex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "word-pairs-01",
+      "prompt": "Join the words 'open' and 'source'.",
+      "expected_name": "fn_join_words",
+      "expected_parameters": {
+        "first": "open",
+        "second": "source"
+      }
+    },
+    {
+      "id": "word-pairs-02",
+      "prompt": "Combine 'sun' with 'rise'.",
+      "expected_name": "fn_join_words",
+      "expected_parameters": {
+        "first": "sun",
+        "second": "rise"
+      }
+    },
+    {
+      "id": "word-pairs-03",
+      "prompt": "Greet Leo.",
+      "expected_name": "fn_greet_friend",
+      "expected_parameters": {
+        "name": "Leo"
+      }
+    },
+    {
+      "id": "word-pairs-04",
+      "prompt": "Say hello to Emma.",
+      "expected_name": "fn_greet_friend",
+      "expected_parameters": {
+        "name": "Emma"
+      }
+    },
+    {
+      "id": "word-pairs-05",
+      "prompt": "Send a greeting to Max.",
+      "expected_name": "fn_greet_friend",
+      "expected_parameters": {
+        "name": "Max"
+      }
+    },
+    {
+      "id": "word-pairs-06",
+      "prompt": "Reverse the string 'piano'.",
+      "expected_name": "fn_reverse_letters",
+      "expected_parameters": {
+        "s": "piano"
+      }
+    },
+    {
+      "id": "word-pairs-07",
+      "prompt": "What is the square root of 49?",
+      "expected_name": "fn_get_square_root",
+      "expected_parameters": {
+        "a": 49
+      }
+    },
+    {
+      "id": "word-pairs-08",
+      "prompt": "Find the square root of 169.",
+      "expected_name": "fn_get_square_root",
+      "expected_parameters": {
+        "a": 169
+      }
+    },
+    {
+      "id": "word-pairs-09",
+      "prompt": "Replace all digits in 'Seat 4 has 32 tickets' with 'N'.",
+      "expected_name": "fn_replace_regex",
+      "expected_parameters": {
+        "source_string": "Seat 4 has 32 tickets",
+        "regex": "\\d+",
+        "replacement": "N"
+      },
+      "regex_checks": [
+        {
+          "input": "Seat 4 has 32 tickets",
+          "output": "Seat N has N tickets"
+        },
+        {
+          "input": "A8B21",
+          "output": "ANBN"
+        },
+        {
+          "input": "empty",
+          "output": "empty"
+        }
+      ]
+    },
+    {
+      "id": "word-pairs-10",
+      "prompt": "Replace every vowel in 'Ocean Route' with '*'.",
+      "expected_name": "fn_replace_regex",
+      "expected_parameters": {
+        "source_string": "Ocean Route",
+        "regex": "[aeiouAEIOU]",
+        "replacement": "*"
+      },
+      "regex_checks": [
+        {
+          "input": "Ocean Route",
+          "output": "*c**n R**t*"
+        },
+        {
+          "input": "AEIOU",
+          "output": "*****"
+        },
+        {
+          "input": "sky",
+          "output": "sky"
+        }
+      ]
+    },
+    {
+      "id": "word-pairs-11",
+      "prompt": "Replace all occurrences of 'fox' with 'dog' in 'fox and foxes'.",
+      "expected_name": "fn_replace_regex",
+      "expected_parameters": {
+        "source_string": "fox and foxes",
+        "regex": "fox",
+        "replacement": "dog"
+      },
+      "regex_checks": [
+        {
+          "input": "fox and foxes",
+          "output": "dog and doges"
+        },
+        {
+          "input": "foxtrot",
+          "output": "dogtrot"
+        },
+        {
+          "input": "FOX",
+          "output": "FOX"
+        }
+      ]
+    }
+  ]
+}

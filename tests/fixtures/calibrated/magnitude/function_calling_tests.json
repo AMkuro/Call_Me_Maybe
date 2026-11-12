@@ -1,0 +1,35 @@
+[
+  {
+    "prompt": "Which number is larger, 15 or 9?"
+  },
+  {
+    "prompt": "Say hello to Elena."
+  },
+  {
+    "prompt": "Greet David."
+  },
+  {
+    "prompt": "How many characters are in 'paper'?"
+  },
+  {
+    "prompt": "Count the characters in 'blue sky'."
+  },
+  {
+    "prompt": "Find the length of the string 'signal'."
+  },
+  {
+    "prompt": "What is the square of 12?"
+  },
+  {
+    "prompt": "Calculate the square of 7."
+  },
+  {
+    "prompt": "Replace each number in 'Apt 3, floor 12' with 'N'."
+  },
+  {
+    "prompt": "Replace every vowel in 'Cloud Drive' with an asterisk."
+  },
+  {
+    "prompt": "Replace all occurrences of 'red' with 'blue' in 'red bed red'."
+  }
+]

@@ -1,0 +1,212 @@
+{
+  "functions": [
+    {
+      "name": "fn_find_maximum",
+      "description": "Find the larger of two numbers.",
+      "parameters": {
+        "a": {
+          "type": "number"
+        },
+        "b": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "fn_greet_visitor",
+      "description": "Generate a greeting message for a visitor by name.",
+      "parameters": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_count_characters",
+      "description": "Count the characters in a string.",
+      "parameters": {
+        "s": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "fn_square_number",
+      "description": "Calculate the square of a number.",
+      "parameters": {
+        "a": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "fn_regex_substitute",
+      "description": "Replace all occurrences matching a regex pattern in a string.",
+      "parameters": {
+        "source_string": {
+          "type": "string"
+        },
+        "regex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "magnitude-01",
+      "prompt": "Which number is larger, 15 or 9?",
+      "expected_name": "fn_find_maximum",
+      "expected_parameters": {
+        "a": 15,
+        "b": 9
+      }
+    },
+    {
+      "id": "magnitude-02",
+      "prompt": "Say hello to Elena.",
+      "expected_name": "fn_greet_visitor",
+      "expected_parameters": {
+        "name": "Elena"
+      }
+    },
+    {
+      "id": "magnitude-03",
+      "prompt": "Greet David.",
+      "expected_name": "fn_greet_visitor",
+      "expected_parameters": {
+        "name": "David"
+      }
+    },
+    {
+      "id": "magnitude-04",
+      "prompt": "How many characters are in 'paper'?",
+      "expected_name": "fn_count_characters",
+      "expected_parameters": {
+        "s": "paper"
+      }
+    },
+    {
+      "id": "magnitude-05",
+      "prompt": "Count the characters in 'blue sky'.",
+      "expected_name": "fn_count_characters",
+      "expected_parameters": {
+        "s": "blue sky"
+      }
+    },
+    {
+      "id": "magnitude-06",
+      "prompt": "Find the length of the string 'signal'.",
+      "expected_name": "fn_count_characters",
+      "expected_parameters": {
+        "s": "signal"
+      }
+    },
+    {
+      "id": "magnitude-07",
+      "prompt": "What is the square of 12?",
+      "expected_name": "fn_square_number",
+      "expected_parameters": {
+        "a": 12
+      }
+    },
+    {
+      "id": "magnitude-08",
+      "prompt": "Calculate the square of 7.",
+      "expected_name": "fn_square_number",
+      "expected_parameters": {
+        "a": 7
+      }
+    },
+    {
+      "id": "magnitude-09",
+      "prompt": "Replace each number in 'Apt 3, floor 12' with 'N'.",
+      "expected_name": "fn_regex_substitute",
+      "expected_parameters": {
+        "source_string": "Apt 3, floor 12",
+        "regex": "\\d+",
+        "replacement": "N"
+      },
+      "regex_checks": [
+        {
+          "input": "Apt 3, floor 12",
+          "output": "Apt N, floor N"
+        },
+        {
+          "input": "B8C90",
+          "output": "BNCN"
+        },
+        {
+          "input": "empty",
+          "output": "empty"
+        }
+      ]
+    },
+    {
+      "id": "magnitude-10",
+      "prompt": "Replace every vowel in 'Cloud Drive' with an asterisk.",
+      "expected_name": "fn_regex_substitute",
+      "expected_parameters": {
+        "source_string": "Cloud Drive",
+        "regex": "[aeiouAEIOU]",
+        "replacement": "*"
+      },
+      "regex_checks": [
+        {
+          "input": "Cloud Drive",
+          "output": "Cl**d Dr*v*"
+        },
+        {
+          "input": "aeiou",
+          "output": "*****"
+        },
+        {
+          "input": "PST",
+          "output": "PST"
+        }
+      ]
+    },
+    {
+      "id": "magnitude-11",
+      "prompt": "Replace all occurrences of 'red' with 'blue' in 'red bed red'.",
+      "expected_name": "fn_regex_substitute",
+      "expected_parameters": {
+        "source_string": "red bed red",
+        "regex": "red",
+        "replacement": "blue"
+      },
+      "regex_checks": [
+        {
+          "input": "red bed red",
+          "output": "blue bed blue"
+        },
+        {
+          "input": "redwood",
+          "output": "bluewood"
+        },
+        {
+          "input": "RED",
+          "output": "RED"
+        }
+      ]
+    }
+  ]
+}

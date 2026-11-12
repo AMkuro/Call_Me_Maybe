@@ -1,0 +1,213 @@
+{
+  "functions": [
+    {
+      "name": "fn_set_alarm",
+      "description": "Set an alarm for a given hour and whether it repeats.",
+      "parameters": {
+        "hour": {
+          "type": "number"
+        },
+        "repeat": {
+          "type": "boolean"
+        }
+      },
+      "returns": {
+        "type": "boolean"
+      }
+    },
+    {
+      "name": "fn_greet_person",
+      "description": "Generate a greeting message for a person by name.",
+      "parameters": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_reverse_text",
+      "description": "Reverse the order of characters in a string.",
+      "parameters": {
+        "s": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_set_notifications",
+      "description": "Enable or disable notifications.",
+      "parameters": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "returns": {
+        "type": "boolean"
+      }
+    },
+    {
+      "name": "fn_substitute_regex",
+      "description": "Replace all occurrences matching a regular expression in a string.",
+      "parameters": {
+        "source_string": {
+          "type": "string"
+        },
+        "regex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "boolean-01",
+      "prompt": "Set an alarm for hour 7 and make it repeat.",
+      "expected_name": "fn_set_alarm",
+      "expected_parameters": {
+        "hour": 7,
+        "repeat": true
+      }
+    },
+    {
+      "id": "boolean-02",
+      "prompt": "Set an alarm for hour 21 without repeating.",
+      "expected_name": "fn_set_alarm",
+      "expected_parameters": {
+        "hour": 21,
+        "repeat": false
+      }
+    },
+    {
+      "id": "boolean-03",
+      "prompt": "Greet Ada.",
+      "expected_name": "fn_greet_person",
+      "expected_parameters": {
+        "name": "Ada"
+      }
+    },
+    {
+      "id": "boolean-04",
+      "prompt": "Reverse the string 'evening'.",
+      "expected_name": "fn_reverse_text",
+      "expected_parameters": {
+        "s": "evening"
+      }
+    },
+    {
+      "id": "boolean-05",
+      "prompt": "Enable notifications.",
+      "expected_name": "fn_set_notifications",
+      "expected_parameters": {
+        "enabled": true
+      }
+    },
+    {
+      "id": "boolean-06",
+      "prompt": "Disable notifications.",
+      "expected_name": "fn_set_notifications",
+      "expected_parameters": {
+        "enabled": false
+      }
+    },
+    {
+      "id": "boolean-07",
+      "prompt": "Turn notifications on.",
+      "expected_name": "fn_set_notifications",
+      "expected_parameters": {
+        "enabled": true
+      }
+    },
+    {
+      "id": "boolean-08",
+      "prompt": "Switch notifications off.",
+      "expected_name": "fn_set_notifications",
+      "expected_parameters": {
+        "enabled": false
+      }
+    },
+    {
+      "id": "boolean-09",
+      "prompt": "Replace all numbers in 'Order 6 has 12 items' with 'X'.",
+      "expected_name": "fn_substitute_regex",
+      "expected_parameters": {
+        "source_string": "Order 6 has 12 items",
+        "regex": "\\d+",
+        "replacement": "X"
+      },
+      "regex_checks": [
+        {
+          "input": "Order 6 has 12 items",
+          "output": "Order X has X items"
+        },
+        {
+          "input": "A9B42",
+          "output": "AXBX"
+        },
+        {
+          "input": "none",
+          "output": "none"
+        }
+      ]
+    },
+    {
+      "id": "boolean-10",
+      "prompt": "Replace every vowel in 'Bright Morning' with '*'.",
+      "expected_name": "fn_substitute_regex",
+      "expected_parameters": {
+        "source_string": "Bright Morning",
+        "regex": "[aeiouAEIOU]",
+        "replacement": "*"
+      },
+      "regex_checks": [
+        {
+          "input": "Bright Morning",
+          "output": "Br*ght M*rn*ng"
+        },
+        {
+          "input": "aeiou",
+          "output": "*****"
+        },
+        {
+          "input": "xyz",
+          "output": "xyz"
+        }
+      ]
+    },
+    {
+      "id": "boolean-11",
+      "prompt": "Replace every 'sun' with 'moon' in 'sun and sunshine'.",
+      "expected_name": "fn_substitute_regex",
+      "expected_parameters": {
+        "source_string": "sun and sunshine",
+        "regex": "sun",
+        "replacement": "moon"
+      },
+      "regex_checks": [
+        {
+          "input": "sun and sunshine",
+          "output": "moon and moonshine"
+        },
+        {
+          "input": "sunflower",
+          "output": "moonflower"
+        },
+        {
+          "input": "SUN",
+          "output": "SUN"
+        }
+      ]
+    }
+  ]
+}

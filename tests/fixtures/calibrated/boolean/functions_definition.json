@@ -1,0 +1,71 @@
+[
+  {
+    "name": "fn_set_alarm",
+    "description": "Set an alarm for a given hour and whether it repeats.",
+    "parameters": {
+      "hour": {
+        "type": "number"
+      },
+      "repeat": {
+        "type": "boolean"
+      }
+    },
+    "returns": {
+      "type": "boolean"
+    }
+  },
+  {
+    "name": "fn_greet_person",
+    "description": "Generate a greeting message for a person by name.",
+    "parameters": {
+      "name": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "fn_reverse_text",
+    "description": "Reverse the order of characters in a string.",
+    "parameters": {
+      "s": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "fn_set_notifications",
+    "description": "Enable or disable notifications.",
+    "parameters": {
+      "enabled": {
+        "type": "boolean"
+      }
+    },
+    "returns": {
+      "type": "boolean"
+    }
+  },
+  {
+    "name": "fn_substitute_regex",
+    "description": "Replace all occurrences matching a regular expression in a string.",
+    "parameters": {
+      "source_string": {
+        "type": "string"
+      },
+      "regex": {
+        "type": "string"
+      },
+      "replacement": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

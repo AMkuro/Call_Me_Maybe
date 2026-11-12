@@ -1,0 +1,212 @@
+{
+  "functions": [
+    {
+      "name": "fn_multiply_numbers",
+      "description": "Multiply two numbers together and return their product.",
+      "parameters": {
+        "a": {
+          "type": "number"
+        },
+        "b": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "fn_welcome",
+      "description": "Generate a welcome greeting for a person by name.",
+      "parameters": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_to_uppercase",
+      "description": "Convert a string to uppercase letters.",
+      "parameters": {
+        "s": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "fn_get_absolute_value",
+      "description": "Calculate the absolute value of a number.",
+      "parameters": {
+        "a": {
+          "type": "number"
+        }
+      },
+      "returns": {
+        "type": "number"
+      }
+    },
+    {
+      "name": "fn_replace_matches_with_regex",
+      "description": "Replace all occurrences matching a regex pattern in a string.",
+      "parameters": {
+        "source_string": {
+          "type": "string"
+        },
+        "regex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "type": "string"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "transfer-01",
+      "prompt": "Multiply 6 by 7.",
+      "expected_name": "fn_multiply_numbers",
+      "expected_parameters": {
+        "a": 6,
+        "b": 7
+      }
+    },
+    {
+      "id": "transfer-03",
+      "prompt": "Welcome Nina.",
+      "expected_name": "fn_welcome",
+      "expected_parameters": {
+        "name": "Nina"
+      }
+    },
+    {
+      "id": "transfer-04",
+      "prompt": "Say a welcome greeting to Omar.",
+      "expected_name": "fn_welcome",
+      "expected_parameters": {
+        "name": "Omar"
+      }
+    },
+    {
+      "id": "transfer-12",
+      "prompt": "Welcome Sofia.",
+      "expected_name": "fn_welcome",
+      "expected_parameters": {
+        "name": "Sofia"
+      }
+    },
+    {
+      "id": "transfer-05",
+      "prompt": "Convert 'hello' to uppercase.",
+      "expected_name": "fn_to_uppercase",
+      "expected_parameters": {
+        "s": "hello"
+      }
+    },
+    {
+      "id": "transfer-06",
+      "prompt": "Write 'little world' in uppercase letters.",
+      "expected_name": "fn_to_uppercase",
+      "expected_parameters": {
+        "s": "little world"
+      }
+    },
+    {
+      "id": "transfer-07",
+      "prompt": "What is the absolute value of -14?",
+      "expected_name": "fn_get_absolute_value",
+      "expected_parameters": {
+        "a": -14
+      }
+    },
+    {
+      "id": "transfer-08",
+      "prompt": "Find the absolute value of 36.",
+      "expected_name": "fn_get_absolute_value",
+      "expected_parameters": {
+        "a": 36
+      }
+    },
+    {
+      "id": "transfer-09",
+      "prompt": "Replace each sequence of digits in 'Box 8 has 25 pens' with '#'.",
+      "expected_name": "fn_replace_matches_with_regex",
+      "expected_parameters": {
+        "source_string": "Box 8 has 25 pens",
+        "regex": "\\d+",
+        "replacement": "#"
+      },
+      "regex_checks": [
+        {
+          "input": "Box 8 has 25 pens",
+          "output": "Box # has # pens"
+        },
+        {
+          "input": "B4C10",
+          "output": "B#C#"
+        },
+        {
+          "input": "no digits",
+          "output": "no digits"
+        }
+      ]
+    },
+    {
+      "id": "transfer-10",
+      "prompt": "Change all vowels in 'Data Science' to '*'.",
+      "expected_name": "fn_replace_matches_with_regex",
+      "expected_parameters": {
+        "source_string": "Data Science",
+        "regex": "[aeiouAEIOU]",
+        "replacement": "*"
+      },
+      "regex_checks": [
+        {
+          "input": "Data Science",
+          "output": "D*t* Sc**nc*"
+        },
+        {
+          "input": "AEIOU",
+          "output": "*****"
+        },
+        {
+          "input": "xyz",
+          "output": "xyz"
+        }
+      ]
+    },
+    {
+      "id": "transfer-11",
+      "prompt": "In 'red bed red', replace every occurrence of 'red' with 'blue'.",
+      "expected_name": "fn_replace_matches_with_regex",
+      "expected_parameters": {
+        "source_string": "red bed red",
+        "regex": "red",
+        "replacement": "blue"
+      },
+      "regex_checks": [
+        {
+          "input": "red bed red",
+          "output": "blue bed blue"
+        },
+        {
+          "input": "redwood",
+          "output": "bluewood"
+        },
+        {
+          "input": "RED",
+          "output": "RED"
+        }
+      ]
+    }
+  ]
+}
