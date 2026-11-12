@@ -75,11 +75,19 @@ def main() -> int:
 def listen(path: str) -> socket.socket:
     """Listen at ``path``, replacing a stale socket; only this user connects.
 
+    Raises OSError when another viewer is already listening there.
+
     Effect: removes an old socket file and creates a new one (mode 0600).
     """
     with contextlib.suppress(FileNotFoundError):
         if stat.S_ISSOCK(os.lstat(path).st_mode):
-            os.unlink(path)
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+                try:
+                    probe.connect(path)
+                except OSError:
+                    os.unlink(path)  # stale: its viewer has exited
+                else:
+                    raise OSError("another viewer is already running")
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     mask = os.umask(0o177)
     try:

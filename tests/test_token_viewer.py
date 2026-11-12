@@ -235,6 +235,14 @@ class SocketTests(unittest.TestCase):
                 report("result", "fn_a {}")
         self.assertIn("result: fn_a {}", self.stderr.getvalue())
 
+    def test_second_viewer_refuses_but_stale_socket_is_replaced(self) -> None:
+        """A live viewer keeps its socket; a dead one's file is reused."""
+        with self.assertRaisesRegex(OSError, "already running"):
+            viewer.listen(self.path)
+        self.server.close()  # the file stays, as after kill -9
+        self.server = viewer.listen(self.path)
+        self.assertIsNotNone(display.connect_viewer(self.path))
+
     def test_missing_or_foreign_viewer_is_not_used(self) -> None:
         """No socket, or another user's socket, means no tracing."""
         self.assertIsNone(display.connect_viewer(self.path + ".missing"))
