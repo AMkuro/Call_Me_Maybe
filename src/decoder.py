@@ -1,11 +1,15 @@
 """The constrained-decoding loop shared by name and value generation."""
 
 from collections.abc import Callable, Collection, Sequence
+from typing import Literal
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from .errors import PromptError
+from .model_port import Model
+
+SelectionMode = Literal["forced", "greedy"]
 
 
 class TokenChoice(BaseModel):
@@ -91,3 +95,26 @@ def generate(
                 "tokens": generated.copy(), "forced": len(allowed) == 1,
                 "raw_top": raw_top,
             }))
+
+
+def select_next_token(
+    model: Model,
+    ids: list[int],
+    allowed: list[int],
+    *,
+    include_raw_top: bool = False,
+) -> tuple[int, SelectionMode, int | None]:
+    """Select one ID without updating the sequence or controlling its loop.
+
+    A unique candidate needs no inference. Otherwise request logits once,
+    use the constrained argmax, and optionally report the raw argmax from
+    those same scores. Diagnostics never affect the selected token.
+    """
+    if not allowed:
+        raise PromptError("no allowed token can continue this value")
+    if len(allowed) == 1:
+        return allowed[0], "forced", None
+    logits = model.logits(ids)
+    token = choose_token(logits, allowed)
+    raw_top = int(np.argmax(logits)) if include_raw_top else None
+    return token, "greedy", raw_top
