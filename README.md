@@ -23,30 +23,18 @@ make clean
 make sdk-install  # unpack an SDK zip over llm_sdk (SDK_ZIP=<zip>, default llm_sdk.zip)
 ```
 
-`uv sync` alone also works. The dependencies are numpy, Pydantic, Rich (used
-only by the token viewer, a bonus feature) and the local `llm_sdk` (a path
-dependency); torch is installed as a dependency of the SDK. The SDK downloads
-the Qwen/Qwen3-0.6B model itself on first use.
+`uv sync` alone also works. The dependencies are numpy, Pydantic and the
+local `llm_sdk` (a path dependency); torch is installed as a dependency of the
+SDK. The SDK downloads the Qwen/Qwen3-0.6B model itself on first use.
 
 When stderr is a terminal, a live dashboard shows the selected function,
-current argument, token choices and diagnostic scores. Redirecting stderr
-produces ordinary result and warning lines instead of terminal controls.
-
-To watch each token decision step by step, start the viewer in another
-terminal before running the program:
-
-```sh
-uv run python -m src.viewer
-```
-
-While the viewer is running, the program sends it one event per token and
-stderr shows only the ordinary result and warning lines. For each token the
-viewer shows the ten highest raw logits, the same rows with disallowed tokens
-masked to negative infinity, the ten highest allowed tokens, and the selected
-token, next to the JSON generated so far. Forced tokens are marked `FORCED`
-without logits, because the model is not called for them. Without a viewer,
-or if it stops, the program falls back to the dashboard above; results are
-the same either way.
+current argument, token choices and diagnostic scores. For each token the
+model chooses, it also lists the ten highest raw logits, marking the tokens
+the constraints mask out and the selected token. Forced tokens are shown
+as forced, without logits, because the model is not called for them.
+Redirecting stderr produces warning lines instead of terminal controls.
+Either way, the run ends with one line per prompt, done or failed with
+its time in seconds, and a total.
 
 The program reads the function definitions and the prompts from
 `data/input/` and writes `data/output/function_calls.json`.
@@ -137,8 +125,7 @@ The SDK recomputes the whole input prefix at each forward pass, so both input
 length and generated length affect runtime. Forced structure and unambiguous
 name paths avoid forward passes. String masks parse the shared prefix once,
 then inspect only each candidate's new bytes. The dashboard reuses existing
-logits and performs no additional model inference. The viewer's top-ten
-extraction also reuses those logits, and runs only while a viewer is connected.
+logits and performs no additional model inference.
 
 Semantic accuracy and total runtime depend on the function definitions,
 requests and hardware. Valid JSON alone does not establish correct arguments.

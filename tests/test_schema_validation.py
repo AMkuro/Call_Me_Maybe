@@ -137,5 +137,5 @@ class ValidationFlowTests(unittest.TestCase):
             self.assertEqual(stdout.getvalue(), '')
             self.assertIn('description', stderr.getvalue())
             self.assertIn('parameter', stderr.getvalue())
-            self.assertIn('skipped', stderr.getvalue())
+            self.assertIn('failed', stderr.getvalue())
             self.assertNotIn('warning', output.read_text().lower())

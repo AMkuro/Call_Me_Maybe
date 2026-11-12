@@ -46,10 +46,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 try:
                     call = process_prompt(
                         user_prompt, functions, model, trie, vocab, report,
-                        report.top_k,
                     )
                 except PromptError as e:
-                    report("error", f"skipped: {e}")
+                    report("error", str(e))
                     skipped = True
                     continue
                 calls.append(call)

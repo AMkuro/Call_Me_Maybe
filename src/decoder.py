@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict
 
 from .errors import PromptError
 
+# Raw candidates per model-chosen token shown on the dashboard (ADR-0021).
+TOP_CANDIDATES = 10
+
 
 class TokenChoice(BaseModel):
     """One observed token decision; uncomputed diagnostics stay None."""
@@ -21,21 +24,21 @@ class TokenChoice(BaseModel):
     allowed_mass: float | None = None
     margin: float | None = None
     constrained: bool = False
-    # Viewer candidates (ADR-0021), filled only when generate gets top_k > 0:
-    # (id, logit, allowed) over the vocabulary, and (id, logit) over allowed.
-    raw: list[tuple[int, float, bool]] = []
-    masked: list[tuple[int, float]] = []
+    logit: float | None = None
+    # Highest raw logits, best first: (id, logit, allowed by the mask).
+    top: list[tuple[int, float, bool]] = []
 
 
 def _top(
-    scores: np.ndarray, ids: np.ndarray, k: int,
-) -> list[tuple[int, float]]:
-    """The ``k`` highest finite ``(id, logit)`` among ``ids``, best first."""
-    ids = ids[np.isfinite(scores[ids])]
-    if len(ids) > k:
-        ids = ids[np.argpartition(-scores[ids], k - 1)[:k]]
-    return sorted(((int(i), float(scores[i])) for i in ids),
-                  key=lambda pair: (-pair[1], pair[0]))
+    scores: np.ndarray, allowed: set[int],
+) -> list[tuple[int, float, bool]]:
+    """The ``TOP_CANDIDATES`` highest finite raw logits, best first."""
+    ids = np.flatnonzero(np.isfinite(scores))
+    if len(ids) > TOP_CANDIDATES:
+        ids = ids[np.argpartition(-scores[ids], TOP_CANDIDATES - 1)
+                  [:TOP_CANDIDATES]]
+    best = sorted(ids.tolist(), key=lambda i: (-scores[i], i))
+    return [(i, float(scores[i]), i in allowed) for i in best]
 
 
 def choose_token(logits: Sequence[float], allowed: Collection[int]) -> int:
@@ -65,16 +68,15 @@ def generate(
     allowed_next: Callable[[list[int]], list[int] | None],
     max_steps: int,
     on_token: Callable[[TokenChoice], None] | None = None,
-    top_k: int = 0,
 ) -> list[int]:
     """Generate tokens after ``ids`` until ``allowed_next`` returns None.
 
     Returns only the generated tokens. ``next_logits`` is the model's
     ``logits``. ``allowed_next`` gets the tokens generated so far. One
     allowed token is forced without asking the model. Raises PromptError
-    after ``max_steps`` tokens. With ``on_token`` and ``top_k`` > 0, each
-    model-chosen token also reports the ``top_k`` best raw and allowed
-    candidates from the same logits; they are not used for selection.
+    after ``max_steps`` tokens. With ``on_token``, a model-chosen token
+    also reports its logit and the raw top candidates from the same
+    logits; they are not used for selection.
 
     Effect: calls ``next_logits`` and the optional observation callback.
 
@@ -114,15 +116,9 @@ def generate(
                                           / weights.sum()),
                     "margin": float(ordered[-1] - ordered[-2]),
                     "constrained": raw_top not in allowed,
+                    "logit": float(scores[token]),
+                    "top": _top(scores, unique),
                 }
-                if top_k > 0:
-                    everything = np.arange(len(scores))
-                    diagnostics["raw"] = [
-                        (i, score, i in unique)
-                        for i, score in _top(scores, everything, top_k)
-                    ]
-                    diagnostics["masked"] = _top(
-                        scores, np.asarray(indices), top_k)
         generated.append(token)
         if on_token is not None:
             on_token(TokenChoice.model_validate({
