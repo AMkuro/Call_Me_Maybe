@@ -458,7 +458,7 @@ class GenerationProgress(Protocol):
 
     def name_token(
         self,
-        tokens: tuple[int, ...],
+        tokens: Sequence[int],
         *,
         mode: SelectionMode,
         raw_top: int | None,
@@ -488,11 +488,18 @@ ProtocolのPythonクラスとしての性質とSubjectの留保は§9.9に記す
 | value_token | 値ループで採用ID追加後 | tokenを採用ID、modeを方式、writtenを途中の値、stepをトークン数として表示 |
 | available | 診断要求と各通知の前に読む | 診断ストリームが利用可能か。isattyや生成の継続フラグではない |
 
-名前の通知にはtuple(generated)という不変のスナップショットを渡す。
-前案のSequence注釈だけでは実体のlistを書き換えられるため、生成中の可変listを表示へ渡す案は撤回する。
-表示がSDKのdecodeに渡すlistはこのtupleから作る別のlistであり、generatedには影響しない。
-値はbytes・整数・文字列Literalだけを渡すため、表示側から生成列や選択結果を書き換えられない。
-通知は同期で行い、Dashboardが原始データや選択履歴を保持しない。全メソッドの戻り値はNoneである。
+名前の通知は生成ループ所有のlistをSequence[int]として同期的に借用する。Sequenceは静的な読み取り専用契約であり、
+実行時の不変性を保証しない。表示側は要素を変更せず、呼び出し終了後までID列への参照を保持しない。
+必要なdecode・整形を呼び出し中に完了し、Dashboardには整形済みの文字列だけを保存する。
+採用IDはtokens[-1]、件数はlen(tokens)から読み、mode/raw_topの引数構成は維持する。
+値はbytes・整数・文字列Literalを渡す。全メソッドの戻り値はNoneであり、生成制御には使用しない。
+
+Sequenceはcollections.abcからimportする。表示側のdecode補助関数もSequence[int]を受け取り、
+既存Model.decodeのlist[int]境界でのみ`tokens if isinstance(tokens, list) else list(tokens)`とする案とする。
+通常の生成listにはコピーが発生せず、tuple等の場合だけこの境界でO(n)のlistコピーが1回発生する。
+Model.decodeと配布SDKの公開decode実装を確認したところ、listはそのまま下位のtokenizerへ渡される。
+下位実装内部のメモリ確保までゼロとは主張しない。入力listの非変更は実装後のSDK回帰試験でも確認する。
+悪意ある受け手による変更を実行時に防ぐ契約ではなく、表示実装のレビュー・型検査・回帰試験で守る。
 
 値のwrittenは、現在observedで行う語彙バイト列の連結をループ側へ移して作る。
 bytesの取得は生成済み内容の観測であり、表示用decode・repr・文字列整形ではない。
@@ -646,11 +653,11 @@ with終了：端末復帰 → 要約 → mainの終了コード
 0/1候補ではprefix_idsをそのまま選択関数へ渡し、複数候補のときだけprefix_ids + generatedを作る。
 上限ちょうどの終了は成功し、未完成で上限と空候補が同時なら上限エラーを優先する。
 
-- 名前: `token, mode, raw_top`を受け、ID追加後にtuple(generated)とmode/raw_topをname_tokenへ渡す。
-  採用IDはtupleの末尾、件数と警告のstepはそのlenから分かる。
+- 名前: `token, mode, raw_top`を受け、ID追加後にgeneratedをSequence[int]としてmode/raw_topとともにname_tokenへ同期的に渡す。
+  採用IDは列の末尾、件数と警告のstepはそのlenから分かる。
 - 値: 同じ3値を受け、ID追加後に語彙からwrittenを連結し、written・len(generated)・token・modeをvalue_tokenへ渡す。
   raw_topは要求していないのでNoneであり、表示にも渡さない。
-- どちらもprogressがない、またはavailableが偽なら観測用snapshot/bytesを作らない。
+- どちらもprogressがない、またはavailableが偽なら観測用bytesの構築・decodeを行わない。
   診断だけを省いてもmodeと採用ID、許可集合、終了条件、モデル入力は同じである。
 
 表示はこのデータから文字列とToken欄を作り、生成には何も返さない。
@@ -684,22 +691,143 @@ SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・�
 | 完成したFunctionCall | 既存のJSON・strict型・数値保持・スキーマ検証を維持。生成制約とは異なる境界 |
 | Dashboardのtotal/model/vocab view | 件数の導出値、同じModel、検証済みdictのview。内容の再検証やcopyをしない |
 
-現在のPydanticでの小規模な確認では、InstanceOfの4参照はすべて同じオブジェクトとして保持された。
-不正な参照型・余分なreport・frozenフィールドの代入は拒否され、辞書内容は意図どおり検証されなかった。
-この確認はLLMをロードしないスキーマの確認であり、アプリ実装やモデル性能の検証ではない。
+#### 参照保持の実測（2026-11-13、プロジェクト.venvのPydantic 2.14.3）
+
+以下はPythonオブジェクトからの通常コンストラクタ呼び出しの結果であり、JSON入力の保証ではない。
+ModelはSDKをロードせずobject.__new__で作り、型一致が初期化済み状態を保証しないことも確認した。
+
+| 構成 | model | vocab辞書 | functions辞書 | 内部FunctionDef / そのparameters・returns | trie / 子ノード |
+| --- | --- | --- | --- | --- | --- |
+| 通常のdictフィールド（ModelだけInstanceOf） | 同一 | 別辞書 | 別辞書 | 同一 | 同一 |
+| 推奨InstanceOfフィールド | 同一 | 同一 | 同一 | 同一 | 同一 |
+| 辞書・TrieをSkipValidation | 同一 | 同一 | 同一 | 同一 | 同一 |
+
+通常のdictは全項目を処理して新しい辞書を作り、不正なキー・bytes値・FunctionDef値を拒否した。
+既存モデルの同一性は、その内部の全検証が省略されることを意味しない。FunctionDefにはafter validatorがあり、
+既存インスタンスでも実行され得るため、資源組立でそれを再走査しないInstanceOfを選ぶ。
+InstanceOfはdictの型だけを検査し、不正な中身の辞書もそのまま受け入れた。
+SkipValidationはフィールド全体に適用するとlistを辞書欄へ、整数をTrie欄へ渡しても拒否しなかった。
+いずれもBaseModelの必須・extra検査は別であり、省略されない。
+model_constructも不正型を受け入れるため採らない。arbitrary_types_allowedを全体へ追加する必要はない。
+
+frozenは通常のフィールド代入と削除を拒否したが、元の辞書の更新、FunctionDef.parametersの変更、
+Trie.childrenの更新、Model内部属性の変更は可能だった。参照の共有は変更も共有する。
+したがって構築後に共有辞書・木を変更しないという所有規約は必要であり、frozenによる深い不変性とは区別する。
+既に検証済みの資源だけを_startで一度組み立てる範囲なら、4つのInstanceOfは明示引数よりわずかな宣言で
+資源セットの責務を表せる。未検証の外部データをこの構造体へ直接入れる用途には使わない。
+
+公式資料: [属性コピーとモデル再検証](https://docs.pydantic.dev/latest/concepts/models/#attribute-copies)、
+[浅い不変性](https://docs.pydantic.dev/latest/concepts/models/#faux-immutability)、
+[InstanceOf / SkipValidation](https://docs.pydantic.dev/latest/concepts/validators/#special-types)、
+[model_construct](https://docs.pydantic.dev/latest/concepts/models/#creating-models-without-validation)。
+一般的説明を公式資料で確認し、このプロジェクトの辞書・モデルについては以下の実測で裏付けた。
+
+<details>
+<summary>実行した一時検証コード（恒久的なアプリ・テストファイルには追加しない）</summary>
+
+プロジェクトルートから`PYTHONPATH=. .venv/bin/python /tmp/cmm-resource-probe.py`で実行。
+初回は検証データのreturnsに未定義descriptionを含めて拒否されたため、既存スキーマに合わせて除いた。
+以下は修正後に全assertが成功したコードである。
+
+```python
+import pydantic
+from pydantic import BaseModel, ConfigDict, InstanceOf, SkipValidation, ValidationError
+from src.model_port import Model
+from src.name_trie import NameTrie
+from src.schema import FunctionDef
+
+class Plain(BaseModel):
+    model_config = ConfigDict(frozen=True, extra='forbid', strict=True)
+    model: InstanceOf[Model]
+    vocab: dict[int, bytes]
+    functions: dict[str, FunctionDef]
+    trie: NameTrie
+
+class References(BaseModel):
+    model_config = ConfigDict(frozen=True, extra='forbid', strict=True)
+    model: InstanceOf[Model]
+    vocab: InstanceOf[dict[int, bytes]]
+    functions: InstanceOf[dict[str, FunctionDef]]
+    trie: InstanceOf[NameTrie]
+
+class Skipped(BaseModel):
+    model_config = ConfigDict(frozen=True, extra='forbid', strict=True)
+    model: InstanceOf[Model]
+    vocab: SkipValidation[dict[int, bytes]]
+    functions: SkipValidation[dict[str, FunctionDef]]
+    trie: SkipValidation[NameTrie]
+
+model = object.__new__(Model)  # SDK未初期化。型検査だけの限界を確認する。
+fn = FunctionDef(name='f', description='test', parameters={},
+                 returns={'type': 'string'})
+vocab = {1: b'a'}
+functions = {'f': fn}
+trie = NameTrie(children={1: NameTrie(name='f')})
+inputs = dict(model=model, vocab=vocab, functions=functions, trie=trie)
+
+def rejected(operation):
+    try:
+        operation()
+    except ValidationError:
+        return
+    raise AssertionError('expected ValidationError')
+
+print('Pydantic', pydantic.__version__)
+for cls in (Plain, References, Skipped):
+    r = cls(**inputs)
+    identities = [getattr(r, key) is value for key, value in inputs.items()]
+    assert identities == ([True, False, False, True] if cls is Plain else [True]*4)
+    assert r.functions['f'] is fn
+    assert r.functions['f'].parameters is fn.parameters
+    assert r.functions['f'].returns is fn.returns
+    assert r.trie.children[1] is trie.children[1]
+    print(cls.__name__, 'model/vocab/functions/trie:', identities, 'nested: same')
+    rejected(lambda: cls(**{k: v for k, v in inputs.items() if k != 'model'}))
+    rejected(lambda: cls(**inputs, report=None))
+    rejected(lambda: setattr(r, 'vocab', {}))
+    rejected(lambda: delattr(r, 'trie'))
+
+for field, wrong in [('model', object()), ('vocab', []),
+                     ('functions', []), ('trie', {})]:
+    rejected(lambda: References(**(inputs | {field: wrong})))
+for field, wrong in [('vocab', {'bad': 'bad'}), ('functions', {1: fn}),
+                     ('functions', {'f': object()})]:
+    rejected(lambda: Plain(**(inputs | {field: wrong})))
+    assert getattr(References(**(inputs | {field: wrong})), field) is wrong
+for field, wrong in [('vocab', []), ('functions', []), ('trie', 123)]:
+    assert getattr(Skipped(**(inputs | {field: wrong})), field) is wrong
+r = References(**inputs)
+assert r.model is model and r.vocab is vocab
+assert r.functions is functions and r.trie is trie
+vocab[2] = b'b'
+fn.parameters['late'] = fn.returns
+trie.children[2] = NameTrie()
+model.probe = True
+assert r.vocab[2] == b'b' and r.functions['f'].parameters['late'] is fn.returns
+assert r.trie.children[2] is trie.children[2] and r.model.probe
+assert References.model_construct(**(inputs | {'vocab': []})).vocab == []
+print('PASS: invalid roots/members, required/extra, frozen assignment/deletion, shallow mutability, construct bypass')
+```
+
+出力: Pydantic 2.14.3、Plainの4参照は`[True, False, False, True]`、
+References/Skippedはともに`[True, True, True, True]`、内部モデルは同一。
+不正型・不正な中身・必須/extra・代入/削除拒否・浅い可変性・construct迂回の全assert成功。
+このスキーマ確認はLLMのロード、推論性能、提案APIの実装回帰の検証ではない。
+
+</details>
 
 | 観測の処理 | 費用と判断 |
 | --- | --- |
 | modeの確定と返却 | 既存分岐で固定文字列を返すだけ。戻り値tupleが2値から3値になるが、語彙走査・推論・Pydantic検証は増えない |
-| 名前のtupleスナップショット | nトークン時にO(n)の参照copy。表示側のlist化にもO(n)が必要。旧TokenChoiceのlist copy1回に比べ、コンテナ変換が1回増え得る |
+| 名前のSequence借用 | 生成listをそのまま同期的に渡し、履歴コンテナをコピーしない。SDK境界ではlist以外の入力に限りO(n)のlist化。decode自体の費用は残る |
 | 値のbytes/件数/ID | bytes連結は旧observedと同じ。token・mode・lenの通知は定数個の値で、ID列のcopyは不要 |
 | トークン欄の整形 | 小さな文字列と表示フィールドを追加する。モデル推論も全語彙の追加処理も行わない |
 | 名前のraw_top | greedyで要求時だけ既存と同じargmax。forced・値・観測なしでは0回 |
 | 観測なし・利用不能 | 観測データの構築・変換を省く。資源構造体は全実行で共有し、プロンプトやステップごとに作らない |
 
-名前の不変スナップショットは、表示へ生成中のlistを渡さないという要件のために選ぶ。
-同じ履歴を永続的に二重保持するものではないが、コピー費用がゼロとは主張しない。
-現行も名前の履歴copy/decodeがあり、漸近的な計算量は変えない。追加の定数費用と全アプリ時間は実装後に測る。
+Sequence借用では旧TokenChoiceによる履歴コピーとtupleスナップショットを追加しない。
+呼び出し終了後に生成listが伸びても、保存済みの表示文字列は変化しない。
+非変更・非保持は実装の契約であり、型注釈だけで安全性を保証したとは扱わない。
 描画間隔を保つ案についても、新しい欄が5分制約へ無影響と実装前に保証しない。
 
 新しい実行時データクラスのGenerationResourcesはBaseModelとして検証を行う。
@@ -712,13 +840,13 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
 
 | 対象ファイル・関数 | 承認後の変更 |
 | --- | --- |
-| pipeline.py | Run/report/sayと4クロージャを廃止。GenerationResources、上位だけの資源受け取り、下位の明示依存、各ループと不変観測データを設ける |
+| pipeline.py | Run/report/sayと4クロージャを廃止。GenerationResources、上位だけの資源受け取り、下位の明示依存、各ループと同期借用の観測契約を設ける |
 | decoder.py | generate/TokenChoiceを廃止。SelectionMode型別名と、選択ID・方式・任意診断IDを返す1選択関数を設ける。choose_tokenを維持 |
 | progress.py | 上記の5メソッド・availableだけの型契約。コールバック・配送・実行状態は持たない |
 | display.py | name_token/value_tokenで採用IDと方式を整形し、途中内容と一緒に現在トークン欄を更新。元の描画・集計・復帰は維持 |
 | __main__.py | _startで資源を一度組み立て、_process_allへ渡す。Dashboardへは必要な参照と語彙の読み取り専用viewだけを接続 |
 | tools/measure_application.py | 同じ関数セットの評価バッチで資源を一度作り、process_promptへ渡す。測定方式を変えない |
-| 関連テスト | 共通選択と名前/値のループへ既存契約を移し、両段階のID/方式・不変通知・浅い資源検証を追加 |
+| 関連テスト | 共通選択と名前/値のループへ既存契約を移し、両段階のID/方式・非変更/非保持の通知・浅い資源検証を追加 |
 
 承認後、少なくとも以下をテスト先行で確認する。
 
@@ -727,7 +855,8 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
 2. modeが実際の分岐と一致し、表示あり/なし・リダイレクトで採用ID、モデル入力、forward回数、JSONが一致する。
    同点・raw最大がマスクされる場合・有限候補が1つだけの場合・不正logitsを既存規則で確認する。
 3. 名前と値の通知が、各ステップの採用ID/方式と一致する。値の同じbytesに複数IDが対応しても逆引きせず正しいIDを渡す。
-   名前snapshotを受け手が変更できず、次ステップの追加でも過去snapshotが変わらないことを確認する。
+   名前のlistが同一参照で渡され、表示が変更・保持せず同期的に整形することを確認する。
+   次ステップの追加でも保存済み表示文字列は変わらないこと、list以外のSDK境界変換と入力非変更も検査する。
 4. トークン欄・途中内容が同じステップで描画されること、引数/段階開始時にトークン欄が初期化されること、
    UTF-8途中・特殊トークン・取得不能表記・制御文字・画面幅・警告・要約・端末復帰を確認する。
    availableとisattyを分け、リダイレクトの警告、stderr故障後の生成継続も確認する。
@@ -736,12 +865,12 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
 6. 資源の必須/余分/不正な参照型・frozen代入拒否、参照の同一性、構築回数、functionsとtrieの対応を検査する。
    root型の検査と内容検査を混同せず、語彙の読み取り専用viewからの更新も拒否されることを確認する。
 7. GPU環境を確認し、make gpu-runで既知入力の前後JSONをcmp・スキーマ検証する。
-   精度試験と計時を分け、資源組立の費用、名前snapshot/list変換、表示あり/なし、全時間とばらつきを測る。
+   精度試験と計時を分け、資源組立の費用、Sequence借用/必要時のlist変換、表示あり/なし、全時間とばらつきを測る。
    forward回数不変だけを性能・5分制約への適合とみなさない。
 8. make install・make lint（Subjectのflake8/mypy）・make test、構造的な型適合と差分レビューを行う。
 
 案Aの基本構造と案Cの管理方針は承認済み。今回承認を求めるのは、具体的な資源構造体と浅い検証、
-選択方式の明示返却、両段階の観測契約、不変データと描画更新の方針である。
+選択方式の明示返却、両段階の観測契約、Sequenceの非変更・非保持と描画更新の方針である。
 コード・テスト・ADRは変更せず、§9の設計更新だけを行う。実装・GPU回帰・モデル性能の試験はまだ行わない。
 
 今回の確認結果（2026-11-13）: make install成功、flake8と必須mypy成功（45ソース）、既存188テスト成功。
