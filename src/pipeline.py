@@ -167,7 +167,8 @@ def generate_value(
     try:
         return generate(
             model.logits, ids, allowed_next, MAX_VALUE_STEPS,
-            on_token=observed if report is not None or trace is not None else None,
+            on_token=observed if (report is not None or trace is not None)
+            else None,
             top_k=10 if trace is not None else 0,
         )
     except PromptError as e:
