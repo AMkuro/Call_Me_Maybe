@@ -101,7 +101,7 @@ def generate(
         else:
             logits = next_logits(ids + generated)
             token = choose_token(logits, allowed)
-            diagnostics: dict[str, object] = {}
+            diagnostics = {}
             if on_token is not None:
                 scores = np.asarray(logits, dtype=float)
                 weights = np.exp(scores - np.max(scores))
