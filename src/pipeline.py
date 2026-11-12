@@ -62,6 +62,7 @@ def _trace_choice(
     preview: str, parameter: str = "",
 ) -> None:
     """Publish only the observed top candidates; never request extra logits."""
+
     def score(value: float) -> float | None:
         return value if math.isfinite(value) else None
 
