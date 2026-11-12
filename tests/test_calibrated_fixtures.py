@@ -24,7 +24,7 @@ class CalibratedFixtureTests(unittest.TestCase):
     """Check schema shape, reference labels and test-set coverage."""
 
     def test_fixture_consistency(self) -> None:
-        """Verify every input against its function definition and gold label."""
+        """Verify inputs against function definitions and gold labels."""
         for suite, distribution in FREQUENCIES.items():
             with self.subTest(suite=suite):
                 root = ROOT / suite
@@ -72,12 +72,12 @@ class CalibratedFixtureTests(unittest.TestCase):
                     for key, spec in parameters.items():
                         value = case["expected_parameters"][key]
                         kind = spec["type"]
-                        expected_type = {
+                        expected_types: dict[str, type | tuple[type, ...]] = {
                             "string": str,
                             "number": (int, float),
                             "boolean": bool,
-                        }[kind]
-                        self.assertIsInstance(value, expected_type)
+                        }
+                        self.assertIsInstance(value, expected_types[kind])
                         if kind == "number":
                             self.assertNotIsInstance(value, bool)
                         if kind == "boolean":
