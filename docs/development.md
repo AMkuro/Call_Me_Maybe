@@ -212,3 +212,39 @@ requirements. Accuracy, generation speed and CPU benchmarks are unmeasured.
 A complete submission needs unseen prompts/functions, 90%+ semantic accuracy,
 100% schema-valid JSON and the Subject's runtime evaluation, measured on a
 separately provisioned, recorded model benchmark.
+
+## Optional token-trace viewer (2026-11-12)
+
+The normal Subject CLI and its locked dependencies are unchanged. To observe
+individual constrained-decoding decisions, enable a local JSONL trace and open
+the separate Rich viewer in a second terminal:
+
+```sh
+# Terminal A — normal-speed generation; only ordinary stderr logs
+CMM_TRACE_FILE=/tmp/cmm-trace.jsonl uv run python -m src
+
+# Terminal B — slow replay (can also start after A has finished)
+uv run --with 'rich>=13,<15' python -m src.viewer \
+  --events /tmp/cmm-trace.jsonl --delay 0.35
+```
+
+The trace is opt-in and contains input prompts and token-level diagnostic data;
+treat it as private and do not commit it. It is reset when a traced run starts.
+A viewer can replay an already completed file or follow a growing one. On end,
+it holds the final screen until Ctrl+C; `--exit-on-end` disables that hold.
+Run the viewer in a real terminal; it does not open a new terminal itself.
+
+For non-forced decisions, each token is visualized in four phases: raw Top 10,
+those same raw candidates with forbidden logits shown as `-∞`, a separately
+computed allowed Top 10, then a highlight of the selected token and its JSON
+prefix. "Sort" is a display transition, not a second step in the decoder:
+actual selection still uses the masked `argmax`. One-allowed-token steps are
+forced without requesting logits and have a single display phase. The viewer
+does not pause or throttle the generating process.
+
+The trace adds token-label decode calls, O(V) top-k selection, and line-buffered
+local file writes only when enabled; it does *not* add forward passes. These
+costs have not been benchmarked against the five-minute runtime limit, so use
+the normal mode for submission/performance measurement. Rich is loaded only in
+`src.viewer` and acquired via the optional `uv run --with` invocation.
+The viewer and trace mode are development aids, not mandatory dependencies.
