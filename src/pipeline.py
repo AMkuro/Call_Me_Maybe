@@ -2,13 +2,15 @@
 
 import json
 
-from pydantic import BaseModel, ConfigDict, InstanceOf
+from pydantic import BaseModel, ConfigDict, InstanceOf, model_validator
 
 from .decoder import select_next_token
 from .errors import PromptError
 from .json_io import loads
 from .model_port import Model
-from .name_trie import NameTrie, leaf_name, max_name_steps, next_tokens
+from .name_trie import (
+    NameTrie, build_name_trie, leaf_name, max_name_steps, next_tokens,
+)
 from .progress import GenerationProgress
 from .prompt import build_name_prompt, build_parameters_prompt
 from .schema import FunctionCall, FunctionDef, build_parameters_model
@@ -21,9 +23,10 @@ MAX_VALUE_STEPS = 256
 class GenerationResources(BaseModel):
     """Hold already validated resources by reference for one application run.
 
-    Validate reference types, not dictionary contents or SDK initialization.
-    Frozen prevents field replacement; shared dictionaries remain mutable
-    and must not be changed after startup.
+    Fields are checked by reference type; vocab contents and SDK state are
+    not. The functions and the trie are checked to belong together, once,
+    at construction. Frozen prevents field replacement only; the shared
+    dictionaries remain mutable and must not be changed after startup.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
@@ -32,6 +35,22 @@ class GenerationResources(BaseModel):
     vocab: InstanceOf[dict[int, bytes]]
     functions: InstanceOf[dict[str, FunctionDef]]
     trie: InstanceOf[NameTrie]
+
+    @model_validator(mode="after")
+    def _trie_spells_functions(self) -> "GenerationResources":
+        """Require keys to be names and the trie to be built from them.
+
+        Comparing name sets alone would accept a leaf on another name's
+        path; rebuilding with this model's tokenizer checks the paths too.
+        """
+        for key, fn in self.functions.items():
+            if not isinstance(fn, FunctionDef) or fn.name != key:
+                raise ValueError(f"functions[{key!r}] is not a definition "
+                                 "with that name")
+        if self.trie != build_name_trie(list(self.functions),
+                                        self.model.encode):
+            raise ValueError("trie was not built from these functions")
+        return self
 
 
 def process_prompt(

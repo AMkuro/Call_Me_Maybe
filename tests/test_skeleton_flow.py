@@ -16,9 +16,9 @@ from src import pipeline
 from src.cli import Args
 from src.errors import PromptError
 from src.model_port import Model
-from src.name_trie import NameTrie
 from src.schema import FunctionCall, FunctionDef
 from src.skeleton import Forced, ValueSlot
+from test_constraints import encode_name
 
 
 def encode(text: str) -> list[int]:
@@ -194,12 +194,15 @@ class MainTests(unittest.TestCase):
         fixtures = {
             'parse_args': Args(output=self.output),
             'load_functions': {'f': definition()}, 'Model': model,
-            'load_vocab': {}, 'build_name_trie': NameTrie(),
+            'load_vocab': {},
         }
         for name, result in fixtures.items():
             self.stack.enter_context(patch.object(
                 entry, name, return_value=result,
             ))
+        self.stack.enter_context(patch.object(
+            Model, 'encode', side_effect=encode_name,
+        ))
         self.stack.enter_context(patch.object(
             Model, 'vocab_path', return_value='unused',
         ))

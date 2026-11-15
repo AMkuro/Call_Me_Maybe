@@ -12,7 +12,7 @@ from src.decoder import SelectionMode
 from src.display import Dashboard
 from src.errors import PromptError
 from src.model_port import Model
-from src.name_trie import build_name_trie
+from src.name_trie import EOS, build_name_trie
 from test_application import definition
 
 
@@ -22,7 +22,8 @@ class ObservationTests(unittest.TestCase):
     def test_diagnostic_decode_failure_preserves_name_selection(self) -> None:
         """A display-text failure cannot change a valid selected function."""
         fn = definition()
-        trie = build_name_trie([fn.name], lambda text: [1, 2])
+        trie = build_name_trie([fn.name],
+                               lambda text: [2] if text == EOS else [1, 2])
         model = object.__new__(Model)
         with patch.object(Model, 'encode', return_value=[9]), \
                 patch.object(Model, 'decode',
@@ -44,9 +45,8 @@ class ObservationTests(unittest.TestCase):
         first = definition().model_copy(update={'name': 'fn_a'})
         second = definition().model_copy(update={'name': 'fn_b'})
         functions = {first.name: first, second.name: second}
-        trie = build_name_trie(list(functions),
-                               lambda text: [1] if text.startswith('fn_a')
-                               else [2])
+        trie = build_name_trie(list(functions), lambda text: (
+            [0] if text == EOS else [1 if text.startswith('fn_a') else 2, 0]))
         model = object.__new__(Model)
         for scores, warned in (([3.0, 1.0, 2.0], True),
                                ([0.0, 1.0, 2.0], False)):
@@ -64,7 +64,8 @@ class ObservationTests(unittest.TestCase):
             self.assertEqual(result, second)
             self.assertEqual(dashboard.fields['value'], 'b')
             self.assertEqual(dashboard.fields['function'], 'fn_b')
-            self.assertEqual(dashboard.fields['token'], '2 (greedy)')
+            # The greedy choice of 2 is followed by the forced EOS 0.
+            self.assertEqual(dashboard.fields['token'], '0 (forced)')
             self.assertEqual('warning' in dashboard.fields, warned)
             self.assertEqual('name_selection_constrained' in output.getvalue(),
                              warned)
@@ -74,12 +75,18 @@ class ObservationTests(unittest.TestCase):
     def test_complete_call_and_value_progress_with_observation(self) -> None:
         """Real masks/validation keep JSON and model inputs in all modes."""
         fn = definition(a='number').model_copy(update={'name': 'f'})
-        trie = build_name_trie(['f'], lambda text: [7])
+
+        def encode(text: str) -> list[int]:
+            """Encode the name "f" as 7 and EOS as 0."""
+            return [7, 0] if text == 'f' + EOS else [0]
+
+        trie = build_name_trie(['f'], encode)
         model = object.__new__(Model)
         vocab = {1: b'1', 2: b'2', 3: b'}', 7: b'f'}
-        resource = pipeline.GenerationResources(
-            model=model, vocab=vocab, functions={'f': fn}, trie=trie,
-        )
+        with patch.object(Model, 'encode', side_effect=encode):
+            resource = pipeline.GenerationResources(
+                model=model, vocab=vocab, functions={'f': fn}, trie=trie,
+            )
         results = []
         inputs = []
         for mode in ('none', 'redirected', 'unavailable', 'broken'):
@@ -87,7 +94,8 @@ class ObservationTests(unittest.TestCase):
             with contextlib.redirect_stderr(output), \
                     patch.object(Model, 'encode', return_value=[]), \
                     patch.object(Model, 'decode', side_effect=lambda ids:
-                                 b''.join(vocab[i] for i in ids).decode()), \
+                                 b''.join(vocab.get(i, b'')
+                                          for i in ids).decode()), \
                     patch.object(Model, 'logits', side_effect=[
                         [0.0, 3.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0],
                         [0.0, 1.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0],

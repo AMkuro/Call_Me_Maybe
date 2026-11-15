@@ -3,10 +3,15 @@
 import json
 import tempfile
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from src.errors import PromptError, StartupError
-from src.name_trie import build_name_trie, leaf_name, next_tokens
+from src.name_trie import (
+    EOS, NameTrie, build_name_trie, leaf_name, next_tokens,
+)
 from src.prompt import build_name_prompt, build_parameters_prompt
 from src.values import allowed_value_tokens, is_value_complete
 from src.vocab import load_vocab
@@ -14,11 +19,11 @@ from test_application import definition
 
 
 def encode_name(text: str) -> list[int]:
-    """Encode characters plus the EOS marker for direct trie tests."""
-    suffix = '<|im_end|>'
-    if text.endswith(suffix):
-        return [ord(char) for char in text[:-len(suffix)]] + [0]
-    return [ord(char) for char in text]
+    """Encode characters, and each EOS as the one token 0 like the SDK."""
+    ids: list[int] = []
+    for index, part in enumerate(text.split(EOS)):
+        ids += ([0] if index else []) + [ord(char) for char in part]
+    return ids
 
 
 class TrieTests(unittest.TestCase):
@@ -44,9 +49,21 @@ class TrieTests(unittest.TestCase):
             self.assertEqual(leaf_name(
                 trie, encode_name(name + '<|im_end|>'),
             ), name)
-        self.assertIsNone(leaf_name(trie, [999999]))
-        with self.assertRaises(PromptError):
-            next_tokens(trie, [999999])
+        for lookup in (leaf_name, next_tokens):
+            with self.subTest(lookup=lookup.__name__):
+                with self.assertRaises(PromptError):
+                    lookup(trie, [999999])
+
+    def test_leaf_name_separates_unfinished_end_and_invalid(self) -> None:
+        """An unfinished valid path is None; an unknown path is an error."""
+        trie = build_name_trie(['ab', 'abc'], encode_name)
+        self.assertIsNone(leaf_name(trie, []))
+        self.assertIsNone(leaf_name(trie, encode_name('ab')))
+        self.assertEqual(leaf_name(trie, encode_name('ab') + [0]), 'ab')
+        for path in (encode_name('ax'), encode_name('ab') + [0, 0],
+                     encode_name('abc') + [0, 1]):
+            with self.subTest(path=path), self.assertRaises(PromptError):
+                leaf_name(trie, path)
 
     def test_encoding_failures_are_startup_errors(self) -> None:
         """Tokenizer failures cannot escape the startup boundary."""
@@ -56,8 +73,37 @@ class TrieTests(unittest.TestCase):
 
         with self.assertRaisesRegex(StartupError, 'tokenizer failed'):
             build_name_trie(['f'], fail)
-        with self.assertRaises(StartupError):
-            build_name_trie(['a', 'b'], lambda text: [1])
+
+    def test_bad_eos_and_encodings_are_rejected(self) -> None:
+        """Every path is name tokens followed by the one EOS token."""
+        def eos_as(ids: list[int]) -> Callable[[str], list[int]]:
+            """Encode EOS alone as ``ids`` and names with encode_name."""
+            return lambda text: ids if text == EOS else encode_name(text)
+
+        cases = {
+            'EOS is not one token': (['f'], eos_as([1, 2])),
+            'EOS encodes to nothing': (['f'], eos_as([])),
+            'path ends without EOS': (['f'], lambda text: [
+                ord(char) for char in text]),
+            'empty name path': (['f'], lambda text: [0]),
+            'EOS inside a name': (['a' + EOS + 'b'], encode_name),
+            'same path for two names': (['a', 'b'], lambda text: (
+                [0] if text == EOS else [1, 0])),
+        }
+        for case, (names, encode) in cases.items():
+            with self.subTest(case), self.assertRaises(StartupError):
+                build_name_trie(names, encode)
+
+    def test_names_only_on_leaves(self) -> None:
+        """Pydantic rejects unnamed leaves and named inner nodes."""
+        for build in (
+            lambda: NameTrie(),
+            lambda: NameTrie(children={1: NameTrie()}),
+            lambda: NameTrie(name='a', children={0: NameTrie(name='b')}),
+        ):
+            with self.assertRaises(ValidationError):
+                build()
+        NameTrie(children={0: NameTrie(name='a')})
 
 
 class VocabularyTests(unittest.TestCase):

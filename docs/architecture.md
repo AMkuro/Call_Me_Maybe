@@ -71,7 +71,7 @@ Subject の最終目標には正答率90%以上、JSON・型適合率100%、全�
 | 入力ファイル → `list[str]` | 1件以上。各要素の `prompt` は文字列。入力順を保持する | 1件ずつ処理し、同じ文字列を出力の `prompt` にコピーする |
 | SDK → `Model` | 公開 API の encode、decode、logits、語彙ファイルのパス | モデルを使用する処理だけがこのラッパーを受け取る |
 | 語彙ファイル → `dict[int, bytes]` | トークン ID と、そのトークンが表すバイト列 | 候補の追加で中間表現の型別文法が保たれるかを調べる |
-| 関数名 → `NameTrie` | `encode(名前 + EOS)` の経路と、葉にある元の関数名 | 定義に存在する名前の経路だけを生成時に許す |
+| 関数名 → `NameTrie` | `encode(名前 + EOS)` の経路と、葉にある元の関数名。葉は EOS の直後だけで、名前を持つのは葉だけ | 定義に存在する名前の経路だけを生成時に許す |
 | 成功した1件 → `FunctionCall` | ちょうど `prompt`、`name`、`parameters` を持つ | 検証済みの呼び出し記録として保存する |
 
 現在の設計が扱う型は `number`、`string`、`boolean`。関数定義の引数・戻り値とも、この3型で検証する。
@@ -110,6 +110,46 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 例えば `fn_add` と `fn_add_numbers` が共存するとき、`fn_add` の後で EOS と `_numbers` の経路が分かれる。
 未完成の名前では EOS を許さない。SDK の decode は特殊トークンを表示しないため、
 終了は表示文字列ではなく ID の経路で判断する。生成上限は名前の木の最長経路から計算する。
+
+#### 名前の木の不変条件と検証場所
+
+背景: 以前の`build_name_trie`は`encode(名前 + EOS)`の最後のIDを、EOSかどうか確かめずに終端としていた。
+`GenerationResources`は参照型だけを検査し、`functions`と`trie`が同じ関数セットから作られたことを保証しなかった。
+`leaf_name`は、未完成の正しい経路と存在しない経路のどちらにもNoneを返していた。
+
+| 不変条件 | 検証する場所・時点 |
+| --- | --- |
+| EOSは1トークンであり、各名前の経路は「1個以上の名前トークン + EOS」で、名前の途中にEOSを含まない | `build_name_trie`。`encode(EOS)`と`encode(名前 + EOS)`の結果で、起動時に1回 |
+| 異なる名前が同じ経路を持たない | `build_name_trie`。同じノードにEOSの葉を2つ作らない |
+| 葉であることと名前を持つことが一致する（名前のない葉・子を持つ名前付きノードがない） | `NameTrie`の`model_validator`。ノード構築時。`build_name_trie`は普通の辞書で木を作り、最後に`model_validate`で一度に検証するので、完成した木の全ノードが対象になる |
+| `functions`の各値が`FunctionDef`で、キーが`FunctionDef.name`と一致する | `GenerationResources`の`model_validator`。組立時に1回 |
+| `trie`が、この`functions`のキーとこの`model`のトークナイザから作った木と等しい | 同上。`build_name_trie`で作り直し、Pydanticモデルの`==`（全フィールドの再帰比較）で比べる |
+| 経路の照会: 正しい未完成の経路はNone、葉は名前、存在しない経路は`PromptError` | `leaf_name`と`next_tokens`が共通の`_node`で経路をたどる |
+
+EOSの根拠（2026-11-15、SDKの公開APIで実測）: `encode("<|im_end|>")`は`[151645]`の1トークン、
+その`decode`は空文字列だった。`get_path_to_tokenizer_file()`の`added_tokens`でも、id 151645は`special: true`である。
+既知の5関数はすべて`encode(名前 + EOS) == encode(名前) + [151645]`だった。
+名前に`<|im_end|>`を含む文字列は、経路の途中に151645が現れる（`a<|im_end|>b`は`[64, 151645, 65, 151645]`）。
+以前の実装はこれを拒否しなかったが、現在は起動時に拒否する。
+`vocab.json`に`<|im_end|>`はないので、語彙の辞書にEOSのIDはない。
+
+採用理由: 名前集合の比較だけでは、ある名前の葉が別の名前の経路に付いた木を見分けられない
+（集合は等しいが、生成した経路と返す名前が対応しない）。モデルの`encode`で作り直して比べれば、
+集合・重複・経路・EOSの終端をまとめて確かめられる。費用は関数数回の短い`encode`で、
+既知の5関数で中央値0.211 ms（20回、GPU環境、組立1回あたり）。生成のステップごとには何も追加しない。
+
+採らなかった案:
+
+- 名前集合と葉の重複だけを比べる案: 安価だが、上記の経路の取り違えを検出できない。
+- `GenerationResources`が`trie`を受け取らず内部で作る案: 不一致の状態を作れなくなるが、Pydanticでは
+  `PrivateAttr`と`model_post_init`などの仕組みが必要になり、現在の4フィールドの構造から離れる。
+- `NameTrie`にEOSのIDを持たせ、ノードの検証で終端の辺も調べる案: EOSのIDはトークナイザの事実なので、
+  木の外にある`encode`で調べるほうが責務が分かれる。
+
+保証の範囲: 検証は構築時の状態だけが対象である。`frozen`は浅く、`functions`の辞書・`FunctionDef`・`NameTrie.children`は
+構築後も変更できる。構築後に変更しないという所有規約で、検証済みの状態を保つ（§9.6）。
+`NameTrie(children={...})`に既存のノードを渡したときは、そのノードを再検証しない。
+そのノードは自身の構築時に検証済みだが、その後に`children`を書き換えていれば検出しない。
 
 名前選択はここで完了し、引数生成は別の入力列で始める。名前選択で生成した EOS は
 引数値の生成列に流用せず、選んだ名前を最終出力の JSON 文字列として組み立てる。
@@ -546,17 +586,18 @@ Pythonオブジェクトから構築し、外部JSONから読み込んだり保�
 | --- | --- | --- |
 | model | Modelのインスタンスであること | SDKの初期化済み状態や推論の正しさ |
 | vocab | dictのインスタンスであること | ID/bytesの全走査。内容はload_vocabで検証・変換済み |
-| functions | dictのインスタンスであること | 各FunctionDefや空/重複の再検証。load_functions/index_functionsが担当 |
-| trie | NameTrieのインスタンスであること | ノードの再構築・経路の再走査。build_name_trieが担当 |
+| functions | dictのインスタンスであること。各値がFunctionDefで、キーがそのnameと一致すること | 各FunctionDefの内容や空/重複の再検証。load_functions/index_functionsが担当 |
+| trie | NameTrieのインスタンスであること。functionsのキーとmodel.encodeから作り直した木と等しいこと | 生成中の再検証 |
 
 必須4フィールドの存在・取り違えた参照型・余分なreport等を拒否し、通常代入による参照の差し替えを拒否する。
-InstanceOf[dict[...]]はPython入力でdict自身の型だけを調べ、型引数が示す中身を検証しない点を明記する。
-構造体に入ったことを「辞書内容が検証済みである証明」とせず、生成元の順序と組に不変条件を持たせる。
+InstanceOf[dict[...]]はPython入力でdict自身の型だけを調べ、型引数が示す中身を検証しない。
+そのためfunctionsとtrieの対応は、model_validatorで別に検証する（§3.1「名前の木の不変条件と検証場所」）。
+辞書を作り直さないので、参照の同一性は保たれる。vocabの内容は検証しない。
 
 - mainは1実行分のGenerationResourcesを所有し、_process_all/process_promptへ同じ参照を渡す。
   測定ツールも同じ関数セットの評価バッチで一度作り、プロンプトごとには再構築しない。
 - _startは入力検証と出力準備の後にModel、vocab、同じfunctionsからのtrieを順に作って組み立てる。
-  必ずこの作成順を使い、異なる関数セットのtrieを後から混ぜない。対応の正しさを型チェックだけで保証したとは扱わない。
+  異なる関数セットやトークナイザのtrieを渡すと、組立時のmodel_validatorが拒否する。
 - frozenは浅い不変性である。辞書・木の子辞書・Model内部を深く不変化するものではない。
   共有辞書・木は構築完了後に書き換えず、モデルの内部処理は既存SDKの資源管理に任せる。
 - generated、入力の継続ids、JSON text、現在のslot、step、mode、raw_top、progressは含めない。
@@ -683,6 +724,7 @@ pipelineから具体的なdisplayをimportしない。displayはpipelineの資�
 ### 9.9 検証境界と性能費用
 
 GenerationResourcesはPydanticを実際に使う実行時クラスであり、4参照の型・必須フィールド・余分なフィールドを組立時に検証する。
+加えて、functionsのキーとFunctionDef.nameの一致、trieとfunctionsの対応を組立時に1回だけ検証する（§3.1）。
 SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・ロード成功・正しい推論の保証ではない。
 ローカルのスキーマ確認では、未初期化のModelインスタンスでもこの型検査を通ることも確認した。
 動作確認は既存Modelの例外処理とモデル回帰試験が担当する。
@@ -690,8 +732,8 @@ SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・�
 | データ | 検証場所・追加費用 |
 | --- | --- |
 | 外部のprompts/functions/vocab | 既存のloaderのstrict検証、空/重複・変換の検査を維持。資源構造体で内容を重ねて走査しない |
-| 名前の木・ValueSlot | 既存のPydanticモデル構築と木の経路検査を維持。資源の組立や表示で再構築しない |
-| 資源の4参照 | InstanceOfによる固定個数の検査。辞書内容・ノード数に比例するcopy/検証はしない |
+| 名前の木・ValueSlot | build_name_trieのEOS・経路検査とNameTrieのノード検証。表示では再構築しない |
+| 資源の4参照 | InstanceOfによる固定個数の検査と、functions/trieの対応検証（木を1回作り直して比較。既知5関数で中央値0.211 ms）。vocabの内容は走査しない |
 | モデルのlogits | choose_tokenの次元・数値・非有限値・許可ID検査を維持。診断のargmax以外の配列処理を加えない |
 | 採用ID・mode・raw_top | 内部の選択分岐から得るプリミティブ。新たなPydanticモデルへ毎ステップ包み直さない |
 | 完成したFunctionCall | 既存のJSON・strict型・数値保持・スキーマ検証を維持。生成制約とは異なる境界 |
