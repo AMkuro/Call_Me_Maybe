@@ -97,8 +97,7 @@ class ResourceTests(unittest.TestCase):
 
     def test_unvalidated_trie_is_rejected(self) -> None:
         """A trie that skipped its own validation has no names to match."""
-        trie = NameTrie.model_construct(eos=0, paths={'g': (103, 0),
-                                                      'f': (102, 0)})
+        trie = NameTrie.model_construct(paths={'g': (103, 0), 'f': (102, 0)})
         with self.assertRaises(AttributeError):
             GenerationResources(**(self.inputs | {'trie': trie}))
 

@@ -71,7 +71,7 @@ Subject の最終目標には正答率90%以上、JSON・型適合率100%、全�
 | 入力ファイル → `list[str]` | 1件以上。各要素の `prompt` は文字列。入力順を保持する | 1件ずつ処理し、同じ文字列を出力の `prompt` にコピーする |
 | SDK → `Model` | 公開 API の encode、decode、logits、語彙ファイルのパス | モデルを使用する処理だけがこのラッパーを受け取る |
 | 語彙ファイル → `dict[int, bytes]` | トークン ID と、そのトークンが表すバイト列 | 候補の追加で中間表現の型別文法が保たれるかを調べる |
-| 関数名 → `NameTrie` | `encode(名前 + EOS)` の経路と、葉にある元の関数名。葉は EOS の直後だけで、名前を持つのは葉だけ | 定義に存在する名前の経路だけを生成時に許す |
+| 関数名 → `NameTrie` | `encode(名前 + EOS)` の完成経路と、その末端（葉）にある元の関数名。名前を持つのは葉だけ | 定義に存在する名前の経路だけを生成時に許す |
 | 成功した1件 → `FunctionCall` | ちょうど `prompt`、`name`、`parameters` を持つ | 検証済みの呼び出し記録として保存する |
 
 現在の設計が扱う型は `number`、`string`、`boolean`。関数定義の引数・戻り値とも、この3型で検証する。
@@ -103,36 +103,39 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 `build_name_prompt`は辞書の`values()`から全関数の名前・説明・引数名と型を入力順に列挙する。
 利用者の依頼を添え、関数名だけを応答するよう指示する。`select_name`はこれをencodeし、自分の明示ループで木を照会して`select_next_token`を呼ぶ。
 生成中は `next_tokens` で現在の経路の子を取得し、その ID だけを次の候補にする。
-名前とEOSの後ろの葉に到達したら`leaf_name`で元の名前を取得し、`functions[name]`で定義を返す。
+名前とEOSを合わせた完成経路の末端（葉）に到達したら`leaf_name`で元の名前を取得し、`functions[name]`で定義を返す。
 読み込み時に作った辞書を使い、選択のたびに関数の配列を再走査しない（ADR-0016）。
 
 名前の末尾には Qwen の応答終了トークン `<|im_end|>` を含める。コード上の名前は `model_port.EOS` とし、
-`_start`と測定ツールが`build_name_trie(names, model.encode, EOS)`の引数として渡す。例えば `fn_add` と `fn_add_numbers` が共存するとき、`fn_add` の後で EOS と `_numbers` の経路が分かれる。
-未完成の名前では EOS を許さない。SDK の decode は特殊トークンを表示しないため、
-終了は表示文字列ではなく ID の経路で判断する。生成上限は名前の木の最長経路から計算する。
+`_start`と測定ツールが`build_name_trie(names, model.encode, EOS)`の引数として渡す。
+各名前の完成経路は`encode(名前 + EOS)`で、その末端に到達したことが名前の確定である。
+例えば `fn_add` と `fn_add_numbers` が共存するとき、`fn_add` の後で EOS の経路と `_numbers` の経路が分かれる。
+SDK の decode は特殊トークンを表示しないため、終了は表示文字列ではなく ID の経路で判断する。
+EOS のIDとの比較はしない。生成上限は名前の木の最長経路から計算する。
 
 #### 名前の木の不変条件と検証場所
 
-背景: 以前の`NameTrie`は`children`辞書を持つノードの木で、`frozen`でも子の追加・削除ができ、
-手で組んだ木はEOSの終端を確かめられなかった。また`GenerationResources`は、対応を確かめるために
-組立時に`model.encode`で木を作り直して比べており、Trieの責務を重ねて持っていた。
+背景: 以前の`NameTrie`は`children`辞書を持つノードの木で、`frozen`でも子の追加・削除ができた。
+また`GenerationResources`は、対応を確かめるために組立時に`model.encode`で木を作り直しており、Trieの責務を重ねて持っていた。
+その後の版はEOSを1トークンに限り、そのIDを`NameTrie.eos`に持って経路の末尾にだけあることを検査していたが、
+名前の終端を表すという目的にEOSのトークン数やIDは関係ないため、この制約を撤廃した（2026-11-15）。
 
-現在の`NameTrie`は、ノードの木ではなく「名前 → トークン経路」の記録と、そこから作る索引である。
+現在の`NameTrie`は、ノードの木ではなく「名前 → 完成経路」の記録と、そこから作る索引である。
+EOSの文字列は`build_name_trie`の入力にだけ使い、完成したTrieには保持しない。
 
 ```python
 class NameTrie(BaseModel):          # frozen, extra="forbid", strict
-    eos: int                        # 終端のトークンID（呼び出し側のEOS文字列から）
-    paths: Mapping[str, tuple[int, ...]]   # 名前 → 名前トークン + eos
+    paths: Mapping[str, tuple[int, ...]]   # 名前 → encode(名前 + EOS)
     _next: Mapping[tuple[int, ...], tuple[int, ...]]  # 正しい接頭辞 → 次に許すID
-    _names: Mapping[tuple[int, ...], str]             # 完全な経路 → 名前
+    _names: Mapping[tuple[int, ...], str]             # 完成経路 → 名前
 ```
 
 構築から確定までの流れ:
 
-1. `build_name_trie(names, encode, eos)`が、トークナイザに依存する処理をすべて行う。
-   `encode(eos)`が1トークンであることを確かめ、各名前の`encode(名前 + eos)`を`paths`の普通の辞書にする。
+1. `build_name_trie(names, encode, eos)`が、トークナイザに依存する唯一の処理として、
+   各名前の`encode(名前 + eos)`を`paths`の普通の辞書にする。`eos`のトークン数やIDは調べない。
    構築途中の可変な状態は、この関数内の辞書だけで、`NameTrie`としては存在しない。
-2. `NameTrie(eos=..., paths=...)`のPydantic検証で、型（strictなので経路はtupleだけ）を検査し、
+2. `NameTrie(paths=...)`のPydantic検証で、型（strictなので経路はtupleだけ）を検査し、
    `paths`をPydanticが作った新しい辞書の読み取り専用ビュー（`MappingProxyType`）にする。
 3. `model_validator(mode="after")`が全経路を検査し、通った後でだけ`_next`と`_names`を作る。
    どちらも、この検証の中で作った辞書の読み取り専用ビューで、値はtupleである。
@@ -140,25 +143,27 @@ class NameTrie(BaseModel):          # frozen, extra="forbid", strict
 
 | 不変条件 | 保証する場所 |
 | --- | --- |
-| EOSは1トークンである | `build_name_trie`（`encode(eos)`の長さ）。`NameTrie.eos`は`int`型 |
-| 各経路は「1個以上の名前トークン + eos」で、eosは末尾にだけある | `NameTrie`の`model_validator` |
-| 異なる名前が同じ経路を持たない。名前を持たないTrie（根が行き止まり）を拒否する | 同上 |
-| 終端ノードに子がない。非終端ノードに名前がない。名前のない行き止まりがない | 上の2つから導かれる。eosが末尾だけにあるので、完全な経路は他の経路の接頭辞にならない。索引はこの検査済みの経路からだけ作る |
+| 完成経路が空でない。名前を持たないTrie（根が行き止まり）を拒否する | `NameTrie`の`model_validator` |
+| 異なる名前が同じ完成経路を持たない | 同上 |
+| ある完成経路が、別の完成経路の真の接頭辞でない | 同上。全経路の真の接頭辞を集めた後で、各完成経路がそこに含まれないことを確かめるので、入力の順序に依らない |
+| 完成経路の末端だけが名前を持つ。終端ノードに子がない。名前のない行き止まりがない | 上の3つから導かれる。索引はこの検査済みの経路からだけ作り、名前は完成経路にだけ付ける。接頭辞はどれも、ある完成経路の途中なので次のIDを持つ |
 | 関数名とトークン経路の対応 | `paths`が名前と経路の組そのもので、`build_name_trie`が同じ`encode`の結果から作る |
 | 同じ名前の重複を黙ってまとめない | `build_name_trie`（`paths`の件数と`names`の件数を比べる） |
 | 経路の照会: 正しい未完成の経路はNone、葉は名前、存在しない経路は`PromptError` | `leaf_name`と`next_tokens`が共通の`_known_prefix`で索引を引く |
 | `functions`の各キーが`FunctionDef.name`と一致し、キー集合がTrieの名前集合と一致する | `GenerationResources`の`model_validator`。値が`FunctionDef`であることは`InstanceOf`で検査する |
 
-EOSを1トークンに限る理由: 名前の終端を1本の辺で表し、`select_name`は1ステップに1トークンを足す。
-現在のQwenの`<|im_end|>`は1トークンなので、この制約で困らない。
-`encode(名前 + EOS) == encode(名前) + encode(EOS)`は一般には保証されないので、不変条件にしていない。
+完成経路の接頭辞衝突は、EOSが不正だという意味ではない。完成経路への到達で名前を確定する方式では、
+その経路集合を曖昧さなく扱えないという構造上のエラーである。
+EOSが複数トークンなら、終端までの数ステップが経路に加わるだけで、`select_name`は同じく1トークンずつ進む。
+`encode(名前 + EOS) == encode(名前) + encode(EOS)`は一般には保証されないが、
+完成経路に矛盾がなければ不要である。指定したEOSがモデルにとって本当に終了記号として働くかは、`NameTrie`の検証の責務に含めない。
 
-EOSの根拠（2026-11-15、SDKの公開APIで実測）: `encode("<|im_end|>")`は`[151645]`の1トークン、
-その`decode`は空文字列だった。`get_path_to_tokenizer_file()`の`added_tokens`でも、id 151645は`special: true`である。
-既知の5関数はすべて`encode(名前 + EOS) == encode(名前) + [151645]`だった。
-名前に`<|im_end|>`を含む文字列は、経路の途中に151645が現れる（`a<|im_end|>b`は`[64, 151645, 65, 151645]`）。
-以前の実装はこれを拒否しなかったが、現在は起動時に拒否する。
-`vocab.json`に`<|im_end|>`はないので、語彙の辞書にEOSのIDはない。
+Qwenでの実測（2026-11-15、SDKの公開API）: `encode("<|im_end|>")`は`[151645]`の1トークン、
+その`decode`は空文字列で、`get_path_to_tokenizer_file()`の`added_tokens`でも`special: true`だった。
+既知の5関数の完成経路は、いずれも151645で終わる。`vocab.json`に`<|im_end|>`はないので、語彙の辞書にEOSのIDはない。
+これらは現在のモデルについての観察で、`NameTrie`が検査する条件ではない。
+名前に`<|im_end|>`を含む場合（`a<|im_end|>b`は`[64, 151645, 65, 151645]`）も、それだけでは拒否しない。
+同時に`a`という関数があると、`a`の完成経路が真の接頭辞になるので拒否する。
 
 採用理由:
 
@@ -172,19 +177,16 @@ EOSの根拠（2026-11-15、SDKの公開APIで実測）: `encode("<|im_end|>")`�
 
 採らなかった案:
 
-- 子を`MappingProxyType`で包んだノードの木を残す案: ノードごとに包むことと、各葉がEOSの辺の先にあることを
-  親から検査する処理が要る。また、手で組んだ部分木を通してノードを共有できるので、元の辞書の別名が残りやすい。
+- 子を`MappingProxyType`で包んだノードの木を残す案: ノードごとに包むことと、葉の位置を親から検査する処理が要る。
+  また、手で組んだ部分木を通してノードを共有できるので、元の辞書の別名が残りやすい。
 - 検証済みフラグを`PrivateAttr`に持たせる案: フラグは正しさを示さない。索引そのものが検証の結果なので、フラグは不要である。
 - `GenerationResources`で、名前集合に加えて経路も確かめる案: `model.encode`が必要になり、Trieの責務と重なる。
-
-EOSの実測（2026-11-15、SDKの公開API）: `encode("<|im_end|>")`は`[151645]`の1トークン、
-その`decode`は空文字列だった。`get_path_to_tokenizer_file()`の`added_tokens`でも、id 151645は`special: true`である。
-名前に`<|im_end|>`を含む文字列は、経路の途中に151645が現れる（`a<|im_end|>b`は`[64, 151645, 65, 151645]`）ので拒否される。
-`vocab.json`に`<|im_end|>`はないので、語彙の辞書にEOSのIDはない。
+- EOSを1トークンに限り、そのIDを`NameTrie`に持って末尾を検査する案（前の版）: 終端の判定は完成経路への到達で足り、
+  IDの検査は目的に不要な、トークナイザへの制約だった。
 
 不変性の範囲（Pydantic 2.14.3で実測・テスト済み）:
 
-- `NameTrie`: `eos`と`paths`の代入はfrozenで拒否する。`paths`と索引は読み取り専用ビューで、
+- `NameTrie`: `paths`の代入はfrozenで拒否する。`paths`と索引は読み取り専用ビューで、
   項目の追加・削除・置換は`TypeError`になる。`paths`の元になった呼び出し側の辞書を後で変えても影響しない
   （Pydanticが検証で新しい辞書を作り、その辞書への参照は外に出ない）。経路と次のIDはtupleで、
   `next_tokens`は毎回新しいlistを返す。入れ子の可変なノードはない。
@@ -447,7 +449,7 @@ TokenChoiceは変更前には観測時だけPydantic検証され、生成ID列�
 | 処理 | 名前の生成 | 値の生成 | 現行の所有者 |
 | --- | --- | --- | --- |
 | プロンプト・初期ID | 関数一覧から名前用入力 | 選択関数と固定JSONを含む入力 | 各pipeline関数 |
-| 終了判定 | leaf_nameでEOS後の葉を確認 | バイト列とslot.type・terminatorでis_value_complete | 各ループに直接記載 |
+| 終了判定 | leaf_nameで完成経路（名前+EOS）の葉を確認 | バイト列とslot.type・terminatorでis_value_complete | 各ループに直接記載 |
 | 許可ID | next_tokens | allowed_value_tokens | 各ループに直接記載 |
 | 生成上限 | 木の最長経路 | MAX_VALUE_STEPS | 各ループ。終了確認後、選択前に確認 |
 | 空候補・forced・モデル呼び出し | 同じ順序 | 同じ順序 | 共通の1トークン選択関数 |
@@ -783,7 +785,7 @@ SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・�
 | データ | 検証場所・追加費用 |
 | --- | --- |
 | 外部のprompts/functions/vocab | 既存のloaderのstrict検証、空/重複・変換の検査を維持。資源構造体で内容を重ねて走査しない |
-| 名前の木・ValueSlot | build_name_trieでEOSを1トークンと確かめ、NameTrieの検証で全経路を検査して索引を作る（起動時1回）。生成・表示では再検証しない |
+| 名前の木・ValueSlot | build_name_trieが各名前+EOSをencodeし、NameTrieの検証で全経路を検査して索引を作る（起動時1回）。生成・表示では再検証しない |
 | 資源の4参照 | InstanceOfの検査、functionsの読み取り専用の複製（N件）、キーと名前・名前集合の比較。既知5関数で中央値0.002 ms。encodeもTrieの再構築もしない。vocabの内容は走査しない |
 | モデルのlogits | choose_tokenの次元・数値・非有限値・許可ID検査を維持。診断のargmax以外の配列処理を加えない |
 | 採用ID・mode・raw_top | 内部の選択分岐から得るプリミティブ。新たなPydanticモデルへ毎ステップ包み直さない |

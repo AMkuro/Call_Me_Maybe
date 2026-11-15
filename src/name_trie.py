@@ -14,18 +14,18 @@ TokenPath = tuple[int, ...]
 
 
 class NameTrie(BaseModel):
-    """The token paths of the function names and the index to follow them.
+    """The full token paths of the function names and the index to follow.
 
-    ``paths`` maps each name to its token IDs, ending with the ``eos`` ID.
-    Validation checks every path and only then builds the private index
-    (each valid prefix -> the tokens that may follow it, and each full path
-    -> its name), so a NameTrie exists only in its checked, finished form.
-    Every stored container is a read-only copy owned by this object.
+    ``paths`` maps each name to its full path, the tokens of name + EOS
+    text. Reaching a full path completes that name. Validation checks the
+    paths and only then builds the private index (each valid prefix -> the
+    tokens that may follow it, and each full path -> its name), so a
+    NameTrie exists only in its checked, finished form. Every stored
+    container is a read-only copy owned by this object.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
-    eos: int
     paths: Mapping[str, TokenPath]
     _next: Mapping[TokenPath, tuple[int, ...]] = PrivateAttr()
     _names: Mapping[TokenPath, str] = PrivateAttr()
@@ -45,27 +45,31 @@ class NameTrie(BaseModel):
 
     @model_validator(mode="after")
     def _index_checked_paths(self) -> "NameTrie":
-        """Reject bad paths, then index them in name order.
+        """Reject ambiguous paths, then index them in name order.
 
-        A path is name tokens then EOS, with EOS nowhere else, so no full
-        path is a prefix of another: every full path is a leaf with a name,
+        Full paths must be non-empty, distinct, and never a proper prefix
+        of another full path; otherwise reaching a path could not tell that
+        a name is complete. Then every full path is a leaf with a name,
         every shorter prefix continues and has no name, and no prefix is a
-        dead end. Distinct paths keep two names from sharing one leaf.
+        dead end.
         """
         if not self.paths:
             raise ValueError("a name tree needs at least one name")
         following: dict[TokenPath, dict[int, None]] = {}
         names: dict[TokenPath, str] = {}
         for name, path in self.paths.items():
-            if len(path) < 2 or path[-1] != self.eos or self.eos in path[:-1]:
-                raise ValueError(f"{name!r}: {list(path)} is not name "
-                                 f"tokens followed by EOS {self.eos}")
+            if not path:
+                raise ValueError(f"{name!r} has an empty token path")
             if path in names:
                 raise ValueError(f"{name!r} and {names[path]!r} have the "
                                  "same token path")
             names[path] = name
             for end, token in enumerate(path):
                 following.setdefault(path[:end], {})[token] = None
+        for path, name in names.items():
+            if path in following:
+                raise ValueError(f"the token path of {name!r} is a prefix "
+                                 "of another name's path")
             following[path] = {}
         self._next = MappingProxyType(
             {prefix: tuple(tokens) for prefix, tokens in following.items()})
@@ -83,19 +87,16 @@ def build_name_trie(
 ) -> NameTrie:
     """Encode each name plus the caller's ``eos`` text into a NameTrie.
 
-    Tokenizer facts are read here: ``eos`` must be one token, because the
-    tree ends each name with one EOS edge and selection adds one token per
-    step. NameTrie checks the paths. Names are unique (loader); a repeated
+    The only tokenizer use: each full path is ``encode(name + eos)``. How
+    many tokens ``eos`` has, or which IDs, does not matter; NameTrie checks
+    that the paths are unambiguous. Names are unique (loader); a repeated
     name is still rejected rather than silently merged.
     """
     try:
-        eos_ids = encode(eos)
-        if len(eos_ids) != 1:
-            raise ValueError(f"{eos!r} is not one token: {eos_ids}")
         paths = {name: tuple(encode(name + eos)) for name in names}
         if len(paths) != len(names):
             raise ValueError("function names are not unique")
-        return NameTrie(eos=eos_ids[0], paths=paths)
+        return NameTrie(paths=paths)
     except (PromptError, ValueError) as e:  # ValidationError is a ValueError
         raise StartupError(f"cannot build name tree: {e}") from e
 
