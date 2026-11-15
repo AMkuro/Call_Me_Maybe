@@ -2,6 +2,10 @@
 
 from .errors import PromptError, StartupError
 
+# Qwen's response-ending special token; it ends every function-name path.
+# Judgment: provisional (ADR-0013).
+EOS = "<|im_end|>"
+
 
 class Model:
     """The model: a thin wrapper around the llm_sdk model.

@@ -1,6 +1,7 @@
 """Replaceable instruction settings and Qwen's non-thinking chat format."""
 
 import json
+from collections.abc import Mapping
 
 from .schema import FunctionDef, Scalar
 from .skeleton import Forced, build_skeleton
@@ -47,7 +48,7 @@ def _chat(instructions: str, content: str,
 
 
 def build_name_prompt(
-    user_prompt: str, functions: dict[str, FunctionDef]
+    user_prompt: str, functions: Mapping[str, FunctionDef]
 ) -> str:
     """Prompt for choosing the function name."""
     definitions = "\n".join(

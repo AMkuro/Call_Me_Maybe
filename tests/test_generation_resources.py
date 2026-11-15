@@ -1,4 +1,4 @@
-"""Shared resources keep references and reject a mismatched function set."""
+"""Shared resources combine validated parts and keep them consistent."""
 
 import unittest
 from typing import Any
@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
-from src.model_port import Model
-from src.name_trie import EOS, NameTrie, build_name_trie
+from src.model_port import EOS, Model
+from src.name_trie import NameTrie, build_name_trie
 from src.pipeline import GenerationResources
 from src.schema import FunctionDef, ParamSpec
 from test_constraints import encode_name
@@ -19,30 +19,51 @@ def function(name: str) -> FunctionDef:
                        returns=ParamSpec(type='string'))
 
 
+def trie_of(*names: str) -> NameTrie:
+    """Build a trie with the test tokenizer, outside the resource check."""
+    return build_name_trie(list(names), encode_name, EOS)
+
+
 class ResourceTests(unittest.TestCase):
-    """Assembly checks the envelope and the functions/trie correspondence."""
+    """Assembly checks names only; the trie owns its own paths."""
 
     def setUp(self) -> None:
-        """Use an unloaded Model whose encode is the test tokenizer."""
-        encode = patch.object(Model, 'encode', side_effect=encode_name)
+        """Fail any test that tokenizes at assembly (a rebuild needs it)."""
+        encode = patch.object(Model, 'encode', side_effect=AssertionError(
+            'encode called during assembly'))
         encode.start()
         self.addCleanup(encode.stop)
         self.inputs: dict[str, Any] = {
             'model': object.__new__(Model), 'vocab': {1: b'a'},
-            'functions': {'f': function('f')},
-            'trie': build_name_trie(['f'], encode_name),
+            'functions': {'g': function('g'), 'f': function('f')},
+            'trie': trie_of('g', 'f'),
         }
 
-    def test_all_references_and_nested_models_are_retained(self) -> None:
-        """No dictionary, function or tree is reconstructed at assembly."""
+    def test_references_and_read_only_functions(self) -> None:
+        """Model, vocab and trie are shared; functions is a frozen copy."""
         resource = GenerationResources(**self.inputs)
-        for key, value in self.inputs.items():
-            self.assertIs(getattr(resource, key), value)
-        self.assertIs(resource.functions['f'], self.inputs['functions']['f'])
-        self.assertIs(resource.functions['f'].parameters,
-                      self.inputs['functions']['f'].parameters)
-        self.assertIs(resource.functions['f'].returns,
-                      self.inputs['functions']['f'].returns)
+        for key in ('model', 'vocab', 'trie'):
+            self.assertIs(getattr(resource, key), self.inputs[key])
+        source = self.inputs['functions']
+        self.assertIsNot(resource.functions, source)
+        self.assertEqual(list(resource.functions), ['g', 'f'])  # input order
+        for key, fn in source.items():
+            self.assertIs(resource.functions[key], fn)  # no deep copy
+            self.assertIs(resource.functions[key].parameters, fn.parameters)
+
+    def test_functions_cannot_change_after_assembly(self) -> None:
+        """Neither the source dict nor the resource view breaks the match."""
+        resource = GenerationResources(**self.inputs)
+        source = self.inputs['functions']
+        source['h'] = function('h')
+        del source['f']
+        self.assertEqual(list(resource.functions), ['g', 'f'])
+        with self.assertRaises(TypeError):
+            resource.functions['h'] = function('h')  # type: ignore[index]
+        with self.assertRaises(TypeError):
+            del resource.functions['f']  # type: ignore[attr-defined]
+        with self.assertRaises(ValidationError):
+            resource.functions = {}
 
     def test_wrong_roots_missing_and_extra_fields_are_rejected(self) -> None:
         """Root checks do not pretend to validate SDK initialization."""
@@ -57,39 +78,36 @@ class ResourceTests(unittest.TestCase):
                 GenerationResources(**{k: v for k, v in self.inputs.items()
                                        if k != key})
 
-    def test_functions_and_trie_must_correspond(self) -> None:
-        """Name sets, keys and token paths must all match one function set."""
-        f, g = function('f'), function('g')
+    def test_functions_and_trie_names_must_match(self) -> None:
+        """Key sets and FunctionDef.name must agree with the trie's names."""
+        f, g, h = function('f'), function('g'), function('h')
         cases: dict[str, dict[str, Any]] = {
-            'trie has a missing function': {
-                'trie': build_name_trie(['f', 'g'], encode_name)},
+            'trie has a missing function': {'trie': trie_of('g', 'f', 'h')},
             'functions have a name not in the trie': {
-                'functions': {'f': f, 'g': g}},
-            'trie built from other names': {
-                'trie': build_name_trie(['g'], encode_name)},
+                'functions': {'g': g, 'f': f, 'h': h}},
+            'trie built from other names': {'trie': trie_of('h')},
             'key differs from FunctionDef.name': {
-                'functions': {'f': g}},
-            'value is not a FunctionDef': {'functions': {'f': object()}},
-            # Same name set, but the path does not spell "f" + EOS.
-            'path does not spell the name': {'trie': NameTrie(children={
-                ord('g'): NameTrie(children={0: NameTrie(name='f')})})},
-            'trie from another tokenizer': {'trie': build_name_trie(
-                ['f'], lambda text: [5] if text == EOS else [6, 5])},
+                'functions': {'g': g, 'f': h}},
+            'value is not a FunctionDef': {
+                'functions': {'g': g, 'f': object()}},
         }
         for case, change in cases.items():
             with self.subTest(case), self.assertRaises(ValidationError):
                 GenerationResources(**(self.inputs | change))
 
-    def test_vocab_is_not_rescanned_and_frozen_is_shallow(self) -> None:
-        """Vocab contents stay unchecked; aliases remain mutable."""
+    def test_unvalidated_trie_is_rejected(self) -> None:
+        """A trie that skipped its own validation has no names to match."""
+        trie = NameTrie.model_construct(eos=0, paths={'g': (103, 0),
+                                                      'f': (102, 0)})
+        with self.assertRaises(AttributeError):
+            GenerationResources(**(self.inputs | {'trie': trie}))
+
+    def test_vocab_is_not_rescanned_and_stays_shared(self) -> None:
+        """Vocab contents stay unchecked; the shared dict is not copied."""
         bad_vocab = {'bad-id': 'not-bytes'}
         resource = GenerationResources(**(self.inputs | {'vocab': bad_vocab}))
         self.assertIs(resource.vocab, bad_vocab)
         with self.assertRaises(ValidationError):
-            resource.vocab = {}
-        with self.assertRaises(ValidationError):
             del resource.trie
         bad_vocab['later'] = 'still mutable'
         self.assertIn('later', resource.vocab)
-        resource.functions['later'] = function('later')
-        self.assertIn('later', resource.functions)  # not rechecked later

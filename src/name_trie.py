@@ -1,99 +1,123 @@
 """A token-level tree of the function names (ADR-0011)."""
 
-from collections.abc import Callable, Sequence
-from typing import Any
+from collections.abc import Callable, Mapping, Sequence
+from types import MappingProxyType
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import (
+    BaseModel, ConfigDict, PrivateAttr, field_serializer, field_validator,
+    model_validator,
+)
 
 from .errors import PromptError, StartupError
 
-EOS = "<|im_end|>"
+TokenPath = tuple[int, ...]
 
 
 class NameTrie(BaseModel):
-    """A node. ``name`` is set on a leaf: the function this path spells.
+    """The token paths of the function names and the index to follow them.
 
-    Invariant (checked per node when it is constructed): a node is a leaf
-    exactly when it has a name. Which token ends a path is a tokenizer
-    fact, so build_name_trie checks that every leaf follows the EOS token.
-    Frozen is shallow: ``children`` must not be changed after construction.
+    ``paths`` maps each name to its token IDs, ending with the ``eos`` ID.
+    Validation checks every path and only then builds the private index
+    (each valid prefix -> the tokens that may follow it, and each full path
+    -> its name), so a NameTrie exists only in its checked, finished form.
+    Every stored container is a read-only copy owned by this object.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
-    children: dict[int, "NameTrie"] = {}
-    name: str | None = None
+    eos: int
+    paths: Mapping[str, TokenPath]
+    _next: Mapping[TokenPath, tuple[int, ...]] = PrivateAttr()
+    _names: Mapping[TokenPath, str] = PrivateAttr()
+
+    @field_validator("paths")
+    @classmethod
+    def _read_only(
+        cls, paths: Mapping[str, TokenPath],
+    ) -> Mapping[str, TokenPath]:
+        """Wrap the new dict Pydantic built, so no outside alias exists."""
+        return MappingProxyType(paths)
+
+    @field_serializer("paths")
+    def _plain(self, paths: Mapping[str, TokenPath]) -> dict[str, TokenPath]:
+        """Serialize the read-only view as an ordinary dict."""
+        return dict(paths)
 
     @model_validator(mode="after")
-    def _named_exactly_at_leaves(self) -> "NameTrie":
-        """Reject an unnamed leaf or a named node that continues."""
-        if (self.name is None) == (not self.children):
-            raise ValueError("a node must be either named or have children")
+    def _index_checked_paths(self) -> "NameTrie":
+        """Reject bad paths, then index them in name order.
+
+        A path is name tokens then EOS, with EOS nowhere else, so no full
+        path is a prefix of another: every full path is a leaf with a name,
+        every shorter prefix continues and has no name, and no prefix is a
+        dead end. Distinct paths keep two names from sharing one leaf.
+        """
+        if not self.paths:
+            raise ValueError("a name tree needs at least one name")
+        following: dict[TokenPath, dict[int, None]] = {}
+        names: dict[TokenPath, str] = {}
+        for name, path in self.paths.items():
+            if len(path) < 2 or path[-1] != self.eos or self.eos in path[:-1]:
+                raise ValueError(f"{name!r}: {list(path)} is not name "
+                                 f"tokens followed by EOS {self.eos}")
+            if path in names:
+                raise ValueError(f"{name!r} and {names[path]!r} have the "
+                                 "same token path")
+            names[path] = name
+            for end, token in enumerate(path):
+                following.setdefault(path[:end], {})[token] = None
+            following[path] = {}
+        self._next = MappingProxyType(
+            {prefix: tuple(tokens) for prefix, tokens in following.items()})
+        self._names = MappingProxyType(names)
         return self
+
+    @property
+    def names(self) -> frozenset[str]:
+        """Return the names reachable through the checked index."""
+        return frozenset(self._names.values())
 
 
 def build_name_trie(
-    names: Sequence[str], encode: Callable[[str], list[int]]
+    names: Sequence[str], encode: Callable[[str], list[int]], eos: str,
 ) -> NameTrie:
-    """Build the tree from the token ids of each name plus EOS.
+    """Encode each name plus the caller's ``eos`` text into a NameTrie.
 
-    Every path is the name's tokens followed by the single EOS token, so a
-    name that is a prefix of another is not a collision: the model chooses
-    to end or to continue. Names are unique and non-empty (loader).
-    The tree is built as plain dicts and validated once by NameTrie, so the
-    node checks see the finished tree.
-    Judgment: Qwen's response-ending token is provisional (ADR-0013).
+    Tokenizer facts are read here: ``eos`` must be one token, because the
+    tree ends each name with one EOS edge and selection adds one token per
+    step. NameTrie checks the paths. Names are unique (loader); a repeated
+    name is still rejected rather than silently merged.
     """
     try:
-        eos = encode(EOS)
-        if len(eos) != 1:
-            raise ValueError(f"{EOS} is not one token: {eos}")
-        root: dict[str, Any] = {"children": {}}
-        for name in names:
-            ids = encode(name + EOS)
-            if len(ids) < 2 or ids[-1] != eos[0] or eos[0] in ids[:-1]:
-                raise ValueError(
-                    f"{name!r} is not name tokens followed by EOS: {ids}"
-                )
-            node = root
-            for token in ids[:-1]:
-                node = node["children"].setdefault(token, {"children": {}})
-            if eos[0] in node["children"]:
-                raise ValueError(f"{name!r} has the same token path as "
-                                 "another function name")
-            node["children"][eos[0]] = {"name": name}
-        return NameTrie.model_validate(root)
+        eos_ids = encode(eos)
+        if len(eos_ids) != 1:
+            raise ValueError(f"{eos!r} is not one token: {eos_ids}")
+        paths = {name: tuple(encode(name + eos)) for name in names}
+        if len(paths) != len(names):
+            raise ValueError("function names are not unique")
+        return NameTrie(eos=eos_ids[0], paths=paths)
     except (PromptError, ValueError) as e:  # ValidationError is a ValueError
         raise StartupError(f"cannot build name tree: {e}") from e
 
 
-def _node(trie: NameTrie, prefix: Sequence[int]) -> NameTrie:
-    """Follow ``prefix``; a token that is not a child is an error."""
-    node = trie
-    try:
-        for token in prefix:
-            node = node.children[token]
-    except KeyError as e:
-        raise PromptError("invalid token path in name tree") from e
-    return node
+def _known_prefix(trie: NameTrie, prefix: Sequence[int]) -> TokenPath:
+    """Return ``prefix`` as an index key; an unknown path is an error."""
+    key = tuple(prefix)
+    if key not in trie._next:
+        raise PromptError("invalid token path in name tree")
+    return key
 
 
 def next_tokens(trie: NameTrie, prefix: Sequence[int]) -> list[int]:
     """Return the token ids that may follow ``prefix`` (empty at a leaf)."""
-    return list(_node(trie, prefix).children)
+    return list(trie._next[_known_prefix(trie, prefix)])
 
 
 def leaf_name(trie: NameTrie, prefix: Sequence[int]) -> str | None:
     """Return the name at a leaf, or None on a valid unfinished path."""
-    return _node(trie, prefix).name
+    return trie._names.get(_known_prefix(trie, prefix))
 
 
 def max_name_steps(trie: NameTrie) -> int:
     """Return the longest terminated path, without a fixed name-length cap."""
-    pending = [(trie, 0)]
-    longest = 0
-    while pending:
-        node, depth = pending.pop()
-        longest = max(longest, depth)
-        pending.extend((child, depth + 1) for child in node.children.values())
-    return longest
+    return max(map(len, trie._names))

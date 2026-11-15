@@ -16,7 +16,7 @@ from src.progress import Stage
 from src.errors import PromptError, StartupError
 from src.json_io import loads
 from src.loader import index_functions
-from src.model_port import Model
+from src.model_port import EOS, Model
 from src.name_trie import build_name_trie
 from src.pipeline import MAX_VALUE_STEPS, GenerationResources, process_prompt
 from src.schema import FunctionCall, FunctionDef, ParamType
@@ -108,7 +108,7 @@ def main() -> int:
                                     for fn in fixture["functions"])
         model = Model()
         vocab = load_vocab(Path(model.vocab_path()))
-        trie = build_name_trie(list(functions), model.encode)
+        trie = build_name_trie(list(functions), model.encode, EOS)
         resources = GenerationResources(model=model, vocab=vocab,
                                         functions=functions, trie=trie)
         results: list[dict[str, Any]] = []

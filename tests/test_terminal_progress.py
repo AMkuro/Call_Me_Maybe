@@ -12,7 +12,7 @@ from src.decoder import SelectionMode
 from src.display import Dashboard
 from src.errors import PromptError
 from src.model_port import Model
-from src.name_trie import EOS, build_name_trie
+from src.name_trie import NameTrie
 from test_application import definition
 
 
@@ -22,8 +22,7 @@ class ObservationTests(unittest.TestCase):
     def test_diagnostic_decode_failure_preserves_name_selection(self) -> None:
         """A display-text failure cannot change a valid selected function."""
         fn = definition()
-        trie = build_name_trie([fn.name],
-                               lambda text: [2] if text == EOS else [1, 2])
+        trie = NameTrie(eos=2, paths={fn.name: (1, 2)})
         model = object.__new__(Model)
         with patch.object(Model, 'encode', return_value=[9]), \
                 patch.object(Model, 'decode',
@@ -45,8 +44,7 @@ class ObservationTests(unittest.TestCase):
         first = definition().model_copy(update={'name': 'fn_a'})
         second = definition().model_copy(update={'name': 'fn_b'})
         functions = {first.name: first, second.name: second}
-        trie = build_name_trie(list(functions), lambda text: (
-            [0] if text == EOS else [1 if text.startswith('fn_a') else 2, 0]))
+        trie = NameTrie(eos=0, paths={'fn_a': (1, 0), 'fn_b': (2, 0)})
         model = object.__new__(Model)
         for scores, warned in (([3.0, 1.0, 2.0], True),
                                ([0.0, 1.0, 2.0], False)):
@@ -75,18 +73,12 @@ class ObservationTests(unittest.TestCase):
     def test_complete_call_and_value_progress_with_observation(self) -> None:
         """Real masks/validation keep JSON and model inputs in all modes."""
         fn = definition(a='number').model_copy(update={'name': 'f'})
-
-        def encode(text: str) -> list[int]:
-            """Encode the name "f" as 7 and EOS as 0."""
-            return [7, 0] if text == 'f' + EOS else [0]
-
-        trie = build_name_trie(['f'], encode)
+        trie = NameTrie(eos=0, paths={'f': (7, 0)})
         model = object.__new__(Model)
         vocab = {1: b'1', 2: b'2', 3: b'}', 7: b'f'}
-        with patch.object(Model, 'encode', side_effect=encode):
-            resource = pipeline.GenerationResources(
-                model=model, vocab=vocab, functions={'f': fn}, trie=trie,
-            )
+        resource = pipeline.GenerationResources(
+            model=model, vocab=vocab, functions={'f': fn}, trie=trie,
+        )
         results = []
         inputs = []
         for mode in ('none', 'redirected', 'unavailable', 'broken'):
@@ -205,13 +197,9 @@ class LoopObservationTests(unittest.TestCase):
 
     def test_name_forced_then_greedy_uses_same_borrowed_list(self) -> None:
         """A leaf at the name cap succeeds; only branching calls logits."""
-        from src.name_trie import NameTrie
-
         first = definition().model_copy(update={'name': 'a'})
         second = definition().model_copy(update={'name': 'b'})
-        trie = NameTrie(children={1: NameTrie(children={
-            2: NameTrie(name='a'), 3: NameTrie(name='b'),
-        })})
+        trie = NameTrie(eos=0, paths={'a': (1, 2, 0), 'b': (1, 3, 0)})
         model = object.__new__(Model)
         with contextlib.redirect_stderr(io.StringIO()):
             dashboard = Dashboard(1, model, {1: b'x', 2: b'a', 3: b'b'})
@@ -238,9 +226,10 @@ class LoopObservationTests(unittest.TestCase):
         self.assertIs(selected, second)
         llm.assert_called_once_with([9, 1])
         self.assertEqual([item[1:] for item in seen],
-                         [((1,), 'forced'), ((1, 3), 'greedy')])
-        self.assertEqual(seen[0][0], seen[1][0])
-        self.assertEqual(dashboard.fields['token'], '3 (greedy)')
+                         [((1,), 'forced'), ((1, 3), 'greedy'),
+                          ((1, 3, 0), 'forced')])
+        self.assertEqual(len({item[0] for item in seen}), 1)
+        self.assertEqual(dashboard.fields['token'], '0 (forced)')
         self.assertIn('step=2', dashboard.fields['warning'])
 
     def test_value_forced_and_duplicate_bytes_keep_actual_id(self) -> None:

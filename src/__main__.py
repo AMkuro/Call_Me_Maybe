@@ -11,7 +11,7 @@ from .cli import Args, parse_args
 from .display import Dashboard
 from .errors import PromptError, StartupError
 from .loader import load_functions, load_prompts
-from .model_port import Model
+from .model_port import EOS, Model
 from .name_trie import build_name_trie
 from .pipeline import GenerationResources, process_prompt
 from .schema import FunctionCall
@@ -57,7 +57,7 @@ def _start(
     prepare_output(args.output)
     model = Model()
     vocab = load_vocab(Path(model.vocab_path()))
-    trie = build_name_trie(list(functions), model.encode)
+    trie = build_name_trie(list(functions), model.encode, EOS)
     try:
         resources = GenerationResources(model=model, vocab=vocab,
                                         functions=functions, trie=trie)
