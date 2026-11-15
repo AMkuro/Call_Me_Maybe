@@ -85,6 +85,17 @@ class TrieTests(unittest.TestCase):
         self.assertEqual(leaf_name(trie, [97, 7]), 'a')
         self.assertEqual(max_name_steps(trie), 3)
 
+    def test_next_tokens_are_unique_in_first_seen_order(self) -> None:
+        """Shared prefixes list each next token once, in input order."""
+        trie = NameTrie(paths={'c': (1, 3, 0), 'a': (1, 2, 0),
+                               'b': (1, 3, 9, 0), 'd': (4, 0)})
+        self.assertEqual(next_tokens(trie, []), [1, 4])  # 1 seen three times
+        self.assertEqual(next_tokens(trie, [1]), [3, 2])  # not sorted
+        self.assertEqual(next_tokens(trie, [1, 3]), [0, 9])
+        self.assertEqual(next_tokens(trie, [1, 3, 0]), [])  # full path
+        self.assertEqual(leaf_name(trie, [1, 3, 9, 0]), 'b')
+        self.assertEqual(max_name_steps(trie), 4)
+
     def test_multi_token_eos_is_followed_to_the_full_path(self) -> None:
         """A terminator of several tokens is just more steps on the path."""
         def encode(text: str) -> list[int]:

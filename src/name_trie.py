@@ -1,8 +1,10 @@
 """A token-level tree of the function names (ADR-0011)."""
 
+from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
 
+from orderedsets import OrderedSet
 from pydantic import (
     BaseModel, ConfigDict, PrivateAttr, field_serializer, field_validator,
     model_validator,
@@ -55,7 +57,8 @@ class NameTrie(BaseModel):
         """
         if not self.paths:
             raise ValueError("a name tree needs at least one name")
-        following: dict[TokenPath, dict[int, None]] = {}
+        following: defaultdict[TokenPath, OrderedSet[int]] = defaultdict(
+            OrderedSet)
         names: dict[TokenPath, str] = {}
         for name, path in self.paths.items():
             if not path:
@@ -65,12 +68,12 @@ class NameTrie(BaseModel):
                                  "same token path")
             names[path] = name
             for end, token in enumerate(path):
-                following.setdefault(path[:end], {})[token] = None
+                following[path[:end]].add(token)
         for path, name in names.items():
-            if path in following:
+            if path in following:  # membership does not create an entry
                 raise ValueError(f"the token path of {name!r} is a prefix "
                                  "of another name's path")
-            following[path] = {}
+            following[path] = OrderedSet()
         self._next = MappingProxyType(
             {prefix: tuple(tokens) for prefix, tokens in following.items()})
         self._names = MappingProxyType(names)

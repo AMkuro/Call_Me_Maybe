@@ -23,9 +23,9 @@ make clean
 make sdk-install  # unpack an SDK zip over llm_sdk (SDK_ZIP=<zip>, default llm_sdk.zip)
 ```
 
-`uv sync` alone also works. The dependencies are numpy, Pydantic and the
-local `llm_sdk` (a path dependency); torch is installed as a dependency of the
-SDK. The SDK downloads the Qwen/Qwen3-0.6B model itself on first use.
+`uv sync` alone also works. The dependencies are numpy, Pydantic,
+orderedsets (an insertion-ordered set used by the name tree) and the local
+`llm_sdk` (a path dependency); torch is installed as a dependency of the SDK. The SDK downloads the Qwen/Qwen3-0.6B model itself on first use.
 
 When stderr is a terminal, a live dashboard shows the selected function,
 current argument, token choices and diagnostic scores. For each token the
