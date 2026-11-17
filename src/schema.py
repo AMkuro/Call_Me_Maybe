@@ -106,8 +106,6 @@ def build_parameters_model(fn: FunctionDef) -> type[BaseModel]:
     types: dict[ParamType, Any] = {
         "number": Number, "string": str, "boolean": bool,
     }
-    # Judgment: aliases preserve arbitrary JSON keys, including model_dump
-    # and leading underscores, without creating conflicting attributes.
     fields: dict[str, Any] = {
         f"parameter_{index}": (types[spec.type], Field(alias=name))
         for index, (name, spec) in enumerate(fn.parameters.items())

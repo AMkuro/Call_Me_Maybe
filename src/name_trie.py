@@ -67,8 +67,9 @@ class NameTrie(BaseModel):
                 raise ValueError(f"{name!r} and {names[path]!r} have the "
                                  "same token path")
             names[path] = name
-            for end, token in enumerate(path):
-                following[path[:end]].add(token)
+            for prefix_length, next_token in enumerate(path):
+                prefix = path[:prefix_length]
+                following[prefix].add(next_token)
         for path, name in names.items():
             if path in following:  # membership does not create an entry
                 raise ValueError(f"the token path of {name!r} is a prefix "
