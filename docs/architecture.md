@@ -214,13 +214,37 @@ EOS はユーザーが承認した暫定方式で、障害となった場合に�
 
 ### 3.2 決まったJSON構造と引数値を順に組み立てる（現行実装）
 
-`generate_parameters`は引数用プロンプトをencodeし、promptと選択した名前を
-`json.dumps`でエスケープしたJSON先頭を作る。この先頭をtextとモデル入力idsの両方へ追加する。
-`build_skeleton(fn)`の要素を定義の順に処理する。
+ADR-0026の追加条件に従い、`generate_parameters`は引数用プロンプトID列Pと、
+JSON本体の確定ID列Oを分離する。`prompt`と選択した`name`を`json.dumps`で表した先頭、
+および`build_skeleton(fn)`の各`Forced.text`を`_append_forced`で処理する。
+固定断片は一括encodeし、語彙バイト列・SDKのdecode・期待文字列の一致を確認してから、
+IDを1個ずつOへappendする。固定部分でlogitsは取得しない。
 
-- `Forced`なら、そのtextを最終文字列へ足し、encodeしたIDもモデル入力へ足す。
-- `ValueSlot`なら、引数名・型を通知して値表示とトークン数を初期化し、`generate_value`を呼ぶ。
-  返るのは値と区切りを含むID列である。SDKの公開decodeで文字列へ変換してtextへ足し、ID列も入力へ足す。
+- `ValueSlot`では既存どおり引数名・型を通知し、`generate_value`へP + Oのスナップショットを渡す。
+- 値ループはローカル生成列Vを1個ずつ確定する。値生成中の論理出力はO + V、分岐時のモデル入力はP + O + Vである。
+- 完成したVのSDK復号と語彙バイト列のUTF-8復号が一致したらOへ統合する。
+  このextendは確定済みIDの移管であり、再生成や再トークン化ではない。
+- 最後にO全体をSDKで復号し、語彙バイト列および検査済み各断片の連結と完全一致することを確認する。
+  この復号結果を返す。期待断片の文字列は照合用であり、別の出力本文としては使わない。
+
+#### 固定JSONの特殊表記とトークン境界
+
+背景: SDKは`<|im_end|>`等を特殊IDに変換し、decodeで除去する。
+固定JSONだけを元の文字列から組み立てる旧処理では、この文面と推論文脈の不一致を検出できなかった。
+実SDKで欠落を確認し、固定断片内の`<`をJSONの`\u003c`へ置換する方式を採用した。
+固定断片の`<`はJSON文字列の内部にしか現れず、解析後のprompt・name・引数キーの意味は変わらない。
+値ループの文法・選択IDは変更せず、特殊表記を含む値を再encodeしない。
+指示用プロンプトのChatMLや説明文の処理は、この変更の対象外である。
+
+`encode(A) + encode(B) == encode(A + B)`は要求しない。確定IDを保持し、その復号結果の文字列一致と、
+次の推論への全履歴の受け渡しを要求する。実SDKでは非正規の分割も受理されたが、logitsは変わった。
+UTF-8途中の単トークンを復号して連結せず、値はbytesで制約し、完成断片の境界で厳密に復号する。
+未知の語彙ID、不正UTF-8、encode/decode不一致はPromptErrorとし、文面を黙って失わない。
+
+代替の理由付き失敗だけでは有効入力の完了率を下げるため、意味を保つescapeを先に適用する。
+全文の再encodeや共有可変状態クラスは、確定IDや既存APIを変更する必要がないため採用しない。
+検証は`test_forced_json.py`の逐次append・境界文脈・不一致・Unicode・特殊表記・別ID同文面と、
+[実SDK・実モデル検証](research/2026-11-17-tokenwise-json.md)による。精度と時間の原記録は分ける。
 
 `ValueSlot.terminator`は途中の引数なら`,`、最後の引数なら`}`である。
 各値が自分の後ろの区切りを生成し、Forcedは同じ区切りを重ねない。最後にForcedで記録全体を閉じる。
@@ -238,6 +262,7 @@ EOS はユーザーが承認した暫定方式で、障害となった場合に�
 `validate_call` は全文を `json_io.loads` で読み、strictな`FunctionCall`で記録のキーと型を検証する。
 `call.name`が選択済みの`fn.name`と完全一致することも確認し、不一致なら期待した名前と実際の名前を含むPromptErrorにする。
 続いて `build_parameters_model` が選択済みの定義から作ったstrictなモデルで、必須引数、余分なキー、型を確認する。
+`process_prompt`は検証後の`call.prompt`と入力文面の完全一致も確認し、不一致をPromptErrorにする。
 内部のフィールド名とは別に元の引数名を保持し、`_private` や `model_dump` のような名前も出力に戻す。
 numberはJSON整数・小数の両方を受け付けるが、bool・数値文字列・全角数字からの変換はしない。
 booleanも整数・文字列から変換しない。これは構造化済みJSONの検査であり、依頼文の数値表現の解釈とは異なる。
@@ -357,7 +382,7 @@ stderr への書き込みで OSError が起きたら表示を止め、生成と�
 | 関数を選ぶ処理 | `pipeline.select_name`、`name_trie.py` | 入力された定義の `FunctionDef` を返す |
 | トークンを選ぶ方法 | `decoder.py` | 許可IDから1つ選び、ID・方式・任意診断を返す。列や上限は管理せず、観察で選択を変えない |
 | 引数値の許可文法・終了条件 | `values.py`、`generate_value` | 値とスロットのJSON区切りのID列を返す。文字列の中の区切り文字では終了しない |
-| JSON全文の組み立て | `generate_parameters`、`skeleton.py` | 値のdecode結果とForcedを最終文字列へ追加し、両方のID列をモデル入力へ継続する |
+| JSON全文の組み立て | `generate_parameters`、`skeleton.py` | 固定IDを1個ずつ確定し、値の確定IDを統合。完成Oの復号・バイト列・期待断片を照合する |
 | 値の生成上限 | `pipeline.MAX_VALUE_STEPS` | 超過を値の短縮で隠さず、理由付きの PromptError にする |
 | 引数の型と数値の扱い | `schema.py`、値の文法、保存 | 定義のキーを保持し、検証後の値を出力する。変更時は生成と検証の双方を確認する |
 | SDK との接続 | `model_port.py` の具体的な `Model` | 公開 API だけを使い、encode と logits は普通のリスト、decode は文字列を返す |
@@ -524,8 +549,8 @@ forcedならinclude_raw_top=Trueでもraw_topはNone、greedyならFalseの場�
 全logits返却やModel.last_logits等の隠れた状態、追加forward、softmax、上位k件は採らない。
 
 ここでのforcedは「許可IDが1つなので推論を省いた選択」である。
-build_skeletonのForcedは固定JSON部品で、選択ループのステップではない。
-固定部品をencodeした各IDについて、選択していないトークン観測や架空のstepを追加しない。
+build_skeletonのForcedは固定JSON部品で、ADR-0026に従い各IDを1個ずつ確定する。
+logitsによる選択は行わず、既存の名前/値用TUI通知やstep数にも加算しない。確定の逐次性は単体テストで検証する。
 
 ### 9.5 観測インターフェースの比較と推奨
 
@@ -752,8 +777,8 @@ main：resourcesから必要な参照を取り出してDashboardをwithで開始
   → _process_all(prompts, resources, ...) → process_prompt(prompt, resources, progress=...)
     → stage(select_name) → select_name(model, functions, trie, progress)
     → stage(generate_parameters) → generate_parameters(model, vocab, fn, progress)
-      → Forcedの追加 / parameter_started(name, type) → generate_value(model, vocab, slot, ids, progress)
-    → stage(validate_call) → validate_call → FunctionCall
+      → 固定IDの逐次確定 / parameter_started(name, type) → generate_value(model, vocab, slot, P + O, progress)
+    → O全文の復号・整合性検査 → stage(validate_call) → validate_call → prompt一致検査 → FunctionCall
   → 成功ごとに保存 → 完了/失敗通知 → 次の入力
 with終了：端末復帰 → 要約 → mainの終了コード
 ```
@@ -798,6 +823,7 @@ SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・�
 | 資源の4参照 | InstanceOfの検査、functionsの読み取り専用の複製（N件）、キーと名前・名前集合の比較。既知5関数で中央値0.002 ms。encodeもTrieの再構築もしない。vocabの内容は走査しない |
 | モデルのlogits | choose_tokenの次元・数値・非有限値・許可ID検査を維持。診断のargmax以外の配列処理を加えない |
 | 採用ID・mode・raw_top | 内部の選択分岐から得るプリミティブ。新たなPydanticモデルへ毎ステップ包み直さない |
+| 固定断片・完成値・JSON全文 | 語彙バイト列とSDK復号の一致、固定encodeの一致、全文と期待断片の一致。固定部分のforwardは増やさない |
 | 完成したFunctionCall | 既存のJSON・strict型・数値保持・スキーマ検証を維持。生成制約とは異なる境界 |
 | Dashboardのtotal/model/vocab view | 件数の導出値、同じModel、検証済みdictのview。内容の再検証やcopyをしない |
 

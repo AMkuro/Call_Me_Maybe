@@ -1,0 +1,57 @@
+{
+  "baseline": {
+    "make test": {
+      "exit": 0,
+      "tests": 210,
+      "seconds": 10.287
+    },
+    "make lint": {
+      "exit": 0,
+      "files": 48
+    }
+  },
+  "after": {
+    "make install": {
+      "exit": 0
+    },
+    "make test": {
+      "exit": 0,
+      "tests": 222,
+      "output": [
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 222 tests in 10.691s",
+        "",
+        "OK"
+      ]
+    },
+    "make lint": {
+      "exit": 0,
+      "output": "Success: no issues found in 49 source files\n"
+    },
+    "make subject": {
+      "exit": 0,
+      "output": "uv run --no-sync python -m tools.check_subject\nScope: layout, declared runtime dependencies, sample inputs, static imports. No model or full Subject certification.\nusage: __main__.py [-h] [--functions_definition FUNCTIONS_DEFINITION]\n                   [--input INPUT] [--output OUTPUT]\n\nGenerate JSON function calls with constrained decoding.\n\noptions:\n  -h, --help            show this help message and exit\n  --functions_definition FUNCTIONS_DEFINITION\n  --input INPUT\n  --output OUTPUT\n"
+    },
+    "make subject-audit": {
+      "exit": 0,
+      "output": "uv run --no-sync python -m tools.check_subject --submission\nScope: layout, declared runtime dependencies, sample inputs, static imports. No model or full Subject certification.\nmake lint\nmake[1]: Entering directory '/home/miwasaki/42Tokyo/Call_Me_Maybe'\nSuccess: no issues found in 49 source files\nmake[1]: Leaving directory '/home/miwasaki/42Tokyo/Call_Me_Maybe'\n"
+    }
+  },
+  "tdd": {
+    "before": {
+      "tests": 11,
+      "failures": 11,
+      "errors": 0
+    },
+    "after": {
+      "new_tests": 12,
+      "passed": 12
+    }
+  },
+  "independent_review": {
+    "substantive_findings": 0,
+    "relevant_tests_passed": 28
+  },
+  "independent_artifact_checks": "All 19 before/after calls parse, preserve prompt, have exact schema keys and primitive types; calls and forward counts equal; CLI11 outputs equal; final pipeline hash matches after.json"
+}

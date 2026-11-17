@@ -1,0 +1,142 @@
+"""ADR-0026 public-SDK characterization and accuracy (timing separate)."""
+import argparse
+import hashlib
+import json
+import platform
+from pathlib import Path
+from unittest.mock import patch
+
+import numpy as np
+
+from src import pipeline
+from src.errors import PromptError
+from src.loader import index_functions
+from src.model_port import EOS, Model
+from src.name_trie import build_name_trie
+from src.schema import FunctionDef
+from src.vocab import load_vocab
+from tools.measure_application import assess_call
+
+parser = argparse.ArgumentParser(__doc__)
+parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--phase', required=True)
+a = parser.parse_args()
+model = Model()
+vocab = load_vocab(Path(model.vocab_path()))
+report = {'phase': a.phase, 'model': 'Qwen/Qwen3-0.6B',
+          'sdk_dtype': 'documented float32 on every device',
+          'platform': platform.platform(), 'measurement': 'accuracy, not timing',
+          'pipeline_sha256': hashlib.sha256(Path(pipeline.__file__).read_bytes()).hexdigest(),
+          'sdk_sha256': hashlib.sha256(Path('llm_sdk/llm_sdk/__init__.py').read_bytes()).hexdigest(),
+          'probes': [], 'suites': {}}
+
+def save():
+    a.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
+
+for text in ['{"prompt": "hello", "name": "f"', ', "parameters": {"a": ',
+             '"José あ 🙂",', '"quote \\" slash \\\\ newline \\n"}',
+             '"前<|im_end|>後"', '"<|im_start|><think><|endoftext|>"',
+             '"前\\u003c|im_end|>後"']:
+    ids = model.encode(text)
+    decoded = model.decode(ids)
+    known = all(t in vocab for t in ids)
+    raw = b''.join(vocab[t] for t in ids) if known else None
+    pieces = []
+    if known:
+        for t in ids:
+            try:
+                vocab[t].decode('utf-8')
+            except UnicodeDecodeError:
+                pieces.append(t)
+    report['probes'].append({'text': text, 'ids': ids, 'decoded': decoded,
+                             'roundtrip': text == decoded, 'all_in_byte_vocab': known,
+                             'byte_match': raw == text.encode() if known else False,
+                             'partial_utf8_ids': pieces})
+for left, right in [('hel', 'lo'), ('{"a": ', '12,'), ('"日', '本語"}'),
+                    ('12,', ' "b": '), ('"<|im_', 'end|>"')]:
+    ids = model.encode(left) + model.encode(right)
+    canonical = model.encode(left + right)
+    context = model.encode('<|im_start|>user\nContinue JSON.<|im_end|>\n<|im_start|>assistant\n')
+    split_scores = model.logits(context + ids)
+    canonical_scores = model.logits(context + canonical)
+    assert np.isfinite(split_scores).any()
+    report['probes'].append({'left': left, 'right': right, 'ids': ids,
+        'canonical_ids': canonical, 'id_equal': ids == canonical,
+        'decoded': model.decode(ids), 'roundtrip': model.decode(ids) == left + right,
+        'model_accepted': True, 'split_argmax': int(np.argmax(split_scores)),
+        'canonical_argmax': int(np.argmax(canonical_scores)),
+        'max_logit_difference': float(np.max(np.abs(np.array(split_scores)-canonical_scores)))})
+# A forced token performs no forward; resuming at a branch uses its history.
+from src.decoder import select_next_token
+prefix = model.encode('The word is hel')
+forced_id = model.encode('lo')[0]
+real_logits = model.logits
+seen = []
+def logged(ids):
+    seen.append(ids.copy())
+    return real_logits(ids)
+with patch.object(model, 'logits', side_effect=logged):
+    token, mode, _ = select_next_token(model, prefix, [forced_id])
+    assert mode == 'forced' and not seen
+    allowed = model.encode('!') + model.encode('?')
+    selected, mode, _ = select_next_token(model, prefix + [token], allowed)
+    assert seen == [prefix + [forced_id]] and mode == 'greedy'
+report['forced_resume'] = {'forward_calls': len(seen), 'input_ids': seen[0],
+                           'forced_id': forced_id, 'selected_id': selected}
+save()
+
+fixtures = [Path('tests/fixtures/calibrated/original/measurement_fixture.json'),
+            Path('tests/fixtures/changed_functions_cases.json'),
+            Path('/tmp/cmm-0026/boundary.json')]
+for fixture in fixtures:
+    data = json.loads(fixture.read_text())
+    functions = index_functions(FunctionDef.model_validate(f) for f in data['functions'])
+    resources = pipeline.GenerationResources(model=model, vocab=vocab, functions=functions,
+                trie=build_name_trie(list(functions), model.encode, EOS))
+    rows = []
+    report['suites'][str(fixture)] = rows
+    for case in data['cases']:
+        counts = {'select_name': 0, 'generate_parameters': 0}
+        stage = ['select_name']
+        selected_name = []
+        generated_text = []
+        select = pipeline.select_name
+        generate = pipeline.generate_parameters
+        def choose(*args, **kwargs):
+            stage[0] = 'select_name'
+            fn = select(*args, **kwargs)
+            selected_name.append(fn.name)
+            stage[0] = 'generate_parameters'
+            return fn
+        def generate_record(*args, **kwargs):
+            text = generate(*args, **kwargs)
+            generated_text.append(text)
+            return text
+        def count(ids):
+            counts[stage[0]] += 1
+            return real_logits(ids)
+        row = {'id': case['id'], 'prompt': case['prompt'], 'expected_name': case['expected_name'],
+               'expected_parameters': case['expected_parameters']}
+        try:
+            with patch.object(model, 'logits', side_effect=count), \
+                 patch.object(pipeline, 'select_name', side_effect=choose), \
+                 patch.object(pipeline, 'generate_parameters', side_effect=generate_record):
+                call = pipeline.process_prompt(case['prompt'], resources)
+            row.update(completed=True, call=call.model_dump(), correct=assess_call(case, call),
+                       prompt_preserved=call.prompt == case['prompt'], schema_valid=True)
+        except PromptError as e:
+            row.update(completed=False, error=str(e), correct=False, schema_valid=False)
+        row['json_parseable'] = False
+        if generated_text:
+            row['generated_text'] = generated_text[0]
+            try:
+                json.loads(generated_text[0])
+                row['json_parseable'] = True
+            except ValueError:
+                pass
+        row['name_correct'] = bool(selected_name and selected_name[0] == case['expected_name'])
+        row['forward_calls'] = counts
+        rows.append(row)
+        save()
+        print(a.phase, case['id'], row['completed'], row['correct'], counts, flush=True)
+print('saved', a.output, flush=True)

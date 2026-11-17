@@ -1,0 +1,790 @@
+{
+  "phase": "after",
+  "model": "Qwen/Qwen3-0.6B",
+  "sdk_dtype": "documented float32 on every device",
+  "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.39",
+  "measurement": "accuracy, not timing",
+  "pipeline_sha256": "3751365a1bb296470cb2f68e9d13ac269a05ac681589c7a5292185654b14153c",
+  "sdk_sha256": "547950f3e58eca9b996d4fd12771713204b480de65a56bacb96b10362ab5d84c",
+  "probes": [
+    {
+      "text": "{\"prompt\": \"hello\", \"name\": \"f\"",
+      "ids": [
+        4913,
+        40581,
+        788,
+        330,
+        14990,
+        497,
+        330,
+        606,
+        788,
+        330,
+        69,
+        1
+      ],
+      "decoded": "{\"prompt\": \"hello\", \"name\": \"f\"",
+      "roundtrip": true,
+      "all_in_byte_vocab": true,
+      "byte_match": true,
+      "partial_utf8_ids": []
+    },
+    {
+      "text": ", \"parameters\": {\"a\": ",
+      "ids": [
+        11,
+        330,
+        13786,
+        788,
+        5212,
+        64,
+        788,
+        220
+      ],
+      "decoded": ", \"parameters\": {\"a\": ",
+      "roundtrip": true,
+      "all_in_byte_vocab": true,
+      "byte_match": true,
+      "partial_utf8_ids": []
+    },
+    {
+      "text": "\"José あ 🙂\",",
+      "ids": [
+        1,
+        96956,
+        963,
+        220,
+        29491,
+        27484,
+        497
+      ],
+      "decoded": "\"José あ 🙂\",",
+      "roundtrip": true,
+      "all_in_byte_vocab": true,
+      "byte_match": true,
+      "partial_utf8_ids": []
+    },
+    {
+      "text": "\"quote \\\" slash \\\\ newline \\n\"}",
+      "ids": [
+        1,
+        2949,
+        7245,
+        36626,
+        24984,
+        39027,
+        1124,
+        77,
+        9207
+      ],
+      "decoded": "\"quote \\\" slash \\\\ newline \\n\"}",
+      "roundtrip": true,
+      "all_in_byte_vocab": true,
+      "byte_match": true,
+      "partial_utf8_ids": []
+    },
+    {
+      "text": "\"前<|im_end|>後\"",
+      "ids": [
+        1,
+        24562,
+        151645,
+        73382,
+        1
+      ],
+      "decoded": "\"前後\"",
+      "roundtrip": false,
+      "all_in_byte_vocab": false,
+      "byte_match": false,
+      "partial_utf8_ids": []
+    },
+    {
+      "text": "\"<|im_start|><think><|endoftext|>\"",
+      "ids": [
+        1,
+        151644,
+        151667,
+        151643,
+        1
+      ],
+      "decoded": "\"<think>\"",
+      "roundtrip": false,
+      "all_in_byte_vocab": false,
+      "byte_match": false,
+      "partial_utf8_ids": []
+    },
+    {
+      "text": "\"前\\u003c|im_end|>後\"",
+      "ids": [
+        1,
+        24562,
+        3770,
+        15,
+        15,
+        18,
+        66,
+        91,
+        318,
+        6213,
+        91,
+        29,
+        73382,
+        1
+      ],
+      "decoded": "\"前\\u003c|im_end|>後\"",
+      "roundtrip": true,
+      "all_in_byte_vocab": true,
+      "byte_match": true,
+      "partial_utf8_ids": []
+    },
+    {
+      "left": "hel",
+      "right": "lo",
+      "ids": [
+        49122,
+        385
+      ],
+      "canonical_ids": [
+        14990
+      ],
+      "id_equal": false,
+      "decoded": "hello",
+      "roundtrip": true,
+      "model_accepted": true,
+      "split_argmax": 198,
+      "canonical_argmax": 198,
+      "max_logit_difference": 2.844806671142578
+    },
+    {
+      "left": "{\"a\": ",
+      "right": "12,",
+      "ids": [
+        4913,
+        64,
+        788,
+        220,
+        16,
+        17,
+        11
+      ],
+      "canonical_ids": [
+        4913,
+        64,
+        788,
+        220,
+        16,
+        17,
+        11
+      ],
+      "id_equal": true,
+      "decoded": "{\"a\": 12,",
+      "roundtrip": true,
+      "model_accepted": true,
+      "split_argmax": 330,
+      "canonical_argmax": 330,
+      "max_logit_difference": 0.0
+    },
+    {
+      "left": "\"日",
+      "right": "本語\"}",
+      "ids": [
+        1,
+        8903,
+        21894,
+        102819,
+        9207
+      ],
+      "canonical_ids": [
+        1,
+        101059,
+        102819,
+        9207
+      ],
+      "id_equal": false,
+      "decoded": "\"日本語\"}",
+      "roundtrip": true,
+      "model_accepted": true,
+      "split_argmax": 698,
+      "canonical_argmax": 698,
+      "max_logit_difference": 1.410684585571289
+    },
+    {
+      "left": "12,",
+      "right": " \"b\": ",
+      "ids": [
+        16,
+        17,
+        11,
+        330,
+        65,
+        788,
+        220
+      ],
+      "canonical_ids": [
+        16,
+        17,
+        11,
+        330,
+        65,
+        788,
+        220
+      ],
+      "id_equal": true,
+      "decoded": "12, \"b\": ",
+      "roundtrip": true,
+      "model_accepted": true,
+      "split_argmax": 16,
+      "canonical_argmax": 16,
+      "max_logit_difference": 0.0
+    },
+    {
+      "left": "\"<|im_",
+      "right": "end|>\"",
+      "ids": [
+        22476,
+        91,
+        318,
+        62,
+        408,
+        91,
+        9877
+      ],
+      "canonical_ids": [
+        1,
+        151645,
+        1
+      ],
+      "id_equal": false,
+      "decoded": "\"<|im_end|>\"",
+      "roundtrip": true,
+      "model_accepted": true,
+      "split_argmax": 4710,
+      "canonical_argmax": 151645,
+      "max_logit_difference": 16.200621128082275
+    }
+  ],
+  "suites": {
+    "tests/fixtures/calibrated/original/measurement_fixture.json": [
+      {
+        "id": "original-01",
+        "prompt": "What do you get when you add 14 and 9?",
+        "expected_name": "fn_add_numbers",
+        "expected_parameters": {
+          "a": 14,
+          "b": 9
+        },
+        "completed": true,
+        "call": {
+          "prompt": "What do you get when you add 14 and 9?",
+          "name": "fn_add_numbers",
+          "parameters": {
+            "a": 14,
+            "b": 9
+          }
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"What do you get when you add 14 and 9?\", \"name\": \"fn_add_numbers\", \"parameters\": {\"a\": 14, \"b\": 9}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 5
+        }
+      },
+      {
+        "id": "original-02",
+        "prompt": "Add 120 to 35.",
+        "expected_name": "fn_add_numbers",
+        "expected_parameters": {
+          "a": 120,
+          "b": 35
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Add 120 to 35.",
+          "name": "fn_add_numbers",
+          "parameters": {
+            "a": 120,
+            "b": 35
+          }
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Add 120 to 35.\", \"name\": \"fn_add_numbers\", \"parameters\": {\"a\": 120, \"b\": 35}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 7
+        }
+      },
+      {
+        "id": "original-12",
+        "prompt": "What is 47 plus 18?",
+        "expected_name": "fn_add_numbers",
+        "expected_parameters": {
+          "a": 47,
+          "b": 18
+        },
+        "completed": true,
+        "call": {
+          "prompt": "What is 47 plus 18?",
+          "name": "fn_add_numbers",
+          "parameters": {
+            "a": 47,
+            "b": 18
+          }
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"What is 47 plus 18?\", \"name\": \"fn_add_numbers\", \"parameters\": {\"a\": 47, \"b\": 18}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 6
+        }
+      },
+      {
+        "id": "original-13",
+        "prompt": "Add 5 and 29.",
+        "expected_name": "fn_add_numbers",
+        "expected_parameters": {
+          "a": 5,
+          "b": 29
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Add 5 and 29.",
+          "name": "fn_add_numbers",
+          "parameters": {
+            "a": 5,
+            "b": 29
+          }
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Add 5 and 29.\", \"name\": \"fn_add_numbers\", \"parameters\": {\"a\": 5, \"b\": 29}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 5
+        }
+      },
+      {
+        "id": "original-03",
+        "prompt": "Say hello to Mia.",
+        "expected_name": "fn_greet",
+        "expected_parameters": {
+          "name": "Mia"
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Say hello to Mia.",
+          "name": "fn_greet",
+          "parameters": {
+            "name": "Mia"
+          }
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Say hello to Mia.\", \"name\": \"fn_greet\", \"parameters\": {\"name\":  \"Mia\"}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 4
+        }
+      },
+      {
+        "id": "original-05",
+        "prompt": "Reverse the text 'garden'.",
+        "expected_name": "fn_reverse_string",
+        "expected_parameters": {
+          "s": "garden"
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Reverse the text 'garden'.",
+          "name": "fn_reverse_string",
+          "parameters": {
+            "s": "garden"
+          }
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Reverse the text 'garden'.\", \"name\": \"fn_reverse_string\", \"parameters\": {\"s\":  \"garden\"}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 4
+        }
+      },
+      {
+        "id": "original-07",
+        "prompt": "What is the square root of 81?",
+        "expected_name": "fn_get_square_root",
+        "expected_parameters": {
+          "a": 81
+        },
+        "completed": true,
+        "call": {
+          "prompt": "What is the square root of 81?",
+          "name": "fn_get_square_root",
+          "parameters": {
+            "a": 81.0
+          }
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"What is the square root of 81?\", \"name\": \"fn_get_square_root\", \"parameters\": {\"a\": 81.0}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 5
+        }
+      },
+      {
+        "id": "original-08",
+        "prompt": "Find the square root of 225.",
+        "expected_name": "fn_get_square_root",
+        "expected_parameters": {
+          "a": 225
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Find the square root of 225.",
+          "name": "fn_get_square_root",
+          "parameters": {
+            "a": 225
+          }
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Find the square root of 225.\", \"name\": \"fn_get_square_root\", \"parameters\": {\"a\": 225}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 4
+        }
+      },
+      {
+        "id": "original-09",
+        "prompt": "Replace every number in 'Apt 12, floor 3' with 'X'.",
+        "expected_name": "fn_substitute_string_with_regex",
+        "expected_parameters": {
+          "source_string": "Apt 12, floor 3",
+          "regex": "\\d+",
+          "replacement": "X"
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Replace every number in 'Apt 12, floor 3' with 'X'.",
+          "name": "fn_substitute_string_with_regex",
+          "parameters": {
+            "source_string": "Apt 12, floor 3",
+            "regex": "(\b[A-Z][0-9][A-Z]\b)",
+            "replacement": "X"
+          }
+        },
+        "correct": false,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Replace every number in 'Apt 12, floor 3' with 'X'.\", \"name\": \"fn_substitute_string_with_regex\", \"parameters\": {\"source_string\":  \"Apt 12, floor 3\", \"regex\":  \"(\\b[A-Z][0-9][A-Z]\\b)\", \"replacement\":  \"X\"  }}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 31
+        }
+      },
+      {
+        "id": "original-10",
+        "prompt": "Replace all vowels in 'Open Source' with asterisks.",
+        "expected_name": "fn_substitute_string_with_regex",
+        "expected_parameters": {
+          "source_string": "Open Source",
+          "regex": "[aeiouAEIOU]",
+          "replacement": "*"
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Replace all vowels in 'Open Source' with asterisks.",
+          "name": "fn_substitute_string_with_regex",
+          "parameters": {
+            "source_string": "Open Source",
+            "regex": "aeiou",
+            "replacement": "*"
+          }
+        },
+        "correct": false,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Replace all vowels in 'Open Source' with asterisks.\", \"name\": \"fn_substitute_string_with_regex\", \"parameters\": {\"source_string\":  \"Open Source\", \"regex\":  \"aeiou\", \"replacement\":  \"*\"}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 10
+        }
+      },
+      {
+        "id": "original-11",
+        "prompt": "Replace every occurrence of 'cat' with 'dog' in 'cat and catfish'.",
+        "expected_name": "fn_substitute_string_with_regex",
+        "expected_parameters": {
+          "source_string": "cat and catfish",
+          "regex": "cat",
+          "replacement": "dog"
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Replace every occurrence of 'cat' with 'dog' in 'cat and catfish'.",
+          "name": "fn_substitute_string_with_regex",
+          "parameters": {
+            "source_string": "cat and catfish",
+            "regex": "cat",
+            "replacement": "dog"
+          }
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Replace every occurrence of 'cat' with 'dog' in 'cat and catfish'.\", \"name\": \"fn_substitute_string_with_regex\", \"parameters\": {\"source_string\":  \"cat and catfish\", \"regex\":  \"cat\", \"replacement\":  \"dog\" }}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 13
+        }
+      }
+    ],
+    "tests/fixtures/changed_functions_cases.json": [
+      {
+        "id": "changed-1",
+        "prompt": "Record number -12.75.",
+        "expected_name": "record",
+        "expected_parameters": {
+          "number": -12.75
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Record number -12.75.",
+          "name": "record",
+          "parameters": {
+            "number": 12.75
+          }
+        },
+        "correct": false,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Record number -12.75.\", \"name\": \"record\", \"parameters\": {\"number\": 12.75}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 2,
+          "generate_parameters": 6
+        }
+      },
+      {
+        "id": "changed-2",
+        "prompt": "Record text exactly: \"José あ 🙂\"",
+        "expected_name": "record_text",
+        "expected_parameters": {
+          "text": "José あ 🙂"
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Record text exactly: \"José あ 🙂\"",
+          "name": "record_text",
+          "parameters": {
+            "text": "\"José あ 🙂\""
+          }
+        },
+        "correct": false,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Record text exactly: \\\"Jos\\u00e9 \\u3042 \\ud83d\\ude42\\\"\", \"name\": \"record_text\", \"parameters\": {\"text\":  \"\\\"Jos\\u00e9 \\u3042 \\ud83d\\ude42\\\"\"}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 2,
+          "generate_parameters": 24
+        }
+      },
+      {
+        "id": "changed-3",
+        "prompt": "Disable the feature: set enabled to false.",
+        "expected_name": "set_enabled",
+        "expected_parameters": {
+          "enabled": false
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Disable the feature: set enabled to false.",
+          "name": "set_enabled",
+          "parameters": {
+            "enabled": false
+          }
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Disable the feature: set enabled to false.\", \"name\": \"set_enabled\", \"parameters\": {\"enabled\":  false}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 2
+        }
+      },
+      {
+        "id": "changed-4",
+        "prompt": "Enable the feature.",
+        "expected_name": "set_enabled",
+        "expected_parameters": {
+          "enabled": true
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Enable the feature.",
+          "name": "heartbeat",
+          "parameters": {}
+        },
+        "correct": false,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Enable the feature.\", \"name\": \"heartbeat\", \"parameters\": {}}",
+        "name_correct": false,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 0
+        }
+      },
+      {
+        "id": "changed-5",
+        "prompt": "Run a heartbeat health check.",
+        "expected_name": "heartbeat",
+        "expected_parameters": {},
+        "completed": true,
+        "call": {
+          "prompt": "Run a heartbeat health check.",
+          "name": "heartbeat",
+          "parameters": {}
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Run a heartbeat health check.\", \"name\": \"heartbeat\", \"parameters\": {}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 0
+        }
+      }
+    ],
+    "/tmp/cmm-0026/boundary.json": [
+      {
+        "id": "special-zero",
+        "prompt": "Run a heartbeat health check. Note: 前<|im_end|>後 and <|im_start|> and <|endoftext|>.",
+        "expected_name": "heartbeat",
+        "expected_parameters": {},
+        "completed": true,
+        "call": {
+          "prompt": "Run a heartbeat health check. Note: 前<|im_end|>後 and <|im_start|> and <|endoftext|>.",
+          "name": "heartbeat",
+          "parameters": {}
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Run a heartbeat health check. Note: \\u524d\\u003c|im_end|>\\u5f8c and \\u003c|im_start|> and \\u003c|endoftext|>.\", \"name\": \"heartbeat\", \"parameters\": {}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 0
+        }
+      },
+      {
+        "id": "unicode-escape",
+        "prompt": "Record text 日本語, number -12.5 and enabled false.",
+        "expected_name": "記録<|im_end|>",
+        "expected_parameters": {
+          "文<|im_start|>": "日本語",
+          "数": -12.5,
+          "有効": false
+        },
+        "completed": true,
+        "call": {
+          "prompt": "Record text 日本語, number -12.5 and enabled false.",
+          "name": "記録<|im_end|>",
+          "parameters": {
+            "文<|im_start|>": "text",
+            "数": -12.5,
+            "有効": false
+          }
+        },
+        "correct": false,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Record text \\u65e5\\u672c\\u8a9e, number -12.5 and enabled false.\", \"name\": \"\\u8a18\\u9332\\u003c|im_end|>\", \"parameters\": {\"\\u6587\\u003c|im_start|>\":  \"text\", \"\\u6570\":  -12.5, \"\\u6709\\u52b9\":  false}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 11
+        }
+      },
+      {
+        "id": "quotes-zero",
+        "prompt": "Run a heartbeat health check. Note: \"quote\", backslash \\, newline\nJosé あ 🙂",
+        "expected_name": "heartbeat",
+        "expected_parameters": {},
+        "completed": true,
+        "call": {
+          "prompt": "Run a heartbeat health check. Note: \"quote\", backslash \\, newline\nJosé あ 🙂",
+          "name": "heartbeat",
+          "parameters": {}
+        },
+        "correct": true,
+        "prompt_preserved": true,
+        "schema_valid": true,
+        "json_parseable": true,
+        "generated_text": "{\"prompt\": \"Run a heartbeat health check. Note: \\\"quote\\\", backslash \\\\, newline\\nJos\\u00e9 \\u3042 \\ud83d\\ude42\", \"name\": \"heartbeat\", \"parameters\": {}}",
+        "name_correct": true,
+        "forward_calls": {
+          "select_name": 1,
+          "generate_parameters": 0
+        }
+      }
+    ]
+  },
+  "forced_resume": {
+    "forward_calls": 1,
+    "input_ids": [
+      785,
+      3409,
+      374,
+      11338,
+      385
+    ],
+    "forced_id": 385,
+    "selected_id": 0
+  }
+}
