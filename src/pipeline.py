@@ -77,7 +77,10 @@ def process_prompt(
                                vocab=resources.vocab, progress=progress)
     if progress is not None and progress.available:
         progress.stage("validate_call")
-    return validate_call(text, fn)
+    call = validate_call(text, fn)
+    if call.prompt != user_prompt:
+        raise PromptError("invalid output: prompt differs from the input")
+    return call
 
 
 def select_name(
@@ -113,6 +116,35 @@ def select_name(
             progress.name_token(generated, mode=mode, raw_top=raw_top)
 
 
+def _decode_output(
+    ids: list[int], *, model: Model, vocab: dict[int, bytes],
+) -> str:
+    """Require SDK decoding to preserve the grammar's exact UTF-8 bytes."""
+    try:
+        expected = b"".join(vocab[token] for token in ids).decode("utf-8")
+    except (KeyError, UnicodeDecodeError) as e:
+        raise PromptError(f"invalid output token bytes: {e}") from e
+    text = model.decode(ids)
+    if text != expected:
+        raise PromptError("output token bytes differ from SDK decoding")
+    return text
+
+
+def _append_forced(
+    text: str, output_ids: list[int], *, model: Model,
+    vocab: dict[int, bytes],
+) -> str:
+    """Check a fixed JSON fragment, then commit each ID without inference."""
+    # '<' occurs only inside JSON strings here; escaping avoids control IDs.
+    text = text.replace("<", r"\u003c")
+    tokens = model.encode(text)
+    if _decode_output(tokens, model=model, vocab=vocab) != text:
+        raise PromptError("fixed JSON text differs from its encoded tokens")
+    for token in tokens:
+        output_ids.append(token)
+    return text
+
+
 def generate_parameters(
     user_prompt: str,
     fn: FunctionDef,
@@ -121,24 +153,30 @@ def generate_parameters(
     vocab: dict[int, bytes],
     progress: GenerationProgress | None = None,
 ) -> str:
-    """Append the forced JSON skeleton and each generated value in order."""
-    ids = model.encode(build_parameters_prompt(user_prompt, fn))
-    text = (
+    """Commit JSON IDs in order and verify their complete decoded record."""
+    prompt_ids = model.encode(build_parameters_prompt(user_prompt, fn))
+    output_ids: list[int] = []
+    head = (
         f'{{"prompt": {json.dumps(user_prompt)}, '
         f'"name": {json.dumps(fn.name)}'
     )
-    ids = ids + model.encode(text)
+    fragments = [_append_forced(head, output_ids, model=model, vocab=vocab)]
     for part in build_skeleton(fn):
         if isinstance(part, Forced):
-            text = text + part.text
-            ids = ids + model.encode(part.text)
+            fragments.append(_append_forced(part.text, output_ids,
+                                            model=model, vocab=vocab))
         else:
             if progress is not None and progress.available:
                 progress.parameter_started(part.name, part.type)
-            value_ids = generate_value(part, ids, model=model, vocab=vocab,
+            value_ids = generate_value(part, prompt_ids + output_ids,
+                                       model=model, vocab=vocab,
                                        progress=progress)
-            text = text + model.decode(value_ids)
-            ids = ids + value_ids
+            fragments.append(_decode_output(value_ids, model=model,
+                                            vocab=vocab))
+            output_ids.extend(value_ids)
+    text = _decode_output(output_ids, model=model, vocab=vocab)
+    if text != "".join(fragments):
+        raise PromptError("full JSON decoding differs from its fragments")
     return text
 
 

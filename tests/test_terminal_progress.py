@@ -76,6 +76,7 @@ class ObservationTests(unittest.TestCase):
         trie = NameTrie(paths={'f': (7, 0)})
         model = object.__new__(Model)
         vocab = {1: b'1', 2: b'2', 3: b'}', 7: b'f'}
+        vocab.update({128 + char: bytes([char]) for char in range(128)})
         resource = pipeline.GenerationResources(
             model=model, vocab=vocab, functions={'f': fn}, trie=trie,
         )
@@ -84,13 +85,14 @@ class ObservationTests(unittest.TestCase):
         for mode in ('none', 'redirected', 'unavailable', 'broken'):
             output = io.StringIO()
             with contextlib.redirect_stderr(output), \
-                    patch.object(Model, 'encode', return_value=[]), \
+                    patch.object(Model, 'encode', side_effect=lambda text:
+                                 [128 + ord(c) for c in text]), \
                     patch.object(Model, 'decode', side_effect=lambda ids:
-                                 b''.join(vocab.get(i, b'')
-                                          for i in ids).decode()), \
+                                 b''.join(vocab[i] for i in ids
+                                          if i != 0).decode()), \
                     patch.object(Model, 'logits', side_effect=[
-                        [0.0, 3.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0],
-                        [0.0, 1.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 3.0, 2.0, 1.0] + [-10.0] * 252,
+                        [0.0, 1.0, 0.0, 4.0] + [-10.0] * 252,
                     ]) as llm:
                 dashboard = Dashboard(1, model, vocab)
                 dashboard.available = mode != 'unavailable'

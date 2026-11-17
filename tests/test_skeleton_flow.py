@@ -142,7 +142,8 @@ class PipelineTests(unittest.TestCase):
                         ]):
                     text = pipeline.generate_parameters(
                         'a "quoted" prompt', fn,
-                        model=model, vocab={},
+                        model=model,
+                        vocab={token: bytes([token]) for token in range(128)},
                     )
                 try:
                     record = json.loads(text)
