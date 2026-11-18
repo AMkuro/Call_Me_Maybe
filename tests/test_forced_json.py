@@ -107,11 +107,11 @@ class ForcedJsonTests(unittest.TestCase):
 
     def test_fixed_ids_commit_individually_after_one_forward(self) -> None:
         """Method B: each fixed ID follows one forward on the full prefix."""
-        self.assertTrue(hasattr(pipeline, '_append_forced_fragment'))
+        self.assertTrue(hasattr(pipeline, '_append_fixed_text'))
         self.target = b'{"x": '
         output = AppendTrace()
-        pipeline._append_forced_fragment('{"x": ', [80], output,
-                                         model=self.model, vocab=self.vocab)
+        pipeline._append_fixed_text('{"x": ', [80], output,
+                                    model=self.model, vocab=self.vocab)
         self.assertEqual(output, [123, 34, 120, 34, 58, 32])
         expected = [list(b'{"x": '[:end]) for end in range(1, 7)]
         self.assertEqual(output.prefixes, expected)
@@ -236,9 +236,9 @@ class ForcedJsonTests(unittest.TestCase):
         encodings = {'{"a":': [300], ' true}': [301],
                      '{"a": true}': [302]}
         with patch.object(Model, 'encode', side_effect=encodings.__getitem__):
-            pipeline._append_forced_fragment(
+            pipeline._append_fixed_text(
                 '{"a":', [80], output, model=self.model, vocab=self.vocab)
-            pipeline._append_forced_fragment(
+            pipeline._append_fixed_text(
                 ' true}', [80], output, model=self.model, vocab=self.vocab)
             self.assertNotEqual(output, self.model.encode('{"a": true}'))
         self.assertEqual(output, [300, 301])

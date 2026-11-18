@@ -110,7 +110,7 @@ class DecimalGrammarTests(unittest.TestCase):
         slot = ValueSlot(name='x', type='number', terminator='}')
         with patch.object(Model, 'logits', return_value=scores) as forward, \
                 patch.object(Model, 'encode') as encode:
-            ids = pipeline.generate_value_with_delimiter(
+            ids = pipeline.generate_slot(
                 slot, [90, 91], model=model, vocab=vocab)
         self.assertEqual(ids, [1, 3])
         self.assertEqual(b''.join(vocab[t] for t in ids), b'2.5}')
@@ -136,13 +136,13 @@ class DecimalGrammarTests(unittest.TestCase):
                     patch.object(Model, 'logits', side_effect=logits):
                 slot = ValueSlot(name='x', type='number', terminator='}')
                 if length == 256:
-                    ids = pipeline.generate_value_with_delimiter(
+                    ids = pipeline.generate_slot(
                         slot, [], model=model, vocab=vocab)
                     self.assertEqual(b''.join(vocab[t] for t in ids), target)
                 else:
                     with self.assertRaisesRegex(
                             PromptError, 'token limit 256'):
-                        pipeline.generate_value_with_delimiter(
+                        pipeline.generate_slot(
                             slot, [], model=model, vocab=vocab)
 
 

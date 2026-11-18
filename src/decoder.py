@@ -50,7 +50,8 @@ def infer_and_select_next_token(
     argmax from those same scores. Diagnostics never affect the selection.
     """
     if not allowed:
-        raise PromptError("no allowed token can continue this value")
+        # The caller adds what was being generated (name or parameter).
+        raise PromptError("no allowed token can continue the output")
     logits = model.logits(ids)
     if len(allowed) == 1:
         return allowed[0], "forced", None

@@ -23,7 +23,7 @@ from src.model_port import Model
 from src import pipeline
 from src.pipeline import validate_call
 from src.schema import FunctionCall, FunctionDef, build_parameters_model
-from src.skeleton import Forced, ValueSlot, build_call_suffix
+from src.skeleton import FixedText, ValueSlot, build_call_suffix
 from src.writer import save_results
 
 
@@ -145,14 +145,14 @@ class StructureTests(unittest.TestCase):
         fn = definition(**{'quote"': 'string', 'b': 'number'})
         parts = build_call_suffix(fn)
         self.assertEqual(parts, [
-            Forced(text=',"parameters":{"quote\\\"": '),
+            FixedText(text=',"parameters":{"quote\\\"": '),
             ValueSlot(name='quote"', type='string', terminator=','),
-            Forced(text='"b": '),
+            FixedText(text='"b": '),
             ValueSlot(name='b', type='number', terminator='}'),
-            Forced(text='}'),
+            FixedText(text='}'),
         ])
         self.assertEqual(build_call_suffix(definition()),
-                         [Forced(text=',"parameters":{}}')])
+                         [FixedText(text=',"parameters":{}}')])
 
     def test_arbitrary_parameter_names_survive_validation(self) -> None:
         """Pydantic attribute names never replace dynamic JSON keys."""
@@ -245,7 +245,7 @@ class DecoderTests(unittest.TestCase):
                              side_effect=lambda data, *_: data == b'ab'), \
                 patch.object(pipeline, 'allowed_slot_tokens',
                              side_effect=[[1], [1, 2]]):
-            self.assertEqual(pipeline.generate_value_with_delimiter(
+            self.assertEqual(pipeline.generate_slot(
                 slot, prefix, model=model, vocab={1: b'a', 2: b'b'},
             ), [1, 2])
         # Method B: the forced first ID also gets its forward.
@@ -263,7 +263,7 @@ class DecoderTests(unittest.TestCase):
                     patch.object(pipeline, 'allowed_slot_tokens',
                                  return_value=allowed):
                 with self.assertRaisesRegex(PromptError, message):
-                    pipeline.generate_value_with_delimiter(
+                    pipeline.generate_slot(
                         slot, prefix, model=model, vocab={1: b'a'})
 
     def test_repeated_boundary_cases_have_clear_limit_errors(self) -> None:
@@ -281,7 +281,7 @@ class DecoderTests(unittest.TestCase):
                         patch.object(pipeline, 'allowed_slot_tokens',
                                      return_value=[0, 1]):
                     if length <= 256:
-                        result = pipeline.generate_value_with_delimiter(
+                        result = pipeline.generate_slot(
                             slot, [], model=model, vocab={0: b'a', 1: b'b'},
                         )
                         self.assertEqual(len(result), length)
@@ -289,7 +289,7 @@ class DecoderTests(unittest.TestCase):
                         with self.assertRaisesRegex(
                             PromptError, r'token limit 256.*terminator',
                         ):
-                            pipeline.generate_value_with_delimiter(
+                            pipeline.generate_slot(
                                 slot, [], model=model,
                                 vocab={0: b'a', 1: b'b'},
                             )
@@ -302,8 +302,7 @@ class DecoderTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 PromptError, r"source_string.*string.*token limit 0",
             ):
-                pipeline.generate_value_with_delimiter(slot, [], model=model,
-                                                       vocab={})
+                pipeline.generate_slot(slot, [], model=model, vocab={})
 
 
 class WriterTests(unittest.TestCase):

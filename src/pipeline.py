@@ -18,7 +18,7 @@ from .name_trie import NameTrie, leaf_name, max_name_steps, next_tokens
 from .progress import GenerationProgress
 from .prompt import build_name_prompt, build_parameters_prompt
 from .schema import FunctionCall, FunctionDef, build_parameters_model
-from .skeleton import Forced, ValueSlot, build_call_suffix
+from .skeleton import FixedText, ValueSlot, build_call_suffix
 from .values import allowed_slot_tokens, is_slot_complete
 
 MAX_VALUE_STEPS = 256
@@ -109,24 +109,27 @@ def select_function(
     prompt_ids = model.encode(build_name_prompt(user_prompt, functions))
     generated: list[int] = []
     limit = max_name_steps(trie)
-    while True:
-        name = leaf_name(trie, generated)
-        if name is not None:
-            if _observing(progress):
-                progress.function_selected(name)
-            return functions[name]
-        allowed = next_tokens(trie, generated)
-        if len(generated) >= limit:
-            raise PromptError(
-                f"token limit {limit} reached before a terminator"
+    try:
+        while True:
+            name = leaf_name(trie, generated)
+            if name is not None:
+                if _observing(progress):
+                    progress.function_selected(name)
+                return functions[name]
+            allowed = next_tokens(trie, generated)
+            if len(generated) >= limit:
+                raise PromptError(
+                    f"token limit {limit} reached before a terminator"
+                )
+            token, mode, raw_top = infer_and_select_next_token(
+                model, prompt_ids + generated, allowed,
+                include_raw_top=_observing(progress),
             )
-        token, mode, raw_top = infer_and_select_next_token(
-            model, prompt_ids + generated, allowed,
-            include_raw_top=_observing(progress),
-        )
-        generated.append(token)
-        if _observing(progress):
-            progress.name_token(generated, mode=mode, raw_top=raw_top)
+            generated.append(token)
+            if _observing(progress):
+                progress.name_token(generated, mode=mode, raw_top=raw_top)
+    except PromptError as e:
+        raise PromptError(f"function name: {e}") from e
 
 
 def _decode_and_verify_output(
@@ -143,7 +146,7 @@ def _decode_and_verify_output(
     return text
 
 
-def _append_forced_fragment(
+def _append_fixed_text(
     text: str, prompt_ids: list[int], output_ids: list[int], *,
     model: Model, vocab: dict[int, bytes],
 ) -> str:
@@ -178,17 +181,17 @@ def generate_call_json(
         f'{{"prompt":{json.dumps(user_prompt)},'
         f'"name":{json.dumps(fn.name)}'
     )
-    fragments = [_append_forced_fragment(head, prompt_ids, output_ids,
-                                         model=model, vocab=vocab)]
+    fragments = [_append_fixed_text(head, prompt_ids, output_ids,
+                                    model=model, vocab=vocab)]
     for part in build_call_suffix(fn):
-        if isinstance(part, Forced):
-            fragments.append(_append_forced_fragment(part.text, prompt_ids,
-                                                     output_ids, model=model,
-                                                     vocab=vocab))
+        if isinstance(part, FixedText):
+            fragments.append(_append_fixed_text(part.text, prompt_ids,
+                                                output_ids, model=model,
+                                                vocab=vocab))
         else:
             if _observing(progress):
                 progress.parameter_started(part.name, part.type)
-            value_ids = generate_value_with_delimiter(
+            value_ids = generate_slot(
                 part, prompt_ids + output_ids, model=model, vocab=vocab,
                 progress=progress)
             fragments.append(_decode_and_verify_output(value_ids, model=model,
@@ -200,7 +203,7 @@ def generate_call_json(
     return text
 
 
-def generate_value_with_delimiter(
+def generate_slot(
     slot: ValueSlot,
     ids: list[int],
     *,
@@ -208,7 +211,7 @@ def generate_value_with_delimiter(
     vocab: dict[int, bytes],
     progress: GenerationProgress | None = None,
 ) -> list[int]:
-    """Generate one value and delimiter, checking completion before the cap."""
+    """Generate one ValueSlot: a value and its terminator, within the cap."""
     generated: list[int] = []
     try:
         while True:

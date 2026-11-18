@@ -17,7 +17,7 @@ from src.cli import Args
 from src.errors import PromptError
 from src.model_port import Model
 from src.schema import FunctionCall, FunctionDef
-from src.skeleton import Forced, ValueSlot
+from src.skeleton import FixedText, ValueSlot
 from test_constraints import encode_name
 
 
@@ -102,7 +102,7 @@ class PipelineTests(unittest.TestCase):
                             lambda scores, permitted:
                             max(permitted, key=scores.__getitem__)
                         )):
-                    result = pipeline.generate_value_with_delimiter(
+                    result = pipeline.generate_slot(
                         slot, [127], model=model,
                         vocab={token: bytes([token]) for token in range(128)},
                     )
@@ -121,15 +121,15 @@ class PipelineTests(unittest.TestCase):
                     'returns': {'type': 'number'},
                 })
                 parts = [
-                    Forced(text=', "parameters": {"a": '),
+                    FixedText(text=', "parameters": {"a": '),
                     ValueSlot.model_validate({
                         'name': 'a', 'type': 'number', 'terminator': ',',
                     }),
-                    Forced(text=' "b": '),
+                    FixedText(text=' "b": '),
                     ValueSlot.model_validate({
                         'name': 'b', 'type': 'boolean', 'terminator': '}',
                     }),
-                    Forced(text='}'),
+                    FixedText(text='}'),
                 ]
                 with patch.object(Model, 'encode', side_effect=encode), \
                         patch.object(Model, 'decode', side_effect=decode), \
@@ -139,7 +139,7 @@ class PipelineTests(unittest.TestCase):
                         patch.object(pipeline, 'build_call_suffix',
                                      return_value=parts), \
                         patch.object(pipeline,
-                                     'generate_value_with_delimiter',
+                                     'generate_slot',
                                      side_effect=[encode('12.0,'),
                                                   encode('true}')]):
                     text = pipeline.generate_call_json(

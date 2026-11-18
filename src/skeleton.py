@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from .schema import FunctionDef, ParamType
 
 
-class Forced(BaseModel):
+class FixedText(BaseModel):
     """Text written as is: keys, quotes, colons, braces."""
 
     model_config = ConfigDict(frozen=True)
@@ -17,7 +17,7 @@ class Forced(BaseModel):
 
 
 class ValueSlot(BaseModel):
-    """A parameter value, including its following JSON delimiter."""
+    """A parameter value, including its following terminator ("," or "}")."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -26,7 +26,7 @@ class ValueSlot(BaseModel):
     terminator: Literal[",", "}"]
 
 
-def build_call_suffix(fn: FunctionDef) -> list[Forced | ValueSlot]:
+def build_call_suffix(fn: FunctionDef) -> list[FixedText | ValueSlot]:
     """Lay out what follows the escaped name: ``,"parameters":{"k": ...}}``.
 
     Judgment: lays out only what follows the name; the name is chosen
@@ -36,19 +36,19 @@ def build_call_suffix(fn: FunctionDef) -> list[Forced | ValueSlot]:
     include the head?
 
     Each slot owns its following comma, or the parameters' closing brace
-    for the last slot. Forced text must not repeat that delimiter
+    for the last slot. FixedText text must not repeat that terminator
     (ADR-0012). With no parameters, force ``,"parameters":{}}``.
     """
     if not fn.parameters:
-        return [Forced(text=',"parameters":{}}')]
-    parts: list[Forced | ValueSlot] = []
+        return [FixedText(text=',"parameters":{}}')]
+    parts: list[FixedText | ValueSlot] = []
     for index, (name, spec) in enumerate(fn.parameters.items()):
         prefix = ',"parameters":{' if index == 0 else ''
         # Keep ": ": without it Qwen3 never ended "2.0" (2026-11-18 GPU run).
-        parts.append(Forced(text=prefix + json.dumps(name) + ': '))
+        parts.append(FixedText(text=prefix + json.dumps(name) + ': '))
         parts.append(ValueSlot(
             name=name, type=spec.type,
             terminator='}' if index == len(fn.parameters) - 1 else ',',
         ))
-    parts.append(Forced(text='}'))
+    parts.append(FixedText(text='}'))
     return parts

@@ -251,7 +251,7 @@ class LoopObservationTests(unittest.TestCase):
                 dashboard = Dashboard(1, model, vocab)
                 with patch.object(Model, 'logits',
                                   return_value=[0.0, 1.0, 2.0]) as llm:
-                    result = pipeline.generate_value_with_delimiter(
+                    result = pipeline.generate_slot(
                         slot, [9], model=model, vocab=vocab,
                         progress=dashboard,
                     )

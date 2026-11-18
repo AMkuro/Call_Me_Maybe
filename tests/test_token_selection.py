@@ -80,6 +80,21 @@ class SelectionTests(unittest.TestCase):
                 decoder.infer_and_select_next_token(
                     object.__new__(Model), [], [])
 
+    def test_name_errors_say_they_come_from_the_name(self) -> None:
+        """A failure while choosing a name is not reported as a value."""
+        fn = FunctionDef.model_validate({
+            'name': 'a', 'description': 'd', 'parameters': {},
+            'returns': {'type': 'string'}})
+        with patch.object(Model, 'encode', return_value=[50]), \
+                patch.object(Model, 'logits',
+                             side_effect=PromptError('model inference')), \
+                patch.object(pipeline, 'build_name_prompt', return_value='N'):
+            with self.assertRaisesRegex(
+                    PromptError, r'^function name: model inference$'):
+                pipeline.select_function(
+                    'x', model=object.__new__(Model), functions={'a': fn},
+                    trie=NameTrie(paths={'a': (1, 0)}))
+
     def test_no_ranking_or_probability_work(self) -> None:
         """Selection and warnings require neither top-k nor softmax."""
         with patch.object(Model, 'logits', return_value=[3.0, 1.0, 2.0]), \

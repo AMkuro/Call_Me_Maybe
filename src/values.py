@@ -1,4 +1,4 @@
-"""Recognize prefixes of one JSON value and its slot delimiter."""
+"""Recognize prefixes of one JSON value and its slot terminator."""
 
 import codecs
 import re
@@ -23,7 +23,7 @@ def _advance_string(phase: int, data: bytes, terminator: int) -> int:
     """Consume new bytes from a JSON-string state; -1 means invalid.
 
     States: 0 leading space, 1 string, 2 escape, 3..6 Unicode escape,
-    7 after the closing quote, 8 after the slot delimiter.
+    7 after the closing quote, 8 after the slot terminator.
     """
     for char in data:
         if phase == 0:
@@ -95,9 +95,9 @@ def allowed_slot_tokens(
     A complete number may continue or take the terminator. No token may
     write anything after the terminator (ADR-0012).
     """
-    delimiter = terminator.encode("ascii")
+    terminator_bytes = terminator.encode("ascii")
     if param_type == "string":
-        phase = _advance_string(0, written, delimiter[0])
+        phase = _advance_string(0, written, terminator_bytes[0])
         if phase < 0 or not _utf8_prefix(written):
             return []
         decoder = codecs.getincrementaldecoder("utf-8")()
@@ -105,12 +105,13 @@ def allowed_slot_tokens(
         pending = decoder.getstate()[0]
         # Parse the shared prefix once. Each vocabulary candidate only
         # advances its own bytes, even for long values.
+        end = terminator_bytes[0]
         return [token for token, value in vocab.items()
-                if value and _advance_string(phase, value, delimiter[0]) >= 0
+                if value and _advance_string(phase, value, end) >= 0
                 and _utf8_prefix(pending + value)]
     return [token for token, value in vocab.items()
             if value and _slot_prefix_states(written + value, param_type,
-                                             delimiter) >= 0]
+                                             terminator_bytes) >= 0]
 
 
 def is_slot_complete(
@@ -120,5 +121,5 @@ def is_slot_complete(
 
     A valid number without its terminator is not finished (ADR-0012).
     """
-    delimiter = terminator.encode("ascii")
-    return _slot_prefix_states(written, param_type, delimiter) == 1
+    terminator_bytes = terminator.encode("ascii")
+    return _slot_prefix_states(written, param_type, terminator_bytes) == 1

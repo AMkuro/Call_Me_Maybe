@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping
 
 from .schema import FunctionDef, Scalar
-from .skeleton import Forced, build_call_suffix
+from .skeleton import FixedText, build_call_suffix
 
 NAME_INSTRUCTIONS = (
     "Choose the function matching the request. Reply with its exact name only."
@@ -77,7 +77,7 @@ def build_example_call_json(user_prompt: str, fn: FunctionDef,
     text = (f'{{"prompt":{json.dumps(user_prompt)},'
             f'"name":{json.dumps(fn.name)}')
     for part in build_call_suffix(fn):
-        text += (part.text if isinstance(part, Forced) else
+        text += (part.text if isinstance(part, FixedText) else
                  json.dumps(parameters[part.name]) + part.terminator)
     return text
 
