@@ -1,6 +1,7 @@
 """Build generation assets from definitions validated by the input loader."""
 
 import unittest
+from types import MappingProxyType
 from unittest.mock import patch
 
 from pydantic import ValidationError
@@ -24,7 +25,7 @@ class ResourceTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.functions = index_functions([function('g'), function('f')])
-        self.vocab = {1: b'a'}
+        self.vocab = MappingProxyType({1: b'a'})
         for mock in (
             patch.object(Model, '__init__', return_value=None),
             patch.object(Model, 'encode', side_effect=encode_name),
@@ -51,6 +52,20 @@ class ResourceTests(unittest.TestCase):
             resource.functions['h'] = function('h')  # type: ignore[index]
         with self.assertRaises(ValidationError):
             resource.functions = {}
+
+    def test_vocab_stays_read_only_and_is_passed_to_dashboard(self) -> None:
+        """The shared vocabulary needs no extra view at the CLI boundary."""
+        from src import __main__ as entry
+        from src.cli import Args
+
+        resource = GenerationAssets(self.functions)
+        self.assertIs(resource.vocab, self.vocab)
+        with self.assertRaises(TypeError):
+            resource.vocab[2] = b'b'  # type: ignore[index]
+        with patch.object(entry, 'Dashboard') as dashboard, \
+                patch.object(entry, 'process_all', return_value=True):
+            self.assertEqual(entry._end(Args(), ['x'], resource), 0)
+        self.assertIs(dashboard.call_args.args[2], resource.vocab)
 
     def test_ambiguous_token_paths_are_startup_errors(self) -> None:
         """NameTrie rejects collisions during asset construction."""

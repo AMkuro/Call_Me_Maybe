@@ -3,12 +3,14 @@
 import json
 import logging
 import math
+from collections.abc import Mapping
 from decimal import Decimal
+from types import MappingProxyType
 from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel, BeforeValidator, ConfigDict, Field, PrivateAttr, create_model,
-    field_validator, model_validator,
+    field_serializer, field_validator, model_validator,
 )
 
 ParamType = Literal["number", "string", "boolean"]
@@ -68,7 +70,7 @@ class FunctionDef(BaseModel):
 
     name: str
     description: str
-    parameters: dict[str, ParamSpec]
+    parameters: Mapping[str, ParamSpec]
     returns: ParamSpec
 
     @field_validator("name")
@@ -78,6 +80,21 @@ class FunctionDef(BaseModel):
         if not value.strip():
             raise ValueError("function names must not be empty")
         return value
+
+    @field_validator("parameters")
+    @classmethod
+    def _read_only(
+        cls, parameters: Mapping[str, ParamSpec],
+    ) -> Mapping[str, ParamSpec]:
+        """Protect the validated copy without retaining the input mapping."""
+        return MappingProxyType(parameters)
+
+    @field_serializer("parameters")
+    def _plain_parameters(
+        self, parameters: Mapping[str, ParamSpec],
+    ) -> dict[str, ParamSpec]:
+        """Keep the original dictionary representation when serializing."""
+        return dict(parameters)
 
     @model_validator(mode="after")
     def warn_blank_metadata(self) -> "FunctionDef":

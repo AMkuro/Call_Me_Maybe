@@ -2,7 +2,6 @@
 
 import sys
 from collections.abc import Sequence
-from types import MappingProxyType
 
 from .cli import Args, parse_args
 from .display import Dashboard
@@ -56,7 +55,7 @@ def _end(
     """
     try:
         with Dashboard(len(prompts), resources.model,
-                       MappingProxyType(resources.vocab)) as dashboard:
+                       resources.vocab) as dashboard:
             all_done = process_all(prompts, resources, args.output, dashboard)
     # Outside the with, so the terminal is restored before the message.
     # Only save_results raises OSError here: Dashboard keeps its own

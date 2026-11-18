@@ -2,6 +2,7 @@
 
 import codecs
 import re
+from collections.abc import Mapping
 
 from .schema import ParamType
 
@@ -136,7 +137,7 @@ def _slot_state(
 
 
 def allowed_slot_tokens(
-    vocab: dict[int, bytes], param_type: ParamType, written: bytes,
+    vocab: Mapping[int, bytes], param_type: ParamType, written: bytes,
     terminator: str,
 ) -> list[int]:
     """Allow prefixes of a value followed by its JSON ``terminator``.

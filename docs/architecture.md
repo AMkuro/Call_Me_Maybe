@@ -757,7 +757,7 @@ class GenerationAssets(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
     model: InstanceOf[Model]
-    vocab: InstanceOf[dict[int, bytes]]
+    vocab: InstanceOf[Mapping[int, bytes]]
     functions: Mapping[str, InstanceOf[FunctionDef]]   # 読み取り専用の複製
     trie: InstanceOf[NameTrie]
 ```
@@ -768,20 +768,33 @@ Pythonオブジェクトから構築し、外部JSONから読み込んだり保�
 | フィールド | 組立時に検証すること | そこで検証しないこと |
 | --- | --- | --- |
 | model | Modelのインスタンスであること | SDKの初期化済み状態や推論の正しさ |
-| vocab | dictのインスタンスであること | ID/bytesの全走査。内容はload_vocabで検証・変換済み |
+| vocab | Mappingのインスタンスであること | ID/bytesの全走査。内容はload_vocabで検証・変換済みで、読み取り専用 |
 | functions | 各値がFunctionDefのインスタンスであること | 各FunctionDefの内容や空/重複・キーとnameの一致。load_functions/index_functionsが担当 |
 | trie | NameTrieのインスタンスであること | 経路・構造はNameTrie自身が保証する。コンストラクタが同じfunctionsとmodel.encodeで一度だけ作る |
 
 コンストラクタは検証済みfunctionsだけを受け取り、残る3資源を内部で作る。通常代入による参照の差し替えを拒否する。
-model・vocab・trieは参照のまま持つ。trieは構築後に変更できないので、共有しても対応は崩れない。
+model・vocab・trieは参照のまま持つ。vocabとtrieは読み取り専用で、Model内部の状態管理はSDKに任せる。
 functionsは、Pydanticが検証で作る新しい辞書（N件の参照のコピー）を`MappingProxyType`で包んで持つ。
 入力の辞書を後で変えても、資源のfunctionsを通して変えても（`TypeError`）、Trieとの対応は崩れない。
 各FunctionDefは同じオブジェクトで、入力順も保つ。
 
 保証の範囲: FunctionDefはfrozenなので`name`は変わらず、Trieとの対応はこの範囲で保たれる。
-FunctionDef.parametersは普通の辞書なので、中身は変更できる。対応関係には関係しないが、骨組みや出力の検証に影響する。
-深い凍結はスキーマの変更になり今回の範囲を超えるため、構築後に変更しないという所有規約で扱う。vocabも同じ規約で扱う。
+FunctionDef.parametersも`Mapping[str, ParamSpec]`とし、Pydanticが検証で作った辞書を
+field_validatorで`MappingProxyType`に包む。ParamSpecもfrozenなので、通常の操作では定義内容を変更できない。
+field_serializerで普通の辞書に戻し、model_dump・JSON出力・復元の形式と引数順を維持する。
+
+vocabはload_vocabが新しく作るID→bytes辞書を、その場で`MappingProxyType`に包んで返す。
+元の辞書を外に渡さないため、追加の辞書コピーは要らない。GenerationAssetsは`InstanceOf[Mapping[int, bytes]]`で
+参照型だけを確認し、内容を再走査せず同じviewを保持する。
+読み取り専用化は生成元で行い、_endや生成ステップで包み直す方式は採らない。
+後者では生成経路に可変な辞書が残り、表示の呼び出し側も変換を知る必要があるためである。
 未検証のTrieを外から渡す引数は設けない。
+
+読み取り専用化の回帰確認では、parametersとvocabの追加・削除・置換の拒否、入力辞書からの独立性、
+定義のシリアライズと復元、Dashboardへ渡すvocabの参照同一性を検査した。
+make install・必須lint/mypy・251テストが成功した。実GPUの既知11入力も全件完了し、
+出力のSHA-256は[分割後の既存記録](measurements/2026-11-18-pipeline-split/accuracy.json)と一致した。
+全結果を関数スキーマへ再照合して成功した。この回帰実行では計時・意味的な正答率の採点はしていない。
 
 - mainは1実行分のGenerationAssetsを所有し、process_all/process_promptへ同じ参照を渡す。
   測定ツールも同じ関数セットの評価バッチで一度作り、プロンプトごとには再構築しない。
@@ -792,8 +805,8 @@ FunctionDef.parametersは普通の辞書なので、中身は変更できる。�
   `_names_match_trie`による再比較は、同じキーから内部構築するため不要となり削除した。
   外部から4資源を受け取って比較する方式と異なり、別のモデルや関数セットのTrieを渡す経路がない。
   コンストラクタと入力経路のテストで名前の対応と変更耐性、経路衝突の起動エラーを検証する。
-- frozenは浅い不変性である。trieとfunctionsは上記のとおり読み取り専用だが、vocab・FunctionDef.parameters・Model内部は
-  深く不変化しない。これらは構築完了後に書き換えず、モデルの内部処理は既存SDKの資源管理に任せる。
+- frozenだけでは入れ子の辞書は保護できないため、trie・functions・FunctionDef.parameters・vocabは
+  上記の読み取り専用コンテナで保持する。Model内部は不変化せず、既存SDKの資源管理に任せる。
 - generated、入力の継続ids、JSON text、現在のslot、step、mode、raw_top、progressは含めない。
   report/sayや通知先の後付け代入も作らない。表示資源と生成途中の状態は別の所有者が持つ。
 - 組立のValidationErrorはコンストラクタでStartupErrorへ変換する。既存の起動エラー処理へ接続し、
@@ -816,7 +829,8 @@ FunctionDef.parametersは普通の辞書なので、中身は変更できる。�
 | infer_and_select_next_token | model・ids・allowedと診断要求だけ。共有構造体・表示先・上限は渡さない |
 
 DashboardもGenerationAssetsを丸ごと受け取らず、__main__._endから必要なmodel/vocab参照と件数だけを受け取る。
-vocabは__main__._endでMappingProxyType(resources.vocab)という読み取り専用viewにして渡し、辞書内容はcopyしない。
+vocabはload_vocabで作った読み取り専用viewを、__main__._endからDashboardへそのまま渡す。
+GenerationAssets・生成処理・Dashboardが同じMappingを共有し、呼び出し側で変換もcopyもしない。
 名前の公開decodeと警告表記だけに使い、表示側から共有語彙への書き込み経路を作らない。
 Modelの所有権をDashboardへ移すわけではなく、表示メソッドでは公開decodeのみを使う。
 
@@ -851,7 +865,7 @@ def generate_call_json(
     fn: FunctionDef,
     *,
     model: Model,
-    vocab: dict[int, bytes],
+    vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
 ) -> str: ...
 
@@ -860,7 +874,7 @@ def generate_slot(
     ids: list[int],
     *,
     model: Model,
-    vocab: dict[int, bytes],
+    vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
 ) -> list[int]: ...
 
@@ -986,7 +1000,7 @@ SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・�
 | 採用ID・mode・raw_top | 内部の選択分岐から得るプリミティブ。新たなPydanticモデルへ毎ステップ包み直さない |
 | 固定断片・完成値・JSON全文 | 語彙バイト列とSDK復号の一致、固定encodeの一致、全文と期待断片の一致。固定部分のforwardは増やさない |
 | 完成したFunctionCall | 既存のJSON・strict型・数値保持・スキーマ検証を維持。生成制約とは異なる境界 |
-| Dashboardのtotal/model/vocab view | 件数の導出値、同じModel、検証済みdictのview。内容の再検証やcopyをしない |
+| Dashboardのtotal/model/vocab view | 件数の導出値、同じModel、load_vocabで作った同じview。再包装・内容の再検証・copyをしない |
 
 #### 参照保持の実測（2026-11-13、プロジェクト.venvのPydantic 2.14.3）
 

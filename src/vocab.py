@@ -1,6 +1,8 @@
 """Read Qwen's byte-level vocabulary without losing partial UTF-8."""
 
+from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 
 from pydantic import TypeAdapter
 
@@ -8,8 +10,8 @@ from .errors import StartupError
 from .json_io import loads
 
 
-def load_vocab(path: Path) -> dict[int, bytes]:
-    """Map each vocabulary ID to its original byte sequence.
+def load_vocab(path: Path) -> Mapping[int, bytes]:
+    """Map each vocabulary ID to its original bytes in a read-only view.
 
     Effect: reads a file.
 
@@ -33,10 +35,10 @@ def load_vocab(path: Path) -> dict[int, bytes]:
             raise ValueError("vocabulary must have nonnegative token IDs")
         if len(set(raw.values())) != len(raw):
             raise ValueError("duplicate vocabulary token IDs")
-        return {
+        return MappingProxyType({
             token: bytes(alphabet[char] for char in text)
             for text, token in raw.items()
-        }
+        })
     except (OSError, ValueError, KeyError) as e:
         raise StartupError(
             f"cannot read byte vocabulary from {path}: {e}"

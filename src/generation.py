@@ -56,7 +56,7 @@ def select_function(
 
 
 def _decode_and_verify_output(
-    ids: list[int], *, model: Model, vocab: dict[int, bytes]
+    ids: list[int], *, model: Model, vocab: Mapping[int, bytes]
 ) -> str:
     """Require SDK decoding to preserve the grammar's exact UTF-8 bytes."""
     try:
@@ -70,7 +70,7 @@ def _decode_and_verify_output(
 
 
 def _commit_fixed_text(
-    text: str, context: list[int], *, model: Model, vocab: dict[int, bytes]
+    text: str, context: list[int], *, model: Model, vocab: Mapping[int, bytes]
 ) -> list[int]:
     """Return the IDs of a fixed JSON fragment, each after one forward.
 
@@ -96,7 +96,7 @@ def generate_call_json(
     fn: FunctionDef,
     *,
     model: Model,
-    vocab: dict[int, bytes],
+    vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
 ) -> str:
     """Commit JSON IDs in skeleton order and verify the decoded record.
@@ -145,7 +145,7 @@ def generate_slot(
     ids: list[int],
     *,
     model: Model,
-    vocab: dict[int, bytes],
+    vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
 ) -> list[int]:
     """Generate one ValueSlot: a value and its terminator, within the cap."""

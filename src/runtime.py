@@ -20,14 +20,14 @@ class GenerationAssets(BaseModel):
 
     The input loader indexes definitions by name. This constructor builds
     the trie from those keys with the same model, and NameTrie validates
-    its paths. functions is a read-only copy; vocab and SDK state remain
-    shared and must not be changed after startup.
+    its paths. functions is a read-only copy and the validated vocabulary
+    is shared as a read-only mapping. SDK state remains owned by Model.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
     model: InstanceOf[Model]
-    vocab: InstanceOf[dict[int, bytes]]
+    vocab: InstanceOf[Mapping[int, bytes]]
     functions: Mapping[str, InstanceOf[FunctionDef]]
     trie: InstanceOf[NameTrie]
 

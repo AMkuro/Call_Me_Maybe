@@ -231,6 +231,20 @@ class VocabularyTests(unittest.TestCase):
         self.assertEqual(vocab[3] + vocab[4], 'あ'.encode())
         self.assertEqual(vocab[5] + vocab[6], 'é'.encode())
 
+    def test_loaded_vocabulary_is_read_only(self) -> None:
+        """Consumers cannot add, replace or delete validated vocabulary IDs."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'vocab.json'
+            path.write_text('{"b":2,"a":1}')
+            vocab = load_vocab(path)
+        self.assertEqual(list(vocab), [2, 1])
+        self.assertEqual(dict(vocab), {2: b'b', 1: b'a'})
+        for token in [1, 3]:
+            with self.subTest(token=token), self.assertRaises(TypeError):
+                vocab[token] = b'x'  # type: ignore[index]
+        with self.assertRaises(TypeError):
+            del vocab[1]  # type: ignore[attr-defined]
+
     def test_bad_vocab_is_a_startup_error(self) -> None:
         """Invalid files, duplicate IDs and unsupported symbols fail early."""
         with tempfile.TemporaryDirectory() as directory:

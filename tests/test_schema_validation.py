@@ -22,6 +22,32 @@ from test_constraints import encode_name
 class DefinitionValidationTests(unittest.TestCase):
     """Use Pydantic for schema checks without changing valid field values."""
 
+    def test_parameters_are_read_only_and_keep_serialization(self) -> None:
+        """Freeze validated definitions without sharing mutable input maps."""
+        spec = ParamSpec(type='number')
+        source = {'z': spec, 'a': ParamSpec(type='string')}
+        fn = FunctionDef(name='f', description='test', parameters=source,
+                         returns=ParamSpec(type='boolean'))
+        source.clear()
+        self.assertEqual(list(fn.parameters), ['z', 'a'])
+        self.assertIs(fn.parameters['z'], spec)
+        with self.assertRaises(TypeError):
+            fn.parameters['late'] = spec  # type: ignore[index]
+        with self.assertRaises(TypeError):
+            del fn.parameters['z']  # type: ignore[attr-defined]
+        with self.assertRaises(ValidationError):
+            fn.parameters = {}
+        expected = {
+            'name': 'f', 'description': 'test',
+            'parameters': {'z': {'type': 'number'}, 'a': {'type': 'string'}},
+            'returns': {'type': 'boolean'},
+        }
+        self.assertEqual(fn.model_dump(), expected)
+        self.assertEqual(json.loads(fn.model_dump_json()), expected)
+        self.assertEqual(FunctionDef.model_validate(fn.model_dump()), fn)
+        self.assertEqual(FunctionDef.model_validate_json(fn.model_dump_json()),
+                         fn)
+
     def test_missing_extra_wrong_type_and_unsupported_fields(self) -> None:
         """Do not accept malformed definitions or implicit text conversions."""
         valid = definition(value='number').model_dump()
