@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# GPU accuracy runs of prompt_exp.py, all five conditions in parallel.
+# Accuracy only (parallel GPU runs are not timing measurements).
+set -u
+S=<scratch>
+cd <repo>
+for C in A B C D DYN; do
+  HF_HOME=<repo>/.cache/huggingface HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 PYTHONPATH=<repo> \
+    <repo>/.venv-gpu/bin/python "$S/prompt_exp.py" \
+    --condition "$C" --output "$S/exp-$C.json" > "$S/exp-$C.log" 2>&1 &
+done
+wait
+for C in A B C D DYN; do echo "$C: $(tail -n 1 "$S/exp-$C.log")"; done

@@ -1,0 +1,42 @@
+"""Compare prompt_exp conditions with A: totals, per-case changes, fit estimate."""
+import json
+from pathlib import Path
+
+S = Path(__file__).parent
+runs = {c: json.loads((S / f'exp-{c}.json').read_text()) for c in ['A', 'B', 'C', 'D', 'DYN']}
+
+
+def params(r):
+    return json.loads(r['generated_text'])['parameters'] if r.get('completed') else None
+
+
+print('cond suite completed name args joint fwd_param lensum_param lensum_name')
+for c, run in runs.items():
+    for k, s in run['summary'].items():
+        print(c, k, s['completed'], s['name_correct'], s['arguments_correct'], s['joint_correct'],
+              s['forwards_generate_parameters'], s['forward_length_sum_generate_parameters'],
+              s['forward_length_sum_select_name'])
+for c, run in runs.items():
+    tot = {m: sum(run['summary'][k][m] for k in run['summary']) for m in (
+        'forwards_select_name', 'forwards_generate_parameters',
+        'forward_length_sum_select_name', 'forward_length_sum_generate_parameters', 'joint_correct')}
+    f = tot['forwards_select_name'] + tot['forwards_generate_parameters']
+    L = tot['forward_length_sum_select_name'] + tot['forward_length_sum_generate_parameters']
+    st = run['summary']['standard11']
+    f11 = st['forwards_select_name'] + st['forwards_generate_parameters']
+    L11 = st['forward_length_sum_select_name'] + st['forward_length_sum_generate_parameters']
+    print(f'{c}: all30 joint={tot["joint_correct"]} forwards={f} lensum={L} '
+          f'| standard11 forwards={f11} lensum={L11} est={0.0791 * f11 + 0.001984 * L11:.1f}s')
+print('--- per-case differences from A')
+for c in ['B', 'C', 'D', 'DYN']:
+    for k, rows in runs['A']['suites'].items():
+        for a, n in zip(rows, runs[c]['suites'][k]):
+            if a.get('joint_correct') != n.get('joint_correct') or params(a) != params(n) \
+                    or a.get('selected_name') != n.get('selected_name'):
+                print(f'{c} {a["id"]}: joint {a["joint_correct"]}->{n["joint_correct"]} '
+                      f'name {a.get("selected_name")}->{n.get("selected_name")}')
+                print('   A:', params(a), '| expected:', a.get('expected_parameters', a.get('expected_arguments')))
+                print('  ', c + ':', params(n), n.get('error', ''))
+dyn = [r for rows in runs['DYN']['suites'].values() for r in rows if r.get('completed')]
+print('DYN switched/param forwards:', sum(r['switched_forwards'] for r in dyn),
+      sum(r['forwards']['generate_parameters'] for r in dyn))

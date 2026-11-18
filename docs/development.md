@@ -195,6 +195,10 @@ no readable thermal counters, so this tool refuses to load the model there.
 replays the known 11 inputs with one forward before every output token
 (558 forwards, 289 s of forward time at phys16-t6) and lists the reductions
 needed for 300 s. It is a measurement and proposal, not an implementation.
+[Method B speedups](research/2026-11-18-method-b-speedups.md) records the
+adopted compact JSON and single-candidate shortcut, and the rejected think-block
+removal. [Prompt shortening](research/2026-11-18-prompt-shortening.md) is an
+experiment only: no prompt change is adopted in the product.
 
 - `make install` recreates `.venv` from `uv.lock` (CPU torch). `uv sync` alone
   also works, as the reviewers require. torch comes from the default `cpu`
