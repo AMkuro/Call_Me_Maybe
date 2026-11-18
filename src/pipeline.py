@@ -8,7 +8,11 @@ from types import MappingProxyType
 from typing import TypeGuard
 
 from pydantic import (
-    BaseModel, ConfigDict, InstanceOf, ValidationError, field_validator,
+    BaseModel,
+    ConfigDict,
+    InstanceOf,
+    ValidationError,
+    field_validator,
 )
 
 from .decoder import infer_and_select_next_token
@@ -68,15 +72,16 @@ class GenerationAssets(BaseModel):
         vocab = load_vocab(Path(model.vocab_path()))
         trie = build_name_trie(list(functions), model.encode, EOS)
         try:
-            super().__init__(model=model, vocab=vocab,
-                             functions=functions, trie=trie)
+            super().__init__(
+                model=model, vocab=vocab, functions=functions, trie=trie
+            )
         except ValidationError as e:
             raise StartupError(f"invalid generation resources: {e}") from e
 
     @field_validator("functions")
     @classmethod
     def _read_only(
-        cls, functions: Mapping[str, FunctionDef],
+        cls, functions: Mapping[str, FunctionDef]
     ) -> Mapping[str, FunctionDef]:
         """Wrap the new dict Pydantic built, so no outside alias exists."""
         return MappingProxyType(functions)
@@ -91,13 +96,22 @@ def process_prompt(
     """Select a name, generate parameters, then validate one JSON record."""
     if _observing(progress):
         progress.stage("select_function")
-    fn = select_function(user_prompt, model=resources.model,
-                         functions=resources.functions, trie=resources.trie,
-                         progress=progress)
+    fn = select_function(
+        user_prompt,
+        model=resources.model,
+        functions=resources.functions,
+        trie=resources.trie,
+        progress=progress,
+    )
     if _observing(progress):
         progress.stage("generate_call_json")
-    text = generate_call_json(user_prompt, fn, model=resources.model,
-                              vocab=resources.vocab, progress=progress)
+    text = generate_call_json(
+        user_prompt,
+        fn,
+        model=resources.model,
+        vocab=resources.vocab,
+        progress=progress,
+    )
     if _observing(progress):
         progress.stage("validate_call")
     return validate_call(text, fn, user_prompt)
@@ -128,7 +142,9 @@ def select_function(
                 return functions[name]
             allowed = trie.next_tokens(generated)
             token, mode, raw_top = infer_and_select_next_token(
-                model, prompt_ids + generated, allowed,
+                model,
+                prompt_ids + generated,
+                allowed,
                 include_raw_top=_observing(progress),
             )
             generated.append(token)
@@ -139,7 +155,7 @@ def select_function(
 
 
 def _decode_and_verify_output(
-    ids: list[int], *, model: Model, vocab: dict[int, bytes],
+    ids: list[int], *, model: Model, vocab: dict[int, bytes]
 ) -> str:
     """Require SDK decoding to preserve the grammar's exact UTF-8 bytes."""
     try:
@@ -153,7 +169,7 @@ def _decode_and_verify_output(
 
 
 def _commit_fixed_text(
-    text: str, context: list[int], *, model: Model, vocab: dict[int, bytes],
+    text: str, context: list[int], *, model: Model, vocab: dict[int, bytes]
 ) -> list[int]:
     """Return the IDs of a fixed JSON fragment, each after one forward.
 
@@ -168,7 +184,8 @@ def _commit_fixed_text(
     committed: list[int] = []
     for token in tokens:
         chosen, _, _ = infer_and_select_next_token(
-            model, context + committed, [token])
+            model, context + committed, [token]
+        )
         committed.append(chosen)
     return committed
 
@@ -196,19 +213,25 @@ def generate_call_json(
     for part in build_call_skeleton(user_prompt, fn):
         context = prompt_ids + output_ids
         if isinstance(part, FixedText):
-            part_ids = _commit_fixed_text(part.text, context, model=model,
-                                          vocab=vocab)
+            part_ids = _commit_fixed_text(
+                part.text, context, model=model, vocab=vocab
+            )
             fragments.append(part.text)
             saved.append(part.text)
         else:
             if _observing(progress):
                 progress.parameter_started(part.name, part.type)
-            part_ids = generate_slot(part, context, model=model, vocab=vocab,
-                                     progress=progress)
-            fragments.append(_decode_and_verify_output(part_ids, model=model,
-                                                       vocab=vocab))
-            saved.append(float_text(fragments[-1]) if part.type == "number"
-                         else fragments[-1])
+            part_ids = generate_slot(
+                part, context, model=model, vocab=vocab, progress=progress
+            )
+            fragments.append(
+                _decode_and_verify_output(part_ids, model=model, vocab=vocab)
+            )
+            saved.append(
+                float_text(fragments[-1])
+                if part.type == "number"
+                else fragments[-1]
+            )
         output_ids.extend(part_ids)
     text = _decode_and_verify_output(output_ids, model=model, vocab=vocab)
     if text != "".join(fragments):
@@ -232,27 +255,28 @@ def generate_slot(
         while True:
             if is_slot_complete(written, slot.type, slot.terminator):
                 return generated
-            allowed = allowed_slot_tokens(vocab, slot.type, written,
-                                          slot.terminator)
+            allowed = allowed_slot_tokens(
+                vocab, slot.type, written, slot.terminator
+            )
             if len(generated) >= limit:
                 raise PromptError(
                     f"token limit {limit} reached before a terminator"
                 )
             token, mode, _ = infer_and_select_next_token(
-                model, ids + generated, allowed)
+                model, ids + generated, allowed
+            )
             generated.append(token)
             written += vocab[token]
             if _observing(progress):
-                progress.value_token(written, len(generated),
-                                     token=token, mode=mode)
+                progress.value_token(
+                    written, len(generated), token=token, mode=mode
+                )
     except PromptError as e:
-        raise PromptError(
-            f"parameter {slot.name!r} ({slot.type}): {e}"
-        ) from e
+        raise PromptError(f"parameter {slot.name!r} ({slot.type}): {e}") from e
 
 
 def validate_call(
-    text: str, fn: FunctionDef, user_prompt: str,
+    text: str, fn: FunctionDef, user_prompt: str
 ) -> FunctionCall:
     """Turn generated JSON into a checked record that keeps that JSON.
 
@@ -269,7 +293,7 @@ def validate_call(
         if call.name != fn.name:
             raise ValueError(
                 f"function name mismatch: expected {fn.name!r}, "
-                f"got {call.name!r}",
+                f"got {call.name!r}"
             )
         parameters = build_parameters_model(fn).model_validate(call.parameters)
         # The saved output must be float: Python's json reads each number so.
@@ -277,12 +301,14 @@ def validate_call(
         for name, spec in fn.parameters.items():
             value = loaded[name]
             if spec.type == "number" and not (
-                    isinstance(value, float) and math.isfinite(value)):
+                isinstance(value, float) and math.isfinite(value)
+            ):
                 raise ValueError(f"{name!r} does not load as a finite float")
     except ValueError as e:  # JSON errors and pydantic's are ValueErrors
         raise PromptError(f"invalid output: {e}") from e
     checked = FunctionCall(
-        prompt=call.prompt, name=call.name,
+        prompt=call.prompt,
+        name=call.name,
         parameters=parameters.model_dump(by_alias=True),
     )
     checked._generated_json = text

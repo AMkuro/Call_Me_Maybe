@@ -37,3 +37,7 @@ exclude = ['^llm_sdk/', '^\.venv/', '^\.venv-gpu/']
 [[tool.mypy.overrides]]
 module = ['llm_sdk', 'llm_sdk.*']
 follow_imports = 'silent'
+
+[tool.ruff]
+line-length = 79
+extend-exclude = ['.venv-gpu', '.cache', 'llm_sdk']
