@@ -79,7 +79,7 @@ Subject の最終目標には正答率90%以上、JSON・型適合率100%、全�
 型や JSON の構造を変えずに、関数名、引数名、個数、説明を変えられる。
 
 モデルは起動時に一度読み込む。語彙と名前の木も、その実行の全入力で共有する。
-語彙は `load_vocab`、名前の木は `build_name_trie` が準備する。
+語彙は `load_vocab`、名前の木は `NameTrie` のコンストラクタが準備する。
 SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普通の ID リストにする。
 語彙の辞書は ID の意味を調べるもの、`tolist()` は SDK の戻り値の型を変えるものであり、用途が異なる。
 
@@ -107,7 +107,7 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 読み込み時に作った辞書を使い、選択のたびに関数の配列を再走査しない（ADR-0016）。
 
 名前の末尾には Qwen の応答終了トークン `<|im_end|>` を含める。コード上の名前は `model_port.EOS` とし、
-`pipeline.GenerationAssets`が`build_name_trie(names, model.encode, EOS)`の引数として渡す。
+`pipeline.GenerationAssets`は`NameTrie(functions, model)`を呼び、`NameTrie`自身が既存の`model_port.EOS`を使う。
 各名前の完成経路は`encode(名前 + EOS)`で、その末端に到達したことが名前の確定である。
 例えば `fn_add` と `fn_add_numbers` が共存するとき、`fn_add` の後で EOS の経路と `_numbers` の経路が分かれる。
 SDK の decode は特殊トークンを表示しないため、終了は表示文字列ではなく ID の経路で判断する。
@@ -121,7 +121,7 @@ EOS のIDとの比較はしない。名前には生成上限を持たない。�
 名前の終端を表すという目的にEOSのトークン数やIDは関係ないため、この制約を撤廃した（2026-11-15）。
 
 現在の`NameTrie`は、ノードの木ではなく「名前 → 完成経路」の記録と、そこから作る索引である。
-EOSの文字列は`build_name_trie`の入力にだけ使い、完成したTrieには保持しない。
+EOSの文字列はコンストラクタでの符号化にだけ使い、完成したTrieには保持しない。
 
 ```python
 class NameTrie(BaseModel):          # frozen, extra="forbid", strict
@@ -133,14 +133,20 @@ class NameTrie(BaseModel):          # frozen, extra="forbid", strict
 
 構築から確定までの流れ:
 
-1. `build_name_trie(names, encode, eos)`が、トークナイザに依存する唯一の処理として、
-   各名前の`encode(名前 + eos)`を`paths`の普通の辞書にする。`eos`のトークン数やIDは調べない。
-   構築途中の可変な状態は、この関数内の辞書だけで、`NameTrie`としては存在しない。
-2. `NameTrie(paths=...)`のPydantic検証で、型（strictなので経路はtupleだけ）を検査し、
+1. `NameTrie(names, model)`が、各名前の`model.encode(名前 + EOS)`をtupleへ変換し、
+   `paths`の普通の辞書にする。関数辞書はキーを入力順に使い、呼び出し側でlistへ変換しない。
+   `names`は件数を持つ名前の集合（`Collection[str]`）で、辞書と名前のリストをそのまま受け取る。
+   完成経路の件数と入力件数が異なれば、名前の重複として拒否する。
+2. `super().__init__(paths=paths)`でPydantic検証を実行する。型（strictなので経路はtupleだけ）を検査し、
    `paths`をPydanticが作った新しい辞書の読み取り専用ビュー（`MappingProxyType`）にする。
-3. `model_validator(mode="after")`が全経路を検査し、通った後でだけ`_next`と`_names`を作る。
+3. 既存の`model_validator(mode="after")`が全経路を検査し、通った後でだけ`_next`と`_names`を作る。
    どちらも、この検証の中で作った辞書の読み取り専用ビューで、値はtupleである。
-4. 検証に失敗すると`ValidationError`になり、オブジェクトは返らない。`build_name_trie`は`StartupError`に変換する。
+4. 符号化の`PromptError`と経路検証の`ValueError`（`ValidationError`を含む）は、
+   コンストラクタが従来と同じ文脈の`StartupError`に変換し、元の例外を原因として保持する。
+
+初期化処理だけを担当していた独立ファクトリは廃止した。実際の構築にはロード済みのModelと
+既存のEOSを使うため、encode関数や任意の終端文字列を渡す公開引数は設けない。
+テストはModel.encodeをモックし、既存validatorと探索処理を実行して確認する。
 
 | 不変条件 | 保証する場所 |
 | --- | --- |
@@ -148,8 +154,8 @@ class NameTrie(BaseModel):          # frozen, extra="forbid", strict
 | 異なる名前が同じ完成経路を持たない | 同上 |
 | ある完成経路が、別の完成経路の真の接頭辞でない | 同上。全経路の真の接頭辞を集めた後で、各完成経路がそこに含まれないことを確かめるので、入力の順序に依らない |
 | 完成経路の末端だけが名前を持つ。終端ノードに子がない。名前のない行き止まりがない | 上の3つから導かれる。索引はこの検査済みの経路からだけ作り、名前は完成経路にだけ付ける。接頭辞はどれも、ある完成経路の途中なので次のIDを持つ |
-| 関数名とトークン経路の対応 | `paths`が名前と経路の組そのもので、`build_name_trie`が同じ`encode`の結果から作る |
-| 同じ名前の重複を黙ってまとめない | `build_name_trie`（`paths`の件数と`names`の件数を比べる） |
+| 関数名とトークン経路の対応 | `paths`が名前と経路の組そのもので、コンストラクタが同じ`model.encode`の結果から作る |
+| 同じ名前の重複を黙ってまとめない | `NameTrie.__init__`（`paths`の件数と`names`の件数を比べる） |
 | 経路の照会: 正しい未完成の経路はNone、葉は名前、存在しない経路は`PromptError` | `NameTrie`のメソッド`leaf_name`と`next_tokens`が、共通の`_known_prefix`で索引を引く |
 | `functions`の各キーが`FunctionDef.name`と一致し、キー集合がTrieの名前集合と一致する | 入力境界の`index_functions`が`fn.name`をキーにする。`GenerationAssets`コンストラクタが同じキーからTrieを作る。値の型は`InstanceOf`で検査する |
 
@@ -168,7 +174,7 @@ Qwenでの実測（2026-11-15、SDKの公開API）: `encode("<|im_end|>")`は`[1
 
 採用理由:
 
-- 名前と経路の組を入力にすると、「ある名前の葉が別の名前の経路に付く」という取り違えは、データの形として起きない。
+- 名前と経路の組を内部の記録にすると、「ある名前の葉が別の名前の経路に付く」という取り違えは、データの形として起きない。
   ノードの木を入力にすると、Trie全体の検証には木の全走査と、各葉に至った辺の記録が必要になる。
 - 索引を検証の後でだけ作るので、「検証済みフラグ」を持たずに、検証を通ったオブジェクトだけが照会に使える。
 - 索引は、その接頭辞の次に許すIDのtupleを持つ。生成の1ステップの費用は、接頭辞のtuple化とハッシュ1回で、
@@ -200,8 +206,9 @@ Subjectの「使ってよいパッケージ: numpy、json」（IV.3.1）との�
   項目の追加・削除・置換は`TypeError`になる。`paths`の元になった呼び出し側の辞書を後で変えても影響しない
   （Pydanticが検証で新しい辞書を作り、その辞書への参照は外に出ない）。経路と次のIDはtupleで、
   `next_tokens`は毎回新しいlistを返す。入れ子の可変なノードはない。
-- シリアライズ: `field_serializer`で`paths`を普通の辞書として出力する。`model_dump`と`model_dump_json`からの
-  `model_validate`/`model_validate_json`で、等しく使えるTrieに戻る。
+- シリアライズ: `field_serializer`で`paths`を普通の辞書として出力する。
+  構築には名前とModelを必須とし、dumpから`model_validate`/`model_validate_json`で復元する用途は廃止した（今回のオーナー承認）。
+  経路のstrict検証と出力形式のテストは維持する。
 - 保証の外: Pydanticの検証を飛ばす`NameTrie.model_construct`は索引を作らないので、照会で
   `AttributeError`になる（使えないが、分かりやすい`StartupError`にはならない。テスト済み）。
   `model_copy(update=...)`（Pydanticの文書上、更新値を検証しない。実測はしていない）、
@@ -922,7 +929,7 @@ SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・�
 | データ | 検証場所・追加費用 |
 | --- | --- |
 | 外部のprompts/functions/vocab | 既存のloaderのstrict検証、空/重複・変換の検査を維持。資源構造体で内容を重ねて走査しない |
-| 名前の木・ValueSlot | build_name_trieが各名前+EOSをencodeし、NameTrieの検証で全経路を検査して索引を作る（起動時1回）。生成・表示では再検証しない |
+| 名前の木・ValueSlot | NameTrieのコンストラクタが各名前+EOSをencodeし、既存validatorで全経路を検査して索引を作る（起動時1回）。生成・表示では再検証しない |
 | 資源の4参照 | InstanceOfの検査とfunctionsの読み取り専用の複製（N件）。コンストラクタがModel・vocab・Trieを一度作る。名前の再比較やvocab内容の再走査はしない |
 | モデルのlogits | constrained_argmaxの次元・数値・非有限値・許可ID検査を維持。診断のargmax以外の配列処理を加えない |
 | 採用ID・mode・raw_top | 内部の選択分岐から得るプリミティブ。新たなPydanticモデルへ毎ステップ包み直さない |

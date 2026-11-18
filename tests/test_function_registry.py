@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 from src.errors import StartupError
 from src.loader import load_functions
-from src.model_port import EOS, Model
-from src.name_trie import build_name_trie
+from src.model_port import Model
+from src.name_trie import NameTrie
 from src import pipeline
 from src.pipeline import select_function
 from src.prompt import build_name_prompt
@@ -61,8 +61,9 @@ class FunctionRegistryTests(unittest.TestCase):
         first = function('z', 'First action.')
         second = function('a', 'Second action.')
         functions = {'z': first, 'a': second}
-        trie = build_name_trie(list(functions), encode_name, EOS)
         model = object.__new__(Model)
+        with patch.object(Model, 'encode', side_effect=encode_name):
+            trie = NameTrie(functions, model)
         scores = [0.0] * 256
         scores[ord('a')] = 1.0
         with patch.object(Model, 'encode', return_value=[255]), \

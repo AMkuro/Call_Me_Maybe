@@ -8,7 +8,7 @@ import numpy as np
 from src import decoder, pipeline
 from src.errors import PromptError
 from src.model_port import Model
-from src.name_trie import NameTrie
+from trie_fixtures import trie_from_paths
 from src.schema import FunctionDef
 
 
@@ -58,7 +58,7 @@ class SelectionTests(unittest.TestCase):
             return FunctionDef.model_validate({
                 'name': name, 'description': 'd', 'parameters': {},
                 'returns': {'type': 'string'}})
-        trie = NameTrie(paths={'ab': (1, 2, 0), 'ac': (1, 3, 0)})
+        trie = trie_from_paths({'ab': (1, 2, 0), 'ac': (1, 3, 0)})
         contexts: list[list[int]] = []
 
         def logits(ids: list[int]) -> list[float]:
@@ -93,7 +93,7 @@ class SelectionTests(unittest.TestCase):
                     PromptError, r'^function name: model inference$'):
                 pipeline.select_function(
                     'x', model=object.__new__(Model), functions={'a': fn},
-                    trie=NameTrie(paths={'a': (1, 0)}))
+                    trie=trie_from_paths({'a': (1, 0)}))
 
     def test_a_token_off_the_tree_stops_name_selection(self) -> None:
         """Without a step limit, leaving the tree is still an error."""
@@ -109,7 +109,7 @@ class SelectionTests(unittest.TestCase):
                     PromptError, r'^function name: invalid token path'):
                 pipeline.select_function(
                     'x', model=object.__new__(Model), functions={'a': fn},
-                    trie=NameTrie(paths={'a': (1, 0)}))
+                    trie=trie_from_paths({'a': (1, 0)}))
 
     def test_no_ranking_or_probability_work(self) -> None:
         """Selection and warnings require neither top-k nor softmax."""

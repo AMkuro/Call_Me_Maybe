@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from src import __main__ as entry, pipeline
 from src.errors import PromptError
 from src.model_port import Model
-from src.name_trie import NameTrie
+from trie_fixtures import trie_from_paths
 from src.schema import FunctionCall, FunctionDef
 from src.skeleton import ValueSlot
 from src.values import allowed_slot_tokens, float_text, is_slot_complete
@@ -45,7 +45,7 @@ def generated(literal: str, prompt: str = '依頼') -> FunctionCall:
     model = object.__new__(Model)
     resources = pipeline.GenerationAssets.model_construct(
         model=model, vocab={}, functions={'record': fn},
-        trie=NameTrie(paths={'record': (1,)}),
+        trie=trie_from_paths({'record': (1,)}),
     )
     text = ('{"prompt":' + json.dumps(prompt) + ',"name":"record",'
             '"parameters":{"x":' + literal + ',"s":'
@@ -292,7 +292,7 @@ class DecimalSaveTests(unittest.TestCase):
         fn = definition()
         resources = pipeline.GenerationAssets.model_construct(
             model=model, vocab={}, functions={'record': fn},
-            trie=NameTrie(paths={'record': (1,)}),
+            trie=trie_from_paths({'record': (1,)}),
         )
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'calls.json'

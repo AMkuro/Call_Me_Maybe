@@ -18,8 +18,8 @@ from pydantic import (
 from .decoder import infer_and_select_next_token
 from .errors import PromptError, StartupError
 from .json_io import loads
-from .model_port import EOS, Model
-from .name_trie import NameTrie, build_name_trie
+from .model_port import Model
+from .name_trie import NameTrie
 from .progress import GenerationProgress
 from .prompt import build_name_prompt, build_parameters_prompt
 from .schema import FunctionCall, FunctionDef, build_parameters_model
@@ -70,7 +70,7 @@ class GenerationAssets(BaseModel):
         """
         model = Model()
         vocab = load_vocab(Path(model.vocab_path()))
-        trie = build_name_trie(list(functions), model.encode, EOS)
+        trie = NameTrie(functions, model)
         try:
             super().__init__(
                 model=model, vocab=vocab, functions=functions, trie=trie

@@ -10,7 +10,7 @@ from unittest.mock import patch
 from src import pipeline
 from src.errors import PromptError
 from src.model_port import Model
-from src.name_trie import NameTrie
+from trie_fixtures import trie_from_paths
 from src.schema import FunctionDef
 from src.writer import save_results
 
@@ -251,7 +251,7 @@ class ForcedJsonTests(unittest.TestCase):
         fn = self.definition('f', n='number')
         resources = pipeline.GenerationAssets.model_construct(
             model=self.model, vocab=self.vocab, functions={'f': fn},
-            trie=NameTrie(paths={'f': (1,)}),
+            trie=trie_from_paths({'f': (1,)}),
         )
         text = ('{"prompt":"request","name":"f","parameters":'
                 '{"n":9007199254740993.0}}')
@@ -274,7 +274,7 @@ class ForcedJsonTests(unittest.TestCase):
         fn = self.definition('f')
         resources = pipeline.GenerationAssets.model_construct(
             model=self.model, vocab=self.vocab, functions={'f': fn},
-            trie=NameTrie(paths={'f': (1,)}),
+            trie=trie_from_paths({'f': (1,)}),
         )
         with patch.object(pipeline, 'select_function', return_value=fn), \
                 patch.object(pipeline, 'generate_call_json', return_value=(

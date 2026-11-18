@@ -1,7 +1,7 @@
 """A token-level tree of the function names (docs/architecture.md §3.1)."""
 
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from types import MappingProxyType
 
 from orderedsets import OrderedSet
@@ -11,6 +11,7 @@ from pydantic import (
 )
 
 from .errors import PromptError, StartupError
+from .model_port import EOS, Model
 
 TokenPath = tuple[int, ...]
 
@@ -31,6 +32,21 @@ class NameTrie(BaseModel):
     paths: Mapping[str, TokenPath]
     _next: Mapping[TokenPath, tuple[int, ...]] = PrivateAttr()
     _names: Mapping[TokenPath, str] = PrivateAttr()
+
+    def __init__(self, names: Collection[str], model: Model) -> None:
+        """Encode names plus EOS and validate their paths with Pydantic.
+
+        Use the already loaded model. Preserve name order and reject
+        duplicate names rather than silently merging them. Tokenizer and
+        path validation failures are startup errors.
+        """
+        try:
+            paths = {name: tuple(model.encode(name + EOS)) for name in names}
+            if len(paths) != len(names):
+                raise ValueError("function names are not unique")
+            super().__init__(paths=paths)
+        except (PromptError, ValueError) as e:
+            raise StartupError(f"cannot build name tree: {e}") from e
 
     @field_validator("paths")
     @classmethod
@@ -99,22 +115,3 @@ class NameTrie(BaseModel):
         if key not in self._next:
             raise PromptError("invalid token path in name tree")
         return key
-
-
-def build_name_trie(
-    names: Sequence[str], encode: Callable[[str], list[int]], eos: str,
-) -> NameTrie:
-    """Encode each name plus the caller's ``eos`` text into a NameTrie.
-
-    The only tokenizer use: each full path is ``encode(name + eos)``. How
-    many tokens ``eos`` has, or which IDs, does not matter; NameTrie checks
-    that the paths are unambiguous. Names are unique (loader); a repeated
-    name is still rejected rather than silently merged.
-    """
-    try:
-        paths = {name: tuple(encode(name + eos)) for name in names}
-        if len(paths) != len(names):
-            raise ValueError("function names are not unique")
-        return NameTrie(paths=paths)
-    except (PromptError, ValueError) as e:  # ValidationError is a ValueError
-        raise StartupError(f"cannot build name tree: {e}") from e
