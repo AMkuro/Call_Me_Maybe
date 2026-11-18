@@ -120,10 +120,9 @@ class ValidationFlowTests(unittest.TestCase):
                         lambda ids: ''.join(chr(x) for x in ids if x)
                     )), patch.object(Model, 'vocab_path',
                                      return_value=str(vocab)), \
-                    patch.object(Model, 'logits', side_effect=AssertionError(
-                        'one-name paths are forced'
-                    )), patch.object(pipeline, 'generate_parameters',
-                                     side_effect=bodies), \
+                    patch.object(Model, 'logits', return_value=[0.0]), \
+                    patch.object(pipeline, 'generate_parameters',
+                                 side_effect=bodies), \
                     contextlib.redirect_stderr(stderr), \
                     contextlib.redirect_stdout(stdout):
                 status = entry.main([

@@ -41,15 +41,17 @@ def select_next_token(
 ) -> tuple[int, SelectionMode, int | None]:
     """Select one ID without updating the sequence or controlling its loop.
 
-    A unique candidate needs no inference. Otherwise request logits once,
-    use the constrained argmax, and optionally report the raw argmax from
-    those same scores. Diagnostics never affect the selected token.
+    Method B (owner decision, 2026-11-18): every token gets exactly one
+    forward on ``ids``, the full context. A unique candidate is then
+    returned as is, with no array, mask or argmax work on the scores.
+    Otherwise use the constrained argmax, and optionally report the raw
+    argmax from those same scores. Diagnostics never affect the selection.
     """
     if not allowed:
         raise PromptError("no allowed token can continue this value")
+    logits = model.logits(ids)
     if len(allowed) == 1:
         return allowed[0], "forced", None
-    logits = model.logits(ids)
     token = choose_token(logits, allowed)
     raw_top = int(np.argmax(logits)) if include_raw_top else None
     return token, "greedy", raw_top

@@ -108,9 +108,8 @@ def select_name(
             raise PromptError(
                 f"token limit {limit} reached before a terminator"
             )
-        ids = prompt_ids + generated if len(allowed) > 1 else prompt_ids
         token, mode, raw_top = select_next_token(
-            model, ids, allowed,
+            model, prompt_ids + generated, allowed,
             include_raw_top=progress is not None and progress.available,
         )
         generated.append(token)
@@ -133,17 +132,22 @@ def _decode_output(
 
 
 def _append_forced(
-    text: str, output_ids: list[int], *, model: Model,
-    vocab: dict[int, bytes],
+    text: str, prompt_ids: list[int], output_ids: list[int], *,
+    model: Model, vocab: dict[int, bytes],
 ) -> str:
-    """Check a fixed JSON fragment, then commit each ID without inference."""
+    """Check a fixed JSON fragment, then commit each ID after one forward.
+
+    Method B: each fixed ID is a unique candidate on P + O, like any token.
+    """
     # '<' occurs only inside JSON strings here; escaping avoids control IDs.
     text = text.replace("<", r"\u003c")
     tokens = model.encode(text)
     if _decode_output(tokens, model=model, vocab=vocab) != text:
         raise PromptError("fixed JSON text differs from its encoded tokens")
     for token in tokens:
-        output_ids.append(token)
+        chosen, _, _ = select_next_token(model, prompt_ids + output_ids,
+                                         [token])
+        output_ids.append(chosen)
     return text
 
 
@@ -162,11 +166,13 @@ def generate_parameters(
         f'{{"prompt":{json.dumps(user_prompt)},'
         f'"name":{json.dumps(fn.name)}'
     )
-    fragments = [_append_forced(head, output_ids, model=model, vocab=vocab)]
+    fragments = [_append_forced(head, prompt_ids, output_ids, model=model,
+                                vocab=vocab)]
     for part in build_skeleton(fn):
         if isinstance(part, Forced):
-            fragments.append(_append_forced(part.text, output_ids,
-                                            model=model, vocab=vocab))
+            fragments.append(_append_forced(part.text, prompt_ids,
+                                            output_ids, model=model,
+                                            vocab=vocab))
         else:
             if progress is not None and progress.available:
                 progress.parameter_started(part.name, part.type)
@@ -204,8 +210,8 @@ def generate_value(
                     f"token limit {MAX_VALUE_STEPS} "
                     "reached before a terminator"
                 )
-            context = ids + generated if len(allowed) > 1 else ids
-            token, mode, _ = select_next_token(model, context, allowed)
+            token, mode, _ = select_next_token(model, ids + generated,
+                                               allowed)
             generated.append(token)
             if progress is not None and progress.available:
                 written = b"".join(vocab[item] for item in generated)

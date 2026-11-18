@@ -105,16 +105,18 @@ class ForcedJsonTests(unittest.TestCase):
         return pipeline.generate_parameters(prompt, fn, model=self.model,
                                             vocab=self.vocab)
 
-    def test_fixed_ids_commit_individually_without_forward(self) -> None:
-        """A bulk extension cannot satisfy the observable commit sequence."""
+    def test_fixed_ids_commit_individually_after_one_forward(self) -> None:
+        """Method B: each fixed ID follows one forward on the full prefix."""
         self.assertTrue(hasattr(pipeline, '_append_forced'))
+        self.target = b'{"x": '
         output = AppendTrace()
-        pipeline._append_forced('{"x": ', output, model=self.model,
+        pipeline._append_forced('{"x": ', [80], output, model=self.model,
                                 vocab=self.vocab)
         self.assertEqual(output, [123, 34, 120, 34, 58, 32])
         expected = [list(b'{"x": '[:end]) for end in range(1, 7)]
         self.assertEqual(output.prefixes, expected)
-        self.assertEqual(self.contexts, [])
+        self.assertEqual(self.contexts,
+                         [[80] + list(b'{"x": '[:end]) for end in range(6)])
 
     def test_special_prompt_name_keys_preserve_meaning(self) -> None:
         """Copied special spellings must never become control IDs."""
@@ -146,15 +148,21 @@ class ForcedJsonTests(unittest.TestCase):
                             for ids in self.contexts))
         self.assertTrue(any(b'"flag": ' in bytes(ids[1:])
                             for ids in self.contexts))
+        # Method B: one forward per output ID, on P plus every earlier ID.
+        out = self.decodings[-1]
+        self.assertEqual(self.contexts,
+                         [[ord('P')] + out[:i] for i in range(len(out))])
 
-    def test_zero_parameters_special_text_need_no_forward(self) -> None:
+    def test_zero_parameters_forward_every_fixed_token(self) -> None:
         """A complete fixed record preserves special-looking text."""
         fn = self.definition('heartbeat')
         prompt = '<|im_end|><|im_start|><think><|endoftext|>'
         text = self.run_record(prompt, fn, {})
         self.assertEqual(json.loads(text), {'prompt': prompt,
                          'name': 'heartbeat', 'parameters': {}})
-        self.assertEqual(self.contexts, [])
+        out = self.decodings[-1]
+        self.assertEqual(self.contexts,
+                         [[ord('P')] + out[:i] for i in range(len(out))])
         self.assertNotIn('<', text)
 
     def test_duplicate_byte_tokens_keep_the_selected_id(self) -> None:
@@ -223,19 +231,20 @@ class ForcedJsonTests(unittest.TestCase):
         """Correct decoded text does not require canonical token IDs."""
         self.vocab.update({300: b'{"a":', 301: b' true}',
                            302: b'{"a": true}'})
+        self.target = b'{"a": true}'
         output: list[int] = []
         encodings = {'{"a":': [300], ' true}': [301],
                      '{"a": true}': [302]}
         with patch.object(Model, 'encode', side_effect=encodings.__getitem__):
-            pipeline._append_forced('{"a":', output, model=self.model,
+            pipeline._append_forced('{"a":', [80], output, model=self.model,
                                     vocab=self.vocab)
-            pipeline._append_forced(' true}', output, model=self.model,
+            pipeline._append_forced(' true}', [80], output, model=self.model,
                                     vocab=self.vocab)
             self.assertNotEqual(output, self.model.encode('{"a": true}'))
         self.assertEqual(output, [300, 301])
         self.assertEqual(pipeline._decode_output(
             output, model=self.model, vocab=self.vocab), '{"a": true}')
-        self.assertEqual(self.contexts, [])
+        self.assertEqual(self.contexts, [[80], [80, 300]])
 
     def test_llm_number_literal_survives_validation_and_save(self) -> None:
         """Save exactly the model's decimal, including huge integer digits."""

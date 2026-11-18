@@ -114,7 +114,8 @@ class DecimalGrammarTests(unittest.TestCase):
                                           vocab=vocab)
         self.assertEqual(ids, [1, 3])
         self.assertEqual(b''.join(vocab[t] for t in ids), b'2.5}')
-        forward.assert_called_once_with([90, 91, 1])
+        self.assertEqual([c.args for c in forward.call_args_list],
+                         [([90, 91],), ([90, 91, 1],)])
         encode.assert_not_called()
 
     def test_real_number_grammar_completes_at_256_not_257(self) -> None:

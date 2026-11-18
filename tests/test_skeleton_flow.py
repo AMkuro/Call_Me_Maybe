@@ -133,6 +133,7 @@ class PipelineTests(unittest.TestCase):
                 ]
                 with patch.object(Model, 'encode', side_effect=encode), \
                         patch.object(Model, 'decode', side_effect=decode), \
+                        patch.object(Model, 'logits', return_value=[0.0]), \
                         patch.object(pipeline, 'build_parameters_prompt',
                                      return_value=''), \
                         patch.object(pipeline, 'build_skeleton',

@@ -218,7 +218,19 @@ ADR-0026の追加条件に従い、`generate_parameters`は引数用プロンプ
 JSON本体の確定ID列Oを分離する。`prompt`と選択した`name`を`json.dumps`で表した先頭、
 および`build_skeleton(fn)`の各`Forced.text`を`_append_forced`で処理する。
 固定断片は一括encodeし、語彙バイト列・SDKのdecode・期待文字列の一致を確認してから、
-IDを1個ずつOへappendする。固定部分でlogitsは取得しない。
+各IDの直前にP + Oで1回forwardし（1候補なので点数は使わない）、そのIDをOへappendする。
+
+#### 方式B: 出力の全トークンで1回forward（2026-11-18、所有者の決定）
+
+背景: 所有者は、固定JSONと1候補の位置を含めて、出力の各トークンの直前にLLMのforwardを1回行う方式を求めた。
+採用: 名前・固定JSON・値のすべてで、`select_next_token`がまず`Model.logits(P + 確定済み全ID)`を1回呼ぶ。
+1候補ならそのIDを返し、配列変換・マスク・argmaxは行わない（高速化④）。複数候補の制約付きargmaxは従来どおり。
+文脈は常に全文脈とする。プロンプトの短縮は別の実験として扱い、ここでは採らない（所有者の回答）。
+空候補は推論前にPromptErrorとする。診断のための追加推論はしない。KVキャッシュは使わない。
+代替: 従来の1候補省略（標準11件で112 forward）は、所有者の方式Bの要件を満たさないため採らない。
+検証: 単体テストで、各確定IDの前に全文脈で1回だけ呼ばれることを確かめた。
+時間は[方式Bの性能評価](research/2026-11-18-method-b-performance.md)と
+[方式Bの高速化の検証](research/2026-11-18-method-b-speedups.md)に、精度と分けて記録する。
 
 - `ValueSlot`では既存どおり引数名・型を通知し、`generate_value`へP + Oのスナップショットを渡す。
 - 値ループはローカル生成列Vを1個ずつ確定する。値生成中の論理出力はO + V、分岐時のモデル入力はP + O + Vである。
@@ -314,7 +326,7 @@ numberを文字列化せず、入力側の数値解析も変更しない。
 1. 完了なら名前は元のFunctionDef、値は生成ID列を返す。上限ちょうどの完了も成功する。
 2. 未完了で生成上限に達していたら、終端未到達を示す PromptError にする。
 3. 続けられる候補がなければ PromptError にする。
-4. 候補が1個ならその ID を強制する。複数なら logits を一度取得する。
+4. 全文脈で logits を一度取得する（方式B）。候補が1個ならその ID を強制する。
 5. `choose_token` が候補外を負の無限大にした点数列から最大の ID を選び、生成列へ追加する。
 
 元の logits は変更しない。点数列の型・次元、NaN、正の無限大、許可候補がすべて非有限の場合を確認する。
@@ -383,7 +395,7 @@ SDK 呼び出しの例外は `Model` が起動時または1件の失敗へ変換
 名前選択で制約前のargmaxが採用IDと異なる場合は警告する。これは制約前の最大値がマスクされたことを示す。
 該当関数なしとは判定せず、許可候補から最大のものを選ぶ。
 警告に必要なraw_topのIDだけを同じlogitsから取得し、上位k件の取得やソートは行わない。
-1候補の位置では追加推論をせず、forcedとして途中経過を通知する。
+1候補の位置でもforwardは1回行うが点数は使わず、forcedとして途中経過を通知する。
 これらはプロンプト比較の補助情報であり、関数の正答率そのものではない（ADR-0011・0014）。
 
 stderr が端末なら同じ領域を更新し、リダイレクト時は制御文字のない通常ログ(警告と要約)にする。
@@ -428,7 +440,7 @@ SDKの既存のfloat32変更と復元手順は開発文書を参照する。
 | 名前から定義を取り出し、入力順と重複拒否を保つ | `test_function_registry.py`で辞書の順序、プロンプトへの掲載、固定logitsの選択、測定fixtureの重複拒否を確認 |
 | 名前の接頭辞が衝突せず定義外へ進まない | `test_prefix_names_choose_end_or_continue` と木の直接テスト |
 | 値の文法、UTF-8、区切りの境界を保つ | 現行JSON文法の直接テストで、値・スロットの区切り・UTF-8・終端越えを検査する |
-| マスクと強制が指定どおりに働く | 固定 logits で候補外の最大値を排除し、1候補の推論省略と上限ちょうどの終了を確認 |
+| マスクと強制が指定どおりに働く | 固定 logits で候補外の最大値を排除し、1候補でも全文脈で1回forwardすること（方式B）と上限ちょうどの終了を確認 |
 | 任意の引数名と検証後の型を保持する | `test_arbitrary_parameter_names_survive_validation` と欠落・余分なキー・非有限値の直接テスト |
 | 失敗時の出力契約を保つ | 一時ファイル、置換失敗、部分成功、空配列の起動時エラー、全件失敗のテスト |
 | 出力先の不備で不要なモデル起動をしない | `test_output_preflight.py`でディレクトリ・権限・パス・flush失敗を調べ、モデル未起動と出力保持を確認 |
@@ -557,7 +569,7 @@ def select_next_token(
 ) -> tuple[int, SelectionMode, int | None]: ...
 ```
 
-1候補なら(token, "forced", None)を返し、推論・診断・配列変換はしない。
+方式Bでは空候補以外で必ず1回Model.logitsを呼ぶ。1候補なら(token, "forced", None)を返し、診断・配列変換はしない。
 複数候補なら1回のModel.logitsと既存choose_tokenを使い、(token, "greedy", raw_topまたはNone)を返す。
 同点や有限の許可候補が1つしかない分布でも、複数候補からモデルを呼んだならgreedyである。
 空候補・不正logitsのエラー、マスク・argmax・同点規則は現行を維持する。
@@ -571,9 +583,9 @@ forcedならinclude_raw_top=Trueでもraw_topはNone、greedyならFalseの場�
 各ループで`token, mode, raw_top = select_next_token(...)`と受け取り、そのステップの通知までに使う。
 全logits返却やModel.last_logits等の隠れた状態、追加forward、softmax、上位k件は採らない。
 
-ここでのforcedは「許可IDが1つなので推論を省いた選択」である。
+ここでのforcedは「許可IDが1つなので点数を使わない選択」である（forwardは方式Bで1回行う）。
 build_skeletonのForcedは固定JSON部品で、ADR-0026に従い各IDを1個ずつ確定する。
-logitsによる選択は行わず、既存の名前/値用TUI通知やstep数にも加算しない。確定の逐次性は単体テストで検証する。
+各IDの前に1回forwardするが、既存の名前/値用TUI通知やstep数には加算しない。確定の逐次性と文脈は単体テストで検証する。
 
 ### 9.5 観測インターフェースの比較と推奨
 
@@ -807,7 +819,7 @@ with終了：端末復帰 → 要約 → mainの終了コード
 ```
 
 各名前/値ループは、終了確認→許可ID計算→上限確認→1選択→ID追加→1ステップの通知の順に書く。
-0/1候補ではprefix_idsをそのまま選択関数へ渡し、複数候補のときだけprefix_ids + generatedを作る。
+方式Bでは候補数によらずprefix_ids + generatedを選択関数へ渡す。
 上限ちょうどの終了は成功し、未完成で上限と空候補が同時なら上限エラーを優先する。
 
 - 名前: `token, mode, raw_top`を受け、ID追加後にgeneratedをSequence[int]としてmode/raw_topとともにname_tokenへ同期的に渡す。
@@ -1012,7 +1024,7 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
 
 以下の回帰条件を維持する。実行済みの範囲と未検証条件は末尾に分ける。
 
-1. 名前と値の両方で、1候補はforced・推論0回、複数候補はgreedy・推論1回となる。
+1. 名前と値の両方で、1候補はforced・推論1回（方式B）、複数候補はgreedy・推論1回となる。
    greedyでinclude_raw_top=Falseならraw_top=Noneだが方式はgreedy。forcedはTrue指定でも診断0回。
 2. modeが実際の分岐と一致し、表示あり/なし・リダイレクトで採用ID、モデル入力、forward回数、JSONが一致する。
    同点・raw最大がマスクされる場合・有限候補が1つだけの場合・不正logitsを既存規則で確認する。

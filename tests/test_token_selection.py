@@ -5,9 +5,11 @@ from unittest.mock import patch
 
 import numpy as np
 
-from src import decoder
+from src import decoder, pipeline
 from src.errors import PromptError
 from src.model_port import Model
+from src.name_trie import NameTrie
+from src.schema import FunctionDef
 
 
 class SelectionTests(unittest.TestCase):
@@ -36,16 +38,40 @@ class SelectionTests(unittest.TestCase):
                     llm.assert_called_once_with(ids)
                     self.assertEqual(ids, [9, 7])
 
-    def test_forced_skips_model_and_all_array_work(self) -> None:
-        """A unique allowed token never needs logits or diagnostic argmax."""
+    def test_forced_runs_one_forward_without_array_work(self) -> None:
+        """Method B: a unique token still gets one forward, no array work."""
         model = object.__new__(Model)
-        with patch.object(Model, 'logits', side_effect=AssertionError), \
-                patch.object(np, 'asarray', side_effect=AssertionError), \
-                patch.object(np, 'argmax', side_effect=AssertionError):
-            for diagnose in (False, True):
+        for diagnose in (False, True):
+            with self.subTest(diagnose=diagnose), \
+                    patch.object(Model, 'logits',
+                                 return_value=[0.0, 0.0, 0.0]) as llm, \
+                    patch.object(np, 'asarray', side_effect=AssertionError), \
+                    patch.object(np, 'argmax', side_effect=AssertionError):
                 self.assertEqual(decoder.select_next_token(
                     model, [9], [2], include_raw_top=diagnose,
                 ), (2, 'forced', None))
+                llm.assert_called_once_with([9])
+
+    def test_name_forwards_every_token_on_full_context(self) -> None:
+        """Method B: forced and branching name IDs see P plus all IDs."""
+        def fn(name: str) -> FunctionDef:
+            return FunctionDef.model_validate({
+                'name': name, 'description': 'd', 'parameters': {},
+                'returns': {'type': 'string'}})
+        trie = NameTrie(paths={'ab': (1, 2, 0), 'ac': (1, 3, 0)})
+        contexts: list[list[int]] = []
+
+        def logits(ids: list[int]) -> list[float]:
+            contexts.append(ids.copy())
+            return [0.0, 0.0, 1.0, 2.0]
+        with patch.object(Model, 'encode', return_value=[50]), \
+                patch.object(Model, 'logits', side_effect=logits), \
+                patch.object(pipeline, 'build_name_prompt', return_value='N'):
+            chosen = pipeline.select_name(
+                'x', model=object.__new__(Model),
+                functions={'ab': fn('ab'), 'ac': fn('ac')}, trie=trie)
+        self.assertEqual(chosen.name, 'ac')
+        self.assertEqual(contexts, [[50], [50, 1], [50, 1, 3]])
 
     def test_empty_mask_fails_without_inference(self) -> None:
         """Empty candidates preserve the existing continuation error."""

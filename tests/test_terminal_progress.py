@@ -25,6 +25,7 @@ class ObservationTests(unittest.TestCase):
         trie = NameTrie(paths={fn.name: (1, 2)})
         model = object.__new__(Model)
         with patch.object(Model, 'encode', return_value=[9]), \
+                patch.object(Model, 'logits', return_value=[0.0]), \
                 patch.object(Model, 'decode',
                              side_effect=PromptError('diagnostic decode')):
             plain = pipeline.select_name('request', model=model,
@@ -68,7 +69,8 @@ class ObservationTests(unittest.TestCase):
             self.assertEqual('name_selection_constrained' in output.getvalue(),
                              warned)
             self.assertNotIn('candidates', dashboard.fields)
-            llm.assert_called_once_with([9])
+            self.assertEqual([c.args for c in llm.call_args_list],
+                             [([9],), ([9, 2],)])
 
     def test_complete_call_and_value_progress_with_observation(self) -> None:
         """Real masks/validation keep JSON and model inputs in all modes."""
@@ -90,10 +92,8 @@ class ObservationTests(unittest.TestCase):
                     patch.object(Model, 'decode', side_effect=lambda ids:
                                  b''.join(vocab[i] for i in ids
                                           if i != 0).decode()), \
-                    patch.object(Model, 'logits', side_effect=[
-                        [0.0, 3.0, 2.0, 1.0] + [-10.0] * 252,
-                        [0.0, 1.0, 0.0, 4.0] + [-10.0] * 252,
-                    ]) as llm:
+                    patch.object(Model, 'logits', return_value=(
+                        [0.0, 3.0, 2.0, 4.0] + [-10.0] * 252)) as llm:
                 dashboard = Dashboard(1, model, vocab)
                 dashboard.available = mode != 'unavailable'
                 dashboard.interactive = mode == 'broken'
@@ -118,7 +118,9 @@ class ObservationTests(unittest.TestCase):
             'prompt': 'request', 'name': 'f', 'parameters': {'a': 1.0},
         }] * 4)
         self.assertTrue(all(item == inputs[0] for item in inputs))
-        self.assertEqual(len(inputs[0]), 2)
+        # Method B: name IDs 7, 0; one byte ID per fixed char; value 1, 3.
+        fixed = '{"prompt":"request","name":"f","parameters":{"a": ' + '}'
+        self.assertEqual(len(inputs[0]), 2 + len(fixed) + 2)
 
 
 class TerminalTests(unittest.TestCase):
@@ -226,7 +228,8 @@ class LoopObservationTests(unittest.TestCase):
                 trie=trie, progress=dashboard,
             )
         self.assertIs(selected, second)
-        llm.assert_called_once_with([9, 1])
+        self.assertEqual([c.args for c in llm.call_args_list],
+                         [([9],), ([9, 1],), ([9, 1, 3],)])
         self.assertEqual([item[1:] for item in seen],
                          [((1,), 'forced'), ((1, 3), 'greedy'),
                           ((1, 3, 0), 'forced')])
@@ -254,7 +257,7 @@ class LoopObservationTests(unittest.TestCase):
                         progress=dashboard,
                     )
                 self.assertEqual(result, [expected])
-                self.assertEqual(llm.call_count, int(mode == 'greedy'))
+                llm.assert_called_once_with([9])
                 self.assertEqual(dashboard.fields['value'], 'true}')
                 self.assertEqual(dashboard.fields['token'],
                                  f'{expected} ({mode})')

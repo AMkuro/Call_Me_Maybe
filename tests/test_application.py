@@ -248,12 +248,15 @@ class DecoderTests(unittest.TestCase):
             self.assertEqual(pipeline.generate_value(
                 slot, prefix, model=model, vocab={1: b'a', 2: b'b'},
             ), [1, 2])
-        llm.assert_called_once_with([7, 1])
+        # Method B: the forced first ID also gets its forward.
+        self.assertEqual([c.args for c in llm.call_args_list],
+                         [([7],), ([7, 1],)])
         self.assertEqual(prefix, [7])
         for cap, allowed, message in ((2, [1], 'token limit 2'),
                                       (2, [], 'no allowed'),
                                       (0, [], 'token limit 0')):
             with self.subTest(cap=cap, allowed=allowed), \
+                    patch.object(Model, 'logits', return_value=[0.0, 0.0]), \
                     patch.object(pipeline, 'MAX_VALUE_STEPS', cap), \
                     patch.object(pipeline, 'is_value_complete',
                                  return_value=False), \
