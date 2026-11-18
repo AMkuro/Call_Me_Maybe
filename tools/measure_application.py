@@ -16,10 +16,9 @@ from src.progress import Stage
 from src.errors import PromptError, StartupError
 from src.json_io import loads
 from src.loader import index_functions
-from src.pipeline import (
-    MAX_NUMBER_STEPS, MAX_VALUE_STEPS, GenerationAssets,
-    process_prompt,
-)
+from src.generation import MAX_NUMBER_STEPS, MAX_VALUE_STEPS
+from src.pipeline import process_prompt
+from src.runtime import GenerationAssets
 from src.schema import FunctionCall, FunctionDef, ParamType
 
 

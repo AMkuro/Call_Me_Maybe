@@ -11,8 +11,7 @@ from unittest.mock import patch
 
 from pydantic import BaseModel
 
-from src import __main__ as entry
-from src import pipeline
+from src import __main__ as entry, generation, pipeline, runtime
 from src.cli import Args
 from src.errors import PromptError
 from src.model_port import Model
@@ -94,15 +93,15 @@ class PipelineTests(unittest.TestCase):
 
                 with patch.object(Model, 'decode', side_effect=decode), \
                         patch.object(Model, 'logits', side_effect=logits), \
-                        patch.object(pipeline, 'is_slot_complete',
+                        patch.object(generation, 'is_slot_complete',
                                      side_effect=complete), \
-                        patch.object(pipeline, 'allowed_slot_tokens',
+                        patch.object(generation, 'allowed_slot_tokens',
                                      side_effect=allowed), \
                         patch('src.decoder.constrained_argmax', side_effect=(
                             lambda scores, permitted:
                             max(permitted, key=scores.__getitem__)
                         )):
-                    result = pipeline.generate_slot(
+                    result = generation.generate_slot(
                         slot, [127], model=model,
                         vocab={token: bytes([token]) for token in range(128)},
                     )
@@ -123,13 +122,13 @@ class PipelineTests(unittest.TestCase):
                 with patch.object(Model, 'encode', side_effect=encode), \
                         patch.object(Model, 'decode', side_effect=decode), \
                         patch.object(Model, 'logits', return_value=[0.0]), \
-                        patch.object(pipeline, 'build_parameters_prompt',
+                        patch.object(generation, 'build_parameters_prompt',
                                      return_value=''), \
-                        patch.object(pipeline,
+                        patch.object(generation,
                                      'generate_slot',
                                      side_effect=[encode('12.0,'),
                                                   encode('true}')]):
-                    text = pipeline.generate_call_json(
+                    text = generation.generate_call_json(
                         'a "quoted" prompt', fn,
                         model=model,
                         vocab={token: bytes([token]) for token in range(128)},
@@ -184,8 +183,8 @@ class MainTests(unittest.TestCase):
         fixtures = {
             (entry, 'parse_args'): Args(output=self.output),
             (entry, 'load_functions'): {'f': definition()},
-            (pipeline, 'Model'): model,
-            (pipeline, 'load_vocab'): {},
+            (runtime, 'Model'): model,
+            (runtime, 'load_vocab'): {},
         }
         for (module, name), result in fixtures.items():
             self.stack.enter_context(patch.object(
@@ -198,7 +197,7 @@ class MainTests(unittest.TestCase):
             Model, 'vocab_path', return_value='unused',
         ))
         self.stack.enter_context(patch.object(
-            entry, 'save_results', side_effect=self.save,
+            pipeline, 'save_results', side_effect=self.save,
         ))
 
     def save(self, path: Path, calls: list[FunctionCall]) -> None:
@@ -212,14 +211,15 @@ class MainTests(unittest.TestCase):
     ) -> int:
         """Run actual CLI orchestration with fixed per-prompt outcomes."""
         with patch.object(entry, 'load_prompts', return_value=prompts), \
-                patch.object(entry, 'process_prompt', side_effect=results), \
+                patch.object(pipeline, 'process_prompt',
+                             side_effect=results), \
                 contextlib.redirect_stderr(self.stderr):
             return entry.main([])
 
     def test_save_error_is_reported_and_stops_processing(self) -> None:
         """A failed write exits nonzero before another prompt is processed."""
         call = FunctionCall(prompt='x', name='f', parameters={})
-        with patch.object(entry, 'save_results',
+        with patch.object(pipeline, 'save_results',
                           side_effect=OSError('disk full')):
             try:
                 result = self.run_main(['x', 'y'], [call])
@@ -236,7 +236,7 @@ class MainTests(unittest.TestCase):
 
     def test_empty_result_save_error_is_reported(self) -> None:
         """Saving an empty array uses the same error handling."""
-        with patch.object(entry, 'save_results',
+        with patch.object(pipeline, 'save_results',
                           side_effect=OSError('permission denied')):
             self.assertEqual(self.run_main(['x'], [PromptError('failed')]), 1)
         self.assertIn('permission denied', self.stderr.getvalue())

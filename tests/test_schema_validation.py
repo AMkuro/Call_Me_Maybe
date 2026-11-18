@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
-from src import __main__ as entry, pipeline
+from src import __main__ as entry, pipeline, runtime
 from src.loader import load_functions
 from src.model_port import Model
 from src.schema import FunctionDef, ParamSpec
@@ -115,7 +115,7 @@ class ValidationFlowTests(unittest.TestCase):
                                 '0.1234567890123456789', '0.1']
             ]
             stderr, stdout = io.StringIO(), io.StringIO()
-            with patch.object(pipeline, 'Model', return_value=model), \
+            with patch.object(runtime, 'Model', return_value=model), \
                     patch.object(Model, 'encode', side_effect=encode_name), \
                     patch.object(Model, 'decode', side_effect=(
                         lambda ids: ''.join(chr(x) for x in ids if x)

@@ -8,12 +8,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from src import runtime
 from src.errors import StartupError
 from src.loader import load_functions
 from src.model_port import Model
 from src.name_trie import NameTrie
-from src import pipeline
-from src.pipeline import select_function
+from src.generation import select_function
 from src.prompt import build_name_prompt
 from src.schema import FunctionDef
 from tools import measure_application
@@ -84,7 +84,7 @@ class FunctionRegistryTests(unittest.TestCase):
             stderr = io.StringIO()
             with patch('sys.argv', ['measure', '--cases', str(cases),
                                     '--output', str(output)]), \
-                    patch.object(pipeline, 'Model',
+                    patch.object(runtime, 'Model',
                                  side_effect=StartupError('model sentinel')) \
                     as model, contextlib.redirect_stderr(stderr):
                 self.assertEqual(measure_application.main(), 1)

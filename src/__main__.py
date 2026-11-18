@@ -2,18 +2,15 @@
 
 import sys
 from collections.abc import Sequence
-from pathlib import Path
 from types import MappingProxyType
 
 from .cli import Args, parse_args
 from .display import Dashboard
-from .errors import PromptError, StartupError
+from .errors import StartupError
 from .loader import load_functions, load_prompts
-from .pipeline import (
-    GenerationAssets, process_prompt,
-)
-from .schema import FunctionCall
-from .writer import prepare_output, save_results
+from .pipeline import process_all
+from .runtime import GenerationAssets
+from .writer import prepare_output
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -28,17 +25,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except StartupError as e:
         print(e, file=sys.stderr)
         return 1
-    try:
-        with Dashboard(len(prompts), resources.model,
-                       MappingProxyType(resources.vocab)) as dashboard:
-            all_done = _process_all(prompts, resources, args.output, dashboard)
-    # Outside the with, so the terminal is restored before the message.
-    # Only save_results raises OSError here: Dashboard keeps its own
-    # stream errors, and Model turns its errors into PromptError.
-    except OSError as e:
-        print(f"cannot save output to {args.output}: {e}", file=sys.stderr)
-        return 1
-    return 0 if all_done else 1
+    return _end(args, prompts, resources)
 
 
 def _start(
@@ -59,34 +46,25 @@ def _start(
     return args, prompts, resources
 
 
-def _process_all(
-    prompts: list[str], resources: GenerationAssets, output: Path,
-    dashboard: Dashboard,
-) -> bool:
-    """Process every prompt; True when none failed.
+def _end(
+    args: Args, prompts: list[str], resources: GenerationAssets,
+) -> int:
+    """Run the batch, close the terminal, and report save failures.
 
-    A failed prompt is reported and skipped. The results so far are saved
-    after each success, so an interruption keeps them. Raises OSError when
-    saving fails.
-
-    Effect: uses the model and writes ``output``.
+    Dashboard owns terminal cleanup, including on interruption. Report
+    OSError only after its context has closed; other exceptions propagate.
     """
-    calls: list[FunctionCall] = []
-    for index, user_prompt in enumerate(prompts, 1):
-        dashboard.prompt_started(index, user_prompt)
-        try:
-            call = process_prompt(user_prompt, resources, progress=dashboard)
-        except PromptError as e:
-            dashboard.prompt_failed(str(e))
-            continue
-        calls.append(call)
-        save_results(output, calls)
-        # Only after the save: if it fails, the summary shows this prompt
-        # as not finished rather than done.
-        dashboard.prompt_done(call.name)
-    if not calls:
-        save_results(output, calls)  # all failed: still write "[]"
-    return len(calls) == len(prompts)
+    try:
+        with Dashboard(len(prompts), resources.model,
+                       MappingProxyType(resources.vocab)) as dashboard:
+            all_done = process_all(prompts, resources, args.output, dashboard)
+    # Outside the with, so the terminal is restored before the message.
+    # Only save_results raises OSError here: Dashboard keeps its own
+    # stream errors, and Model turns its errors into PromptError.
+    except OSError as e:
+        print(f"cannot save output to {args.output}: {e}", file=sys.stderr)
+        return 1
+    return 0 if all_done else 1
 
 
 if __name__ == "__main__":

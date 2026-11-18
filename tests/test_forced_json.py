@@ -7,7 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
-from src import pipeline
+from src import generation, pipeline, runtime
 from src.errors import PromptError
 from src.model_port import Model
 from trie_fixtures import trie_from_paths
@@ -32,7 +32,7 @@ class ForcedJsonTests(unittest.TestCase):
                                ('decode', self.decode),
                                ('logits', self.logits)):
             patch.object(Model, method, side_effect=effect).start()
-        patch.object(pipeline, 'build_parameters_prompt',
+        patch.object(generation, 'build_parameters_prompt',
                      return_value='P').start()
 
     def encode(self, text: str) -> list[int]:
@@ -88,15 +88,15 @@ class ForcedJsonTests(unittest.TestCase):
         )
         expected = head.replace('<', r'\u003c') + members + '}}'
         self.target = expected.encode()
-        return pipeline.generate_call_json(prompt, fn, model=self.model,
-                                           vocab=self.vocab)
+        return generation.generate_call_json(prompt, fn, model=self.model,
+                                             vocab=self.vocab)
 
     def test_fixed_ids_commit_individually_after_one_forward(self) -> None:
         """Method B: each fixed ID follows one forward on the full prefix."""
         self.target = b'{"x": '
         context = [80]
-        ids = pipeline._commit_fixed_text('{"x": ', context,
-                                          model=self.model, vocab=self.vocab)
+        ids = generation._commit_fixed_text('{"x": ', context,
+                                            model=self.model, vocab=self.vocab)
         self.assertEqual(ids, [123, 34, 120, 34, 58, 32])
         self.assertEqual(context, [80], 'the caller owns the output IDs')
         self.assertEqual(self.contexts,
@@ -107,8 +107,8 @@ class ForcedJsonTests(unittest.TestCase):
         fn = self.definition('timer', minutes='number', repeat='boolean')
         self.target = (b'{"prompt":"t","name":"timer","parameters":'
                        b'{"minutes": 10,"repeat": true}}')
-        text = pipeline.generate_call_json('t', fn, model=self.model,
-                                           vocab=self.vocab)
+        text = generation.generate_call_json('t', fn, model=self.model,
+                                             vocab=self.vocab)
         self.assertEqual(text, '{"prompt":"t","name":"timer","parameters":'
                          '{"minutes": 10.0,"repeat": true}}')
         # The context keeps what the model wrote; ".0" is never forwarded.
@@ -181,8 +181,8 @@ class ForcedJsonTests(unittest.TestCase):
         with patch.object(Model, 'encode', side_effect=lambda text:
                           [80] if text == 'P' else [120]):
             with self.assertRaises(PromptError):
-                pipeline.generate_call_json('x', fn, model=self.model,
-                                            vocab=self.vocab)
+                generation.generate_call_json('x', fn, model=self.model,
+                                              vocab=self.vocab)
         self.assertEqual(self.contexts, [])
 
     def test_unknown_fixed_id_is_a_prompt_error(self) -> None:
@@ -190,15 +190,15 @@ class ForcedJsonTests(unittest.TestCase):
         with patch.object(Model, 'encode', side_effect=lambda text:
                           [80] if text == 'P' else [999]):
             with self.assertRaises(PromptError):
-                pipeline.generate_call_json('x', fn, model=self.model,
-                                            vocab=self.vocab)
+                generation.generate_call_json('x', fn, model=self.model,
+                                              vocab=self.vocab)
 
     def test_sdk_decode_loss_is_a_prompt_error(self) -> None:
         fn = self.definition('f')
         with patch.object(Model, 'decode', return_value=''):
             with self.assertRaises(PromptError):
-                pipeline.generate_call_json('x', fn, model=self.model,
-                                            vocab=self.vocab)
+                generation.generate_call_json('x', fn, model=self.model,
+                                              vocab=self.vocab)
 
     def test_completed_value_decode_must_match_grammar_bytes(self) -> None:
         fn = self.definition('f', n='number')
@@ -236,20 +236,20 @@ class ForcedJsonTests(unittest.TestCase):
         encodings = {'{"a":': [300], ' true}': [301],
                      '{"a": true}': [302]}
         with patch.object(Model, 'encode', side_effect=encodings.__getitem__):
-            output += pipeline._commit_fixed_text(
+            output += generation._commit_fixed_text(
                 '{"a":', [80] + output, model=self.model, vocab=self.vocab)
-            output += pipeline._commit_fixed_text(
+            output += generation._commit_fixed_text(
                 ' true}', [80] + output, model=self.model, vocab=self.vocab)
             self.assertNotEqual(output, self.model.encode('{"a": true}'))
         self.assertEqual(output, [300, 301])
-        self.assertEqual(pipeline._decode_and_verify_output(
+        self.assertEqual(generation._decode_and_verify_output(
             output, model=self.model, vocab=self.vocab), '{"a": true}')
         self.assertEqual(self.contexts, [[80], [80, 300]])
 
     def test_llm_number_literal_survives_validation_and_save(self) -> None:
         """Save exactly the model's decimal, including huge integer digits."""
         fn = self.definition('f', n='number')
-        resources = pipeline.GenerationAssets.model_construct(
+        resources = runtime.GenerationAssets.model_construct(
             model=self.model, vocab=self.vocab, functions={'f': fn},
             trie=trie_from_paths({'f': (1,)}),
         )
@@ -272,7 +272,7 @@ class ForcedJsonTests(unittest.TestCase):
 
     def test_process_rejects_changed_prompt(self) -> None:
         fn = self.definition('f')
-        resources = pipeline.GenerationAssets.model_construct(
+        resources = runtime.GenerationAssets.model_construct(
             model=self.model, vocab=self.vocab, functions={'f': fn},
             trie=trie_from_paths({'f': (1,)}),
         )

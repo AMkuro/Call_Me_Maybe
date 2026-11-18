@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from src import decoder, pipeline
+from src import decoder, generation
 from src.errors import PromptError
 from src.model_port import Model
 from trie_fixtures import trie_from_paths
@@ -66,8 +66,9 @@ class SelectionTests(unittest.TestCase):
             return [0.0, 0.0, 1.0, 2.0]
         with patch.object(Model, 'encode', return_value=[50]), \
                 patch.object(Model, 'logits', side_effect=logits), \
-                patch.object(pipeline, 'build_name_prompt', return_value='N'):
-            chosen = pipeline.select_function(
+                patch.object(generation, 'build_name_prompt',
+                             return_value='N'):
+            chosen = generation.select_function(
                 'x', model=object.__new__(Model),
                 functions={'ab': fn('ab'), 'ac': fn('ac')}, trie=trie)
         self.assertEqual(chosen.name, 'ac')
@@ -88,10 +89,11 @@ class SelectionTests(unittest.TestCase):
         with patch.object(Model, 'encode', return_value=[50]), \
                 patch.object(Model, 'logits',
                              side_effect=PromptError('model inference')), \
-                patch.object(pipeline, 'build_name_prompt', return_value='N'):
+                patch.object(generation, 'build_name_prompt',
+                             return_value='N'):
             with self.assertRaisesRegex(
                     PromptError, r'^function name: model inference$'):
-                pipeline.select_function(
+                generation.select_function(
                     'x', model=object.__new__(Model), functions={'a': fn},
                     trie=trie_from_paths({'a': (1, 0)}))
 
@@ -101,13 +103,13 @@ class SelectionTests(unittest.TestCase):
             'name': 'a', 'description': 'd', 'parameters': {},
             'returns': {'type': 'string'}})
         with patch.object(Model, 'encode', return_value=[50]), \
-                patch.object(pipeline, 'build_name_prompt',
+                patch.object(generation, 'build_name_prompt',
                              return_value='N'), \
-                patch.object(pipeline, 'infer_and_select_next_token',
+                patch.object(generation, 'infer_and_select_next_token',
                              return_value=(9, 'greedy', None)):
             with self.assertRaisesRegex(
                     PromptError, r'^function name: invalid token path'):
-                pipeline.select_function(
+                generation.select_function(
                     'x', model=object.__new__(Model), functions={'a': fn},
                     trie=trie_from_paths({'a': (1, 0)}))
 

@@ -7,7 +7,7 @@ import unittest
 from collections.abc import Sequence
 from unittest.mock import patch
 
-from src import pipeline
+from src import generation, pipeline, runtime
 from src.decoder import SelectionMode
 from src.display import Dashboard
 from src.errors import PromptError
@@ -28,12 +28,12 @@ class ObservationTests(unittest.TestCase):
                 patch.object(Model, 'logits', return_value=[0.0]), \
                 patch.object(Model, 'decode',
                              side_effect=PromptError('diagnostic decode')):
-            plain = pipeline.select_function('request', model=model,
-                                             functions={fn.name: fn},
-                                             trie=trie)
+            plain = generation.select_function('request', model=model,
+                                               functions={fn.name: fn},
+                                               trie=trie)
             with contextlib.redirect_stderr(io.StringIO()):
                 dashboard = Dashboard(1, model, {})
-                observed = pipeline.select_function(
+                observed = generation.select_function(
                     'request', model=model, functions={fn.name: fn},
                     trie=trie, progress=dashboard,
                 )
@@ -57,7 +57,7 @@ class ObservationTests(unittest.TestCase):
                     patch.object(Model, 'decode', return_value='b'), \
                     patch.object(Model, 'logits', return_value=scores) as llm:
                 dashboard = Dashboard(1, model, {0: b'x', 1: b'a', 2: b'b'})
-                result = pipeline.select_function(
+                result = generation.select_function(
                     'request', model=model, functions=functions,
                     trie=trie, progress=dashboard,
                 )
@@ -80,7 +80,7 @@ class ObservationTests(unittest.TestCase):
         model = object.__new__(Model)
         vocab = {1: b'1', 2: b'2', 3: b'.0}', 7: b'f'}
         vocab.update({128 + char: bytes([char]) for char in range(128)})
-        resource = pipeline.GenerationAssets.model_construct(
+        resource = runtime.GenerationAssets.model_construct(
             model=model, vocab=vocab, functions={'f': fn}, trie=trie,
         )
         results = []
@@ -222,7 +222,7 @@ class LoopObservationTests(unittest.TestCase):
                 patch.object(Model, 'logits',
                              return_value=[9.0, 0.0, 1.0, 2.0]) as llm, \
                 patch.object(dashboard, 'name_token', side_effect=observe):
-            selected = pipeline.select_function(
+            selected = generation.select_function(
                 'request', model=model, functions={'a': first, 'b': second},
                 trie=trie, progress=dashboard,
             )
@@ -251,7 +251,7 @@ class LoopObservationTests(unittest.TestCase):
                 dashboard = Dashboard(1, model, vocab)
                 with patch.object(Model, 'logits',
                                   return_value=[0.0, 1.0, 2.0]) as llm:
-                    result = pipeline.generate_slot(
+                    result = generation.generate_slot(
                         slot, [9], model=model, vocab=vocab,
                         progress=dashboard,
                     )

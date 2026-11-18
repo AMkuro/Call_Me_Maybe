@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
-from src import __main__ as entry, pipeline
+from src import generation, pipeline, runtime
 from src.errors import PromptError
 from src.model_port import Model
 from trie_fixtures import trie_from_paths
@@ -43,7 +43,7 @@ def generated(literal: str, prompt: str = '依頼') -> FunctionCall:
     """Keep real validation and the production raw-text setter."""
     fn = definition()
     model = object.__new__(Model)
-    resources = pipeline.GenerationAssets.model_construct(
+    resources = runtime.GenerationAssets.model_construct(
         model=model, vocab={}, functions={'record': fn},
         trie=trie_from_paths({'record': (1,)}),
     )
@@ -123,7 +123,7 @@ class DecimalGrammarTests(unittest.TestCase):
         slot = ValueSlot(name='x', type='number', terminator='}')
         with patch.object(Model, 'logits', return_value=scores) as forward, \
                 patch.object(Model, 'encode') as encode:
-            ids = pipeline.generate_slot(
+            ids = generation.generate_slot(
                 slot, [90, 91], model=model, vocab=vocab)
         self.assertEqual(ids, [1, 3])
         self.assertEqual(b''.join(vocab[t] for t in ids), b'2.05}')
@@ -149,13 +149,13 @@ class DecimalGrammarTests(unittest.TestCase):
                     patch.object(Model, 'logits', side_effect=logits):
                 slot = ValueSlot(name='x', type='number', terminator='}')
                 if length == 32:
-                    ids = pipeline.generate_slot(
+                    ids = generation.generate_slot(
                         slot, [], model=model, vocab=vocab)
                     self.assertEqual(b''.join(vocab[t] for t in ids), target)
                 else:
                     with self.assertRaisesRegex(
                             PromptError, 'token limit 32'):
-                        pipeline.generate_slot(
+                        generation.generate_slot(
                             slot, [], model=model, vocab=vocab)
 
 
@@ -290,7 +290,7 @@ class DecimalSaveTests(unittest.TestCase):
 
         model = object.__new__(Model)
         fn = definition()
-        resources = pipeline.GenerationAssets.model_construct(
+        resources = runtime.GenerationAssets.model_construct(
             model=model, vocab={}, functions={'record': fn},
             trie=trie_from_paths({'record': (1,)}),
         )
@@ -300,13 +300,14 @@ class DecimalSaveTests(unittest.TestCase):
                 dashboard = Dashboard(3, model, {})
             outcomes = [generated('2.00', 'first'), PromptError('skip'),
                         generated('0.00000001', 'last')]
-            with patch.object(entry, 'process_prompt', side_effect=outcomes):
-                self.assertFalse(entry._process_all(
+            with patch.object(pipeline, 'process_prompt',
+                              side_effect=outcomes):
+                self.assertFalse(pipeline.process_all(
                     ['first', 'bad', 'last'], resources, path, dashboard))
             prompts = [r['prompt'] for r in json.loads(path.read_text())]
             self.assertEqual(prompts, ['first', 'last'])
-            with patch.object(entry, 'process_prompt',
+            with patch.object(pipeline, 'process_prompt',
                               side_effect=PromptError('skip')):
-                self.assertFalse(entry._process_all(
+                self.assertFalse(pipeline.process_all(
                     ['bad'], resources, path, dashboard))
             self.assertEqual(path.read_text(), '[]\n')

@@ -107,7 +107,7 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 読み込み時に作った辞書を使い、選択のたびに関数の配列を再走査しない（ADR-0016）。
 
 名前の末尾には Qwen の応答終了トークン `<|im_end|>` を含める。コード上の名前は `model_port.EOS` とし、
-`pipeline.GenerationAssets`は`NameTrie(functions, model)`を呼び、`NameTrie`自身が既存の`model_port.EOS`を使う。
+`runtime.GenerationAssets`は`NameTrie(functions, model)`を呼び、`NameTrie`自身が既存の`model_port.EOS`を使う。
 各名前の完成経路は`encode(名前 + EOS)`で、その末端に到達したことが名前の確定である。
 例えば `fn_add` と `fn_add_numbers` が共存するとき、`fn_add` の後で EOS の経路と `_numbers` の経路が分かれる。
 SDK の decode は特殊トークンを表示しないため、終了は表示文字列ではなく ID の経路で判断する。
@@ -360,7 +360,7 @@ numberを文字列化せず、入力側の数値解析も変更しない。
 非公開属性がない直接構築のFunctionCallは、従来どおり`model_dump`と標準JSON保存を用いる。
 
 この本文は内部の信頼済みデータであり、writerは再解析・再検証しない。
-現行の`_process_all`は`process_prompt`の戻り値を変更せず直ちに保存し、その後の累積保存でも変更しない。
+現行の`pipeline.process_all`は`process_prompt`の戻り値を変更せず直ちに保存し、その後の累積保存でも変更しない。
 別の呼出元がprivate属性へ未検証本文を設定したり、検証後のparameters辞書を書き換えたりする経路は対象外である。
 そのような更新APIを導入する場合は、本文と公開データの一致を改めて保証する必要がある。
 原子的保存は、同じディレクトリの一時ファイルへ全件を書き、close後に`os.replace`する方式を維持する。
@@ -445,11 +445,11 @@ SDK 呼び出しの例外は `Model` が起動時または1件の失敗へ変換
 
 ユーザーがプロンプトや部品を調整するとき、どの入力のどの段階で何が選ばれたかを見られるようにする。
 `decoder.infer_and_select_next_token`は採用ID・選択方式・要求時だけraw_topを返す。
-`pipeline`の名前/値ループはID追加後にGenerationProgressへ同期通知し、表示から制御判断を受け取らない。
+`generation`の名前/値ループはID追加後にGenerationProgressへ同期通知し、表示から制御判断を受け取らない。
 共有資源はGenerationAssetsが保持し、mainが具体的なDashboardを別引数で接続する。
 通知先の後付け代入、Run.say、TokenChoice、生成制御コールバックは廃止した。
 
-1件の始まりと終わりは、`_process_all`がDashboardの`prompt_started(index, prompt)`・
+1件の始まりと終わりは、`pipeline.process_all`がDashboardの`prompt_started(index, prompt)`・
 `prompt_done(name)`・`prompt_failed(reason)`で知らせる。この3つだけが、表示欄の全消去、1件の計時、
 完了・失敗の件数、要約の行を変える。GenerationProgressのメソッドと内部の`_show`は表示欄だけを変える。
 `prompt_done`は`save_results`の後に呼ぶ。保存に失敗した件は、要約で「not finished」に数えられる。
@@ -482,11 +482,11 @@ stderr への書き込みで OSError が起きたら表示を止め、生成と�
 | 調整・変更するもの | 主な担当 | 他の処理へ渡す条件 |
 | --- | --- | --- |
 | モデルへ与える説明・形式 | `prompt.py` の設定値と組み立て関数 | 名前段階・引数段階それぞれの文字列を返す。名前の応答形式は EOS の木と整合させる |
-| 関数を選ぶ処理 | `pipeline.select_function`、`name_trie.py` | 入力された定義の `FunctionDef` を返す |
+| 関数を選ぶ処理 | `generation.select_function`、`name_trie.py` | 入力された定義の `FunctionDef` を返す |
 | トークンを選ぶ方法 | `decoder.py` | 許可IDから1つ選び、ID・方式・任意診断を返す。列や上限は管理せず、観察で選択を変えない |
 | 引数値の許可文法・終了条件 | `values.py`、`generate_slot` | 値とスロットのJSON区切りのID列を返す。文字列の中の区切り文字では終了しない |
 | JSON全文の組み立て | `generate_call_json`、`skeleton.py` | 固定IDを1個ずつ確定し、値の確定IDを統合。完成Oの復号・バイト列・期待断片を照合する |
-| 値の生成上限 | `pipeline.MAX_VALUE_STEPS`、`MAX_NUMBER_STEPS` | 超過を値の短縮で隠さず、理由付きの PromptError にする |
+| 値の生成上限 | `generation.MAX_VALUE_STEPS`、`MAX_NUMBER_STEPS` | 超過を値の短縮で隠さず、理由付きの PromptError にする |
 | 引数の型と数値の扱い | `schema.py`、値の文法、保存 | 定義のキーを保持し、検証後の値を出力する。変更時は生成と検証の双方を確認する |
 | SDK との接続 | `model_port.py` の具体的な `Model` | 公開 API だけを使い、encode と logits は普通のリスト、decode は文字列を返す |
 | 表示とログの形式 | `display.py`の同期受信・整形 | 選択結果と保存データを変えない |
@@ -669,7 +669,7 @@ build_call_skeletonのFixedTextは固定JSON部品で、ADR-0026に従い各ID�
 value_tokenではそのIDを復元できないため、採用IDを明示する。modeの意味は両方で同じである。
 
 GenerationProgressは引き続き小さな構造的型契約とし、mainがDashboardを接続する。
-具体的なDashboardを直接渡す案は型宣言を減らせるがpipelineが端末実装へ依存する。
+具体的なDashboardを生成ループへ直接渡す案は型宣言を減らせるがgenerationが端末実装へ依存する。
 共有バッファや別スレッドの描画は終了・復帰管理を増やすため、今回も採らない。
 
 ```python
@@ -747,7 +747,7 @@ stderrのOSError後はavailableを偽にして表示と追加診断を省くが�
 ### 9.6 案C：上位で共有資源をまとめ、下位へ必要な依存を渡す
 
 案Cはユーザーが採用した管理方針である。全依存を個別引数にする前案は上位処理について撤回する。
-具体的な構造体をGenerationAssetsとし、pipeline.pyの上位処理入口の近くに定義する。
+具体的な構造体をGenerationAssetsとし、起動資源を担当するruntime.pyに定義する。
 生成サービスやFactory階層は作らず、_startと測定ツールがコンストラクタを呼ぶ。
 
 ```python
@@ -783,9 +783,9 @@ FunctionDef.parametersは普通の辞書なので、中身は変更できる。�
 深い凍結はスキーマの変更になり今回の範囲を超えるため、構築後に変更しないという所有規約で扱う。vocabも同じ規約で扱う。
 未検証のTrieを外から渡す引数は設けない。
 
-- mainは1実行分のGenerationAssetsを所有し、_process_all/process_promptへ同じ参照を渡す。
+- mainは1実行分のGenerationAssetsを所有し、process_all/process_promptへ同じ参照を渡す。
   測定ツールも同じ関数セットの評価バッチで一度作り、プロンプトごとには再構築しない。
-  組立は`pipeline.GenerationAssets(functions)`の1か所で、_startと測定ツールが同じ手順で資源を作る。
+  組立は`runtime.GenerationAssets(functions)`の1か所で、_startと測定ツールが同じ手順で資源を作る。
 - _startは入力検証と出力準備の後に`GenerationAssets(functions)`を呼ぶ。
   コンストラクタがModel、vocab、同じfunctionsからのtrieを順に作り、資源の検証エラーを`StartupError`にする。
   キーとnameの一致は入力境界、経路の検証はNameTrieが担当する。
@@ -809,14 +809,14 @@ FunctionDef.parametersは普通の辞書なので、中身は変更できる。�
 
 | 関数 | 受け取る資源と利用 |
 | --- | --- |
-| _process_all / process_prompt | resourcesを受け取り、必要なフィールドを下位へ展開。progressは別引数 |
+| process_all / process_prompt | resourcesを受け取り、必要なフィールドを下位へ展開。progressは別引数 |
 | select_function | model・functions・trie。vocabや資源構造体全体は渡さない |
 | generate_call_json | model・vocab。fnは選択済みの処理対象。progressも別に渡す |
 | generate_slot | model・vocabと処理対象slot/ids。functions・trieは渡さない |
 | infer_and_select_next_token | model・ids・allowedと診断要求だけ。共有構造体・表示先・上限は渡さない |
 
-DashboardもGenerationAssetsを丸ごと受け取らず、mainから必要なmodel/vocab参照と件数だけを受け取る。
-vocabはmainでMappingProxyType(resources.vocab)という読み取り専用viewにして渡し、辞書内容はcopyしない。
+DashboardもGenerationAssetsを丸ごと受け取らず、__main__._endから必要なmodel/vocab参照と件数だけを受け取る。
+vocabは__main__._endでMappingProxyType(resources.vocab)という読み取り専用viewにして渡し、辞書内容はcopyしない。
 名前の公開decodeと警告表記だけに使い、表示側から共有語彙への書き込み経路を作らない。
 Modelの所有権をDashboardへ移すわけではなく、表示メソッドでは公開decodeのみを使う。
 
@@ -825,6 +825,11 @@ Modelの所有権をDashboardへ移すわけではなく、表示メソッドで
 以下は実装したインターフェースである。GenerationAssetsの具体定義は§9.6、GenerationProgressは§9.5を使う。
 
 ```python
+def process_all(
+    prompts: list[str], resources: GenerationAssets, output: Path,
+    dashboard: Dashboard,
+) -> bool: ...
+
 def process_prompt(
     user_prompt: str,
     resources: GenerationAssets,
@@ -874,20 +879,20 @@ def constrained_argmax(
 
 _startは`tuple[Args, list[str], GenerationAssets]`を返す。Dashboardの構築は
 `Dashboard(total: int, model: Model, vocab: Mapping[int, bytes])`で、__init__はNoneを返す。
-具体的なDashboardはmainが持ち、生成へ渡すのは別引数のGenerationProgressだけである。
+具体的なDashboardは__main__._endがwithで管理し、生成へ渡すのは別引数のGenerationProgressだけである。
 
 ### 9.8 データフローと表示の責務
 
 ```text
 _start：入力/出力先検査 → Model → vocab → 同じfunctionsからtrie → GenerationAssets
-main：resourcesから必要な参照を取り出してDashboardをwithで開始
-  → _process_all(prompts, resources, ...) → process_prompt(prompt, resources, progress=...)
+__main__._end：resourcesから必要な参照を取り出してDashboardをwithで開始
+  → pipeline.process_all(prompts, resources, ...) → process_prompt(prompt, resources, progress=...)
     → stage(select_function) → select_function(model, functions, trie, progress)
     → stage(generate_call_json) → generate_call_json(model, vocab, fn, progress)
       → 固定IDの逐次確定 / parameter_started(name, type) → generate_slot(model, vocab, slot, P + O, progress)
     → O全文の復号・整合性検査 → stage(validate_call) → validate_call → prompt一致検査 → FunctionCall
   → 成功ごとに保存 → 完了/失敗通知 → 次の入力
-with終了：端末復帰 → 要約 → mainの終了コード
+with終了：端末復帰 → 要約 → _endで保存エラー報告または終了コードを返す
 ```
 
 各名前/値ループは、終了確認→許可ID計算→上限確認（値だけ）→1選択→ID追加→1ステップの通知の順に書く。
@@ -899,7 +904,7 @@ with終了：端末復帰 → 要約 → mainの終了コード
 - 値: 同じ3値を受け、ID追加後に語彙からwrittenを連結し、written・len(generated)・token・modeをvalue_tokenへ渡す。
   raw_topは要求していないのでNoneであり、表示にも渡さない。
 - どちらもprogressがない、またはavailableが偽なら観測用bytesの構築・decodeを行わない。
-  この条件は`pipeline._observing(progress)`の1か所に書き、通知のたびに呼ぶ。`available`は1件の途中でも
+  この条件は`progress.observing(progress)`の1か所に書き、通知のたびに呼ぶ。`available`は1件の途中でも
   stderrの失敗で偽になるので、process_promptの入口で1回だけ判定する形にはしない。
   表示先の状態を生成側が読むのは、表示にしか使わない計算（raw_top、writtenの複製、decode）を省くためである。
   診断だけを省いてもmodeと採用ID、許可集合、終了条件、モデル入力は同じである。
@@ -908,15 +913,61 @@ with終了：端末復帰 → 要約 → mainの終了コード
 診断decodeのPromptErrorは取得不能表記、stderrのOSErrorは表示停止、最終値decodeの失敗は生成失敗として扱う。
 中断は握りつぶさずwithで端末を戻す。順序・エラー・保存・公開SDKの条件は維持する。
 
+モジュールの責務（ユーザー承認後の分割）:
+
+| モジュール | 担当 |
+| --- | --- |
+| runtime.py | GenerationAssetsの構築と資源の保持。Model、語彙、Trieを起動時に一度作る |
+| generation.py | 名前・固定文字列・値の生成、復号の照合、生成上限。資源構造体を受け取らず、必要な依存を明示引数で受け取る |
+| pipeline.py | process_allによる反復・成功ごとの保存、process_promptによる段階の調停、validate_callによる出力の受理 |
+| __main__.py | _startの入力・出力先検査、_endの端末コンテキスト管理・保存エラー報告・終了コード。起動失敗はmainで報告する |
+| progress.py | 既存のGenerationProgress契約と、通知ごとに呼ぶobserving判定 |
+
 ```text
-main ──→ pipeline（GenerationAssets・上位調停・各生成ループ） ──→ decoder ──→ model_port
-  │          └──→ progress（表示の型契約。SelectionMode等は型参照だけ）
-  └──→ display ──→ model_port（公開decodeのみ）
+__main__ ──→ runtime ──→ model_port / name_trie / vocab
+   │
+   ├──→ pipeline ──→ generation ──→ decoder ──→ model_port
+   │        │            └──→ progress
+   │        ├──→ runtime / schema / writer
+   │        └──→ progress
+   └──→ display ──→ model_port / progress
 ```
 
-pipelineから具体的なdisplayをimportしない。displayはpipelineの資源構造体をimportしない。
-生のModel/vocabは表示処理に必要な参照としてmainで接続し、Progressのトークン通知には含めない。
-共有資源・生成中の可変状態・表示状態の3つの所有を分け、資源構造体を制御フローやサービスロケータにはしない。
+runtimeとgenerationはpipelineへ依存しない。pipelineのDashboard参照は型検査時だけで、
+実行時にはdisplayをimportせず、displayもpipelineやruntimeをimportしない。
+バッチの通知先は現在Dashboardだけなので、process_allは既存のDashboard引数を維持する。
+2つ目のバッチ通知先のためだけのProtocolやアダプタは先に作らない。
+生のModel/vocabは__main__._endで表示へ接続し、Progressのトークン通知には含めない。
+共有資源・生成中の可変状態・表示状態の所有を分け、資源構造体を制御フローやサービスロケータにはしない。
+
+分割の根拠は処理の実行頻度と依存先の違いである。起動資源は実行全体で一度構築し、
+生成はモデルとトークン列を扱い、pipelineは入力ごとの成否と保存順を判断する。
+validate_callは生成の再実行をせず、出力を受理できるか判断するためpipelineに残す。
+既存の関数単位は、名前・値・固定部分で終了条件と照合内容が異なるので維持する。
+process_allで成功の通知をするのは保存の後であり、保存に失敗した入力を完了扱いにしない。
+_endは既存のDashboardのwithを使い、端末復帰後に保存のOSErrorを報告する。
+KeyboardInterruptや予期しない例外の一括捕捉、SDK内部への明示的な解放処理は追加しない。
+
+比較して採らなかった構成:
+
+- 資源だけを別モジュールにする2分割: 起動との混在は減るが、処理調停と生成ループの混在が残る。
+- 出力検証も独立させる4分割: 現在の検証関数は出力受理の一段階で、独立モジュールを増やす利益が小さい。
+- 生成サービスクラスや共通の名前・値ループ: 明示引数で既に依存が分かり、異なる終了条件をまとめると分岐が増える。
+
+検証では、移動した既存関数の構文木を旧配置と比較し、観測判定とバッチ関数の改名を除く一致を確認する。
+固定logitsの既存テストで生成JSON・モデル入力・forward回数・通知を検査し、
+保存失敗時の端末コンテキスト終了順と中断時の片づけを回帰テストで確認する。
+実モデルの出力比較と総実行時間の測定は別の実行で行う。
+
+今回の検証: make install・必須lint/mypy・248テストが成功し、移動した既存関数の構文木は改名を除いて一致した。
+GPUで既知11入力を前後各1回実行し、どちらも11件完了・失敗0、保存JSONはバイト単位で一致した。
+両方の全結果を関数スキーマへ再照合した。[出力比較の記録](measurements/2026-11-18-pipeline-split/accuracy.json)に生の出力を残す。
+この確認では意味的な正答率を採点していない。
+
+計時は出力比較と別に直列実行し、make gpu-run全体で変更前66.06秒、変更後65.73秒だった。
+[計時の記録](measurements/2026-11-18-pipeline-split/timing.json)にオフセットなしの値と条件を残す。
+前後各1回で分散は算出できず、外れ値の除外はしていない。編集・短い静的確認等は並行しており、
+性能同等性や高速化、キャンパス環境の制限への適合をこの値だけでは証明しない。
 
 ### 9.9 検証境界と性能費用
 
@@ -1086,6 +1137,8 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
 無意味なvalidate_callやBaseModelとの多重継承をProtocolへ足して、形式的に解決したことにもしない。
 
 ### 9.10 実装対象・回帰検証・制約
+
+以下の変更対応表と末尾の実測値は2026-11-13時点の記録である。現在のモジュール配置は§9.8に記す。
 
 | 対象ファイル・関数 | 実装した変更 |
 | --- | --- |

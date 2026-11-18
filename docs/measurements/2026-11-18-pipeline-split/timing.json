@@ -1,0 +1,25 @@
+{
+  "measurement": "total make gpu-run wall time; separate runs from output regression",
+  "device": "Radeon 8060S Graphics",
+  "command": "/usr/bin/time -f %e -o <seconds> make gpu-run FLAGS=\"--output <result.json>\"",
+  "before_wall_seconds": [
+    66.06
+  ],
+  "after_wall_seconds": [
+    65.73
+  ],
+  "samples_per_revision": 1,
+  "model_runs_serial": true,
+  "variance": null,
+  "outlier_rule": "No samples removed; one sample per revision, variance not measurable.",
+  "campus_offset_seconds_applied": 0,
+  "output_bytes_identical": true,
+  "output_sha256": "d6077a684649a10fb758d5e3603683928e6b494c1a60917b9e64a4892938ce14",
+  "notes": [
+    "Host GPU measurement, not calibrated campus CPU timing.",
+    "Both measurements include process startup and model loading.",
+    "Model cache was warm: each timing run followed its separate output regression run.",
+    "Agent editing and short static checks occurred concurrently; a 0.005-second lifecycle unit check also occurred during the before run.",
+    "These single observations cannot establish performance equivalence or a speedup."
+  ]
+}

@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from src.errors import StartupError
 from src.loader import index_functions
 from src.model_port import Model
-from src.pipeline import GenerationAssets
+from src.runtime import GenerationAssets
 from src.schema import FunctionDef, ParamSpec
 from test_constraints import encode_name
 
@@ -29,7 +29,7 @@ class ResourceTests(unittest.TestCase):
             patch.object(Model, '__init__', return_value=None),
             patch.object(Model, 'encode', side_effect=encode_name),
             patch.object(Model, 'vocab_path', return_value='unused.json'),
-            patch('src.pipeline.load_vocab', return_value=self.vocab),
+            patch('src.runtime.load_vocab', return_value=self.vocab),
         ):
             mock.start()
             self.addCleanup(mock.stop)

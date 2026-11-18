@@ -14,13 +14,12 @@ from unittest.mock import Mock, patch
 
 from pydantic import ValidationError
 
-from src import __main__ as entry
+from src import __main__ as entry, generation, runtime
 from src.cli import parse_args
 from src.decoder import constrained_argmax
 from src.errors import PromptError, StartupError
 from src.loader import load_functions, load_prompts
 from src.model_port import Model
-from src import pipeline
 from src.pipeline import validate_call
 from src.schema import FunctionCall, FunctionDef, build_parameters_model
 from src.skeleton import FixedText, ValueSlot, build_call_skeleton
@@ -91,7 +90,7 @@ class InputTests(unittest.TestCase):
                         output.write_bytes(previous)
                     stderr = io.StringIO()
                     with patch.object(
-                        pipeline, 'Model', side_effect=AssertionError(
+                        runtime, 'Model', side_effect=AssertionError(
                             'model must not load for empty input'
                         ),
                     ) as model, contextlib.redirect_stderr(stderr):
@@ -272,12 +271,12 @@ class DecoderTests(unittest.TestCase):
         slot = ValueSlot(name='x', type='string', terminator='}')
         with patch.object(Model, 'logits',
                           return_value=[20.0, 1.0, 3.0]) as llm, \
-                patch.object(pipeline, 'MAX_VALUE_STEPS', 2), \
-                patch.object(pipeline, 'is_slot_complete',
+                patch.object(generation, 'MAX_VALUE_STEPS', 2), \
+                patch.object(generation, 'is_slot_complete',
                              side_effect=lambda data, *_: data == b'ab'), \
-                patch.object(pipeline, 'allowed_slot_tokens',
+                patch.object(generation, 'allowed_slot_tokens',
                              side_effect=[[1], [1, 2]]):
-            self.assertEqual(pipeline.generate_slot(
+            self.assertEqual(generation.generate_slot(
                 slot, prefix, model=model, vocab={1: b'a', 2: b'b'},
             ), [1, 2])
         # Method B: the forced first ID also gets its forward.
@@ -289,13 +288,13 @@ class DecoderTests(unittest.TestCase):
                                       (0, [], 'token limit 0')):
             with self.subTest(cap=cap, allowed=allowed), \
                     patch.object(Model, 'logits', return_value=[0.0, 0.0]), \
-                    patch.object(pipeline, 'MAX_VALUE_STEPS', cap), \
-                    patch.object(pipeline, 'is_slot_complete',
+                    patch.object(generation, 'MAX_VALUE_STEPS', cap), \
+                    patch.object(generation, 'is_slot_complete',
                                  return_value=False), \
-                    patch.object(pipeline, 'allowed_slot_tokens',
+                    patch.object(generation, 'allowed_slot_tokens',
                                  return_value=allowed):
                 with self.assertRaisesRegex(PromptError, message):
-                    pipeline.generate_slot(
+                    generation.generate_slot(
                         slot, prefix, model=model, vocab={1: b'a'})
 
     def test_repeated_boundary_cases_have_clear_limit_errors(self) -> None:
@@ -307,13 +306,13 @@ class DecoderTests(unittest.TestCase):
                 with self.subTest(length=length, repeat=repeat), \
                         patch.object(Model, 'logits',
                                      return_value=[0.0, 1.0]), \
-                        patch.object(pipeline, 'is_slot_complete',
+                        patch.object(generation, 'is_slot_complete',
                                      side_effect=lambda data, *_:
                                      len(data) == length), \
-                        patch.object(pipeline, 'allowed_slot_tokens',
+                        patch.object(generation, 'allowed_slot_tokens',
                                      return_value=[0, 1]):
                     if length <= 256:
-                        result = pipeline.generate_slot(
+                        result = generation.generate_slot(
                             slot, [], model=model, vocab={0: b'a', 1: b'b'},
                         )
                         self.assertEqual(len(result), length)
@@ -321,7 +320,7 @@ class DecoderTests(unittest.TestCase):
                         with self.assertRaisesRegex(
                             PromptError, r'token limit 256.*terminator',
                         ):
-                            pipeline.generate_slot(
+                            generation.generate_slot(
                                 slot, [], model=model,
                                 vocab={0: b'a', 1: b'b'},
                             )
@@ -330,11 +329,11 @@ class DecoderTests(unittest.TestCase):
         """Limit errors explain which typed parameter could not complete."""
         model = object.__new__(Model)
         slot = ValueSlot(name='source_string', type='string', terminator='}')
-        with patch.object(pipeline, 'MAX_VALUE_STEPS', 0):
+        with patch.object(generation, 'MAX_VALUE_STEPS', 0):
             with self.assertRaisesRegex(
                 PromptError, r"source_string.*string.*token limit 0",
             ):
-                pipeline.generate_slot(slot, [], model=model, vocab={})
+                generation.generate_slot(slot, [], model=model, vocab={})
 
 
 class WriterTests(unittest.TestCase):

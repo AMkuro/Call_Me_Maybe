@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol, TypeGuard
 
 if TYPE_CHECKING:
     from .decoder import SelectionMode
     from .schema import ParamType
 
-# Each stage is named after the pipeline function it runs, so the display
+# Each stage is named after the function it runs, so the display
 # points at the code that is working.
 Stage = Literal["select_function", "generate_call_json", "validate_call"]
 
@@ -50,3 +50,14 @@ class GenerationProgress(Protocol):
     ) -> None:
         """Observe a value prefix and the ID/mode that produced this step."""
         ...
+
+
+def observing(
+    progress: GenerationProgress | None,
+) -> TypeGuard[GenerationProgress]:
+    """Whether to notify ``progress`` and build what only it uses.
+
+    Checked at every notification, because ``available`` turns False when
+    the diagnostic stream fails during a prompt.
+    """
+    return progress is not None and progress.available
