@@ -80,6 +80,8 @@ def process_prompt(
     call = validate_call(text, fn)
     if call.prompt != user_prompt:
         raise PromptError("invalid output: prompt differs from the input")
+    # Preserve the LLM-selected number lexemes after successful validation.
+    call._generated_json = text
     return call
 
 

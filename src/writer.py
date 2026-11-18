@@ -57,9 +57,24 @@ def save_results(path: Path, calls: list[FunctionCall]) -> None:
             prefix=f".{path.name}.", suffix=".tmp", delete=False,
         ) as output:
             temporary = Path(output.name)
-            json.dump([call.model_dump() for call in calls], output,
-                      ensure_ascii=True, allow_nan=False, indent=2)
-            output.write("\n")
+            if not calls:
+                output.write("[]\\n".replace("\\\\n", "\\n"))
+            else:
+                output.write("[\\n".replace("\\\\n", "\\n"))
+                for index, call in enumerate(calls):
+                    if index:
+                        output.write(",\\n".replace("\\\\n", "\\n"))
+                    output.write("  ")
+                    # Generated records were already parsed and validated.
+                    # Re-encoding their numbers could add exponent notation
+                    # or lose the decimal digits selected by the LLM.
+                    if call._generated_json is not None:
+                        output.write(call._generated_json)
+                    else:
+                        json.dump(call.model_dump(), output,
+                                  ensure_ascii=True, allow_nan=False,
+                                  indent=2)
+                output.write("\\n]\\n".replace("\\\\n", "\\n"))
         os.replace(temporary, path)
     finally:
         if temporary is not None:

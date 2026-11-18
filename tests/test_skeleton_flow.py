@@ -55,8 +55,8 @@ class PipelineTests(unittest.TestCase):
     """Test real pipeline control flow, not the unfinished leaf algorithms."""
 
     def test_numbers_continue_until_the_chosen_delimiter(self) -> None:
-        """A valid numeric prefix must not truncate an integer or decimal."""
-        for target in ('12,', '1.5}', '-0.25,', '0}'):
+        """A valid numeric prefix must not truncate a decimal."""
+        for target in ('12.0,', '1.5}', '-0.25,', '0.0}'):
             with self.subTest(target=target):
                 model = object.__new__(Model)
                 slot = ValueSlot.model_validate({
@@ -138,7 +138,7 @@ class PipelineTests(unittest.TestCase):
                         patch.object(pipeline, 'build_skeleton',
                                      return_value=parts), \
                         patch.object(pipeline, 'generate_value', side_effect=[
-                            encode('12,'), encode('true}'),
+                            encode('12.0,'), encode('true}'),
                         ]):
                     text = pipeline.generate_parameters(
                         'a "quoted" prompt', fn,

@@ -6,7 +6,7 @@ import re
 from .schema import ParamType
 
 _WHITESPACE = b" \t\r\n"
-_NUMBER = re.compile(rb"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
+_NUMBER = re.compile(rb"-?(?:0|[1-9][0-9]*)\.[0-9]+\Z")
 _NUMBER_PREFIX = re.compile(rb"-?(?:(?:0|[1-9][0-9]*)(?:\.[0-9]*)?)?\Z")
 
 

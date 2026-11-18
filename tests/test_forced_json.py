@@ -1,7 +1,10 @@
 """Tokenwise fixed JSON and exact byte/SDK/context correspondence."""
 
 import json
+import tempfile
 import unittest
+from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
 from src import pipeline
@@ -9,6 +12,7 @@ from src.errors import PromptError
 from src.model_port import Model
 from src.name_trie import NameTrie
 from src.schema import FunctionDef
+from src.writer import save_results
 
 
 class AppendTrace(list[int]):
@@ -92,7 +96,8 @@ class ForcedJsonTests(unittest.TestCase):
                 f'"name": {json.dumps(fn.name)}, "parameters": {{')
         members = ', '.join(
             json.dumps(key).replace('<', r'\u003c') + ': '
-            + json.dumps(value, ensure_ascii=False)
+            + (f'{value}.0' if type(value) is int else
+               json.dumps(value, ensure_ascii=False))
             for key, value in values.items()
         )
         expected = head.replace('<', r'\u003c') + members + '}}'
@@ -194,7 +199,7 @@ class ForcedJsonTests(unittest.TestCase):
         def corrupt(ids: list[int]) -> str:
             """Change a number after its byte grammar passed."""
             text = original(ids)
-            return '8}' if text == '7}' else text
+            return '8.0}' if text == '7.0}' else text
 
         with patch.object(Model, 'decode', side_effect=corrupt):
             with self.assertRaises(PromptError):
@@ -231,6 +236,30 @@ class ForcedJsonTests(unittest.TestCase):
         self.assertEqual(pipeline._decode_output(
             output, model=self.model, vocab=self.vocab), '{"a": true}')
         self.assertEqual(self.contexts, [])
+
+    def test_llm_number_literal_survives_validation_and_save(self) -> None:
+        """Save exactly the model's decimal, including huge integer digits."""
+        fn = self.definition('f', n='number')
+        resources = pipeline.GenerationResources(
+            model=self.model, vocab=self.vocab, functions={'f': fn},
+            trie=NameTrie(paths={'f': (1,)}),
+        )
+        text = ('{"prompt":"request","name":"f","parameters":'
+                '{"n":9007199254740993.0}}')
+        with patch.object(pipeline, 'select_name', return_value=fn), \\
+                patch.object(pipeline, 'generate_parameters',
+                             return_value=text):
+            call = pipeline.process_prompt('request', resources)
+        self.assertEqual(call.parameters['n'], 9007199254740993)
+        self.assertEqual(call._generated_json, text)
+        self.assertNotIn('_generated_json', call.model_dump())
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'output.json'
+            save_results(path, [call])
+            saved = path.read_text(encoding='utf-8')
+        self.assertIn('9007199254740993.0', saved)
+        self.assertEqual(json.loads(saved, parse_float=Decimal)[0]
+                         ['parameters']['n'], Decimal('9007199254740993.0'))
 
     def test_process_rejects_changed_prompt(self) -> None:
         fn = self.definition('f')

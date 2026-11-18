@@ -75,7 +75,7 @@ class ObservationTests(unittest.TestCase):
         fn = definition(a='number').model_copy(update={'name': 'f'})
         trie = NameTrie(paths={'f': (7, 0)})
         model = object.__new__(Model)
-        vocab = {1: b'1', 2: b'2', 3: b'}', 7: b'f'}
+        vocab = {1: b'1', 2: b'2', 3: b'.0}', 7: b'f'}
         vocab.update({128 + char: bytes([char]) for char in range(128)})
         resource = pipeline.GenerationResources(
             model=model, vocab=vocab, functions={'f': fn}, trie=trie,
@@ -109,13 +109,13 @@ class ObservationTests(unittest.TestCase):
                     inputs.append(llm.call_args_list)
                 if mode == 'redirected':
                     self.assertEqual([c.args for c in values.call_args_list],
-                                     [(b'1', 1), (b'1}', 2)])
+                                     [(b'1', 1), (b'1.0}', 2)])
                     self.assertEqual([c.kwargs for c in values.call_args_list],
                                      [dict(token=1, mode='greedy'),
                                       dict(token=3, mode='greedy')])
                     self.assertEqual(dashboard.fields['token'], '3 (greedy)')
         self.assertEqual(results, [{
-            'prompt': 'request', 'name': 'f', 'parameters': {'a': 1},
+            'prompt': 'request', 'name': 'f', 'parameters': {'a': 1.0},
         }] * 4)
         self.assertTrue(all(item == inputs[0] for item in inputs))
         self.assertEqual(len(inputs[0]), 2)
