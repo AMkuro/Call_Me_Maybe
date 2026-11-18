@@ -274,7 +274,7 @@ class GrammarTests(unittest.TestCase):
         ), [1, 4])
         for value in [b'true}', b'false}', b' true \n}']:
             self.assertTrue(is_slot_complete(value, 'boolean', '}'))
-        for value in [b'True}', b'1}', b'false', b'true},']:
+        for value in [b'True}', b'1}', b'false', b'true},', b'true} ']:
             self.assertFalse(is_slot_complete(value, 'boolean', '}'))
 
     def test_strings_accept_every_byte_prefix_and_json_escape(self) -> None:
