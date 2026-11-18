@@ -56,38 +56,39 @@ def generated(literal: str, prompt: str = '依頼') -> FunctionCall:
 class DecimalGrammarTests(unittest.TestCase):
     """Compare masks and completion against independently supplied literals."""
 
-    def test_every_valid_prefix_reaches_both_delimiters(self) -> None:
+    def test_every_valid_prefix_reaches_both_terminators(self) -> None:
         """No legal next byte is masked before the complete decimal value."""
         vocab = {token: bytes([token]) for token in range(128)}
         for literal in VALID:
-            for delimiter in (',', '}'):
-                with self.subTest(literal=literal, delimiter=delimiter):
+            for terminator in (',', '}'):
+                with self.subTest(literal=literal, terminator=terminator):
                     written = b''
-                    for token in (literal + delimiter).encode():
+                    for token in (literal + terminator).encode():
                         self.assertFalse(is_slot_complete(
-                            written, 'number', delimiter))
+                            written, 'number', terminator))
                         self.assertIn(token, allowed_slot_tokens(
-                            vocab, 'number', written, delimiter))
+                            vocab, 'number', written, terminator))
                         written += bytes([token])
                     self.assertTrue(is_slot_complete(
-                        written, 'number', delimiter))
+                        written, 'number', terminator))
                     self.assertEqual(allowed_slot_tokens(
-                        vocab, 'number', written, delimiter), [])
+                        vocab, 'number', written, terminator), [])
 
     def test_invalid_literals_cannot_be_committed_whole(self) -> None:
-        """Incomplete prefixes can continue, but cannot accept a delimiter."""
+        """Incomplete prefixes can continue, but cannot accept a terminator."""
         for literal in INVALID:
-            for delimiter in (',', '}'):
-                with self.subTest(literal=literal, delimiter=delimiter):
-                    payload = (literal + delimiter).encode()
+            for terminator in (',', '}'):
+                with self.subTest(literal=literal, terminator=terminator):
+                    payload = (literal + terminator).encode()
                     self.assertFalse(is_slot_complete(
-                        payload, 'number', delimiter))
+                        payload, 'number', terminator))
                     self.assertEqual(allowed_slot_tokens(
-                        {9: payload}, 'number', b'', delimiter), [])
+                        {9: payload}, 'number', b'', terminator), [])
         for prefix in (b'2', b'-2', b'2.'):
-            for delimiter in (',', '}'):
+            for terminator in (',', '}'):
                 self.assertEqual(allowed_slot_tokens(
-                    {9: delimiter.encode()}, 'number', prefix, delimiter), [])
+                    {9: terminator.encode()}, 'number', prefix, terminator,
+                ), [])
 
     def test_merged_token_candidates_obey_the_whole_token(self) -> None:
         """A token cannot hide an exponent or trailing material."""

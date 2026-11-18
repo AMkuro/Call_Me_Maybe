@@ -3,7 +3,8 @@
 from .errors import PromptError, StartupError
 
 # Qwen's response-ending special token; it ends every function-name path.
-# Judgment: provisional (ADR-0013).
+# Judgment: provisional; revisit if it causes failures (docs/architecture.md
+# §3.1).
 EOS = "<|im_end|>"
 
 
@@ -18,17 +19,16 @@ class Model:
 
     Judgment: a plain class with no abstract interface in front of it.
     It holds the SDK handle and no data to validate, so it is outside the
-    pydantic rule (ADR-0011). logits is a shorter name for the SDK's
-    get_logits_from_input_ids. Open: should the names follow the SDK?
+    pydantic rule. logits is a shorter name for the SDK's
+    get_logits_from_input_ids.
     """
 
     def __init__(self) -> None:
-        """Load the model from llm_sdk (ADR-0007).
+        """Load the model from llm_sdk.
 
         Any load failure is raised as StartupError with a clear message.
 
         Judgment: takes no arguments (the model name is the SDK default).
-        How to hold settings is open.
         """
         try:
             from llm_sdk import Small_LLM_Model

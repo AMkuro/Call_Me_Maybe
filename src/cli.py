@@ -11,7 +11,9 @@ class Args(BaseModel):
     """Validated command-line arguments.
 
     Judgment: the defaults follow the Subject (default input and output
-    live under data/). The default output path is ADR-0011.
+    live under data/). The Subject gives the output file as both
+    data/output/function_calls.json and output/function_calls.json; the
+    first matches the data/ default.
     Path fields validate types only; loaders and prepare_output check I/O.
     """
 

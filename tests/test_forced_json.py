@@ -116,7 +116,7 @@ class ForcedJsonTests(unittest.TestCase):
                             for text in self.encodings[1:]))
 
     def test_unicode_escapes_multiple_types_and_boundaries(self) -> None:
-        """Values and their delimiters enter the next slot's exact context."""
+        """Values and their terminators enter the next slot's exact context."""
         fn = self.definition('記録_v2', number='number', text='string',
                              flag='boolean')
         values: dict[str, object] = {

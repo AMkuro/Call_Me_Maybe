@@ -140,7 +140,7 @@ class InputTests(unittest.TestCase):
 class StructureTests(unittest.TestCase):
     """Check forced structure and dynamic output validation directly."""
 
-    def test_skeleton_owns_each_delimiter_once(self) -> None:
+    def test_skeleton_owns_each_terminator_once(self) -> None:
         """Only slots supply commas or the parameters' closing brace."""
         fn = definition(**{'quote"': 'string', 'b': 'number'})
         parts = build_call_skeleton('p', fn)

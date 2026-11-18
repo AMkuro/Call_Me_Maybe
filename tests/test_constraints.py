@@ -229,10 +229,10 @@ class VocabularyTests(unittest.TestCase):
 
 
 class GrammarTests(unittest.TestCase):
-    """Allow every valid prefix and reject bytes past slot delimiters."""
+    """Allow every valid prefix and reject bytes past slot terminators."""
 
     def test_number_prefixes_and_completion(self) -> None:
-        """Decimal-only numbers continue until the actual delimiter."""
+        """Decimal-only numbers continue until the actual terminator."""
         for value in ['0.0', '-0.0', '12.0', '1.5', '-0.25', '9' * 400 + '.0',
                       '0.12345678901234567']:
             for terminator in [',', '}']:
@@ -250,7 +250,7 @@ class GrammarTests(unittest.TestCase):
         self.assertTrue(is_slot_complete(b' \n-12.5 \t}', 'number', '}'))
 
     def test_invalid_numbers_and_crossing_tokens_are_masked(self) -> None:
-        """A candidate cannot add bad syntax or text after a delimiter."""
+        """A candidate cannot add bad syntax or text after a terminator."""
         vocab = {0: b'1', 1: b'.', 2: b',', 3: b', "next":',
                  4: b'e2', 5: b'}', 6: b'', 7: b'0'}
         self.assertEqual(set(allowed_slot_tokens(
@@ -262,7 +262,7 @@ class GrammarTests(unittest.TestCase):
             self.assertFalse(is_slot_complete(value, 'number', ','))
 
     def test_boolean_grammar(self) -> None:
-        """Only lowercase JSON booleans can reach their delimiter."""
+        """Only lowercase JSON booleans can reach their terminator."""
         self.assertEqual(allowed_slot_tokens(
             {1: b'ue}', 2: b'ue}junk', 3: b'ue,', 4: b'ue'},
             'boolean', b'tr', '}',
@@ -289,7 +289,7 @@ class GrammarTests(unittest.TestCase):
             ))
 
     def test_invalid_string_bytes_are_masked(self) -> None:
-        """Valid delimiters inside strings never terminate a value early."""
+        """Valid terminators inside strings never terminate a value early."""
         for token in [b'"a\n"}', b'"\\q"}', b'"\\u00xz"}', b'"a"}x',
                       b'"a"} ', b'"\xff"}', b'"\xe3"}', b'"a",']:
             self.assertEqual(allowed_slot_tokens(

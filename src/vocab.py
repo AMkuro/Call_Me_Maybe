@@ -15,7 +15,7 @@ def load_vocab(path: Path) -> dict[int, bytes]:
 
     Judgment: the SDK's Qwen tokenizer uses byte-level BPE. Its visible
     alphabet keeps printable bytes and maps the others above U+00FF.
-    Reverse that alphabet, without decoding incomplete UTF-8 (ADR-0013).
+    Reverse that alphabet, without decoding incomplete UTF-8.
     """
     visible = list(range(33, 127)) + list(range(161, 173))
     visible += list(range(174, 256))

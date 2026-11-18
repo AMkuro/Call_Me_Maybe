@@ -1,7 +1,7 @@
 """A live stderr dashboard, with ordinary logs when stderr is redirected.
 
 Both modes end with one line per prompt (done or failed, with seconds)
-and a total line (ADR-0014, ADR-0021).
+and a total line (docs/architecture.md §6).
 """
 
 import json

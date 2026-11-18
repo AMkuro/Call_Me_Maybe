@@ -1,4 +1,4 @@
-"""A token-level tree of the function names (ADR-0011)."""
+"""A token-level tree of the function names (docs/architecture.md §3.1)."""
 
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence

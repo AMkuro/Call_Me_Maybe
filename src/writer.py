@@ -41,7 +41,7 @@ def save_results(path: Path, calls: list[FunctionCall]) -> None:
 
     Called after every successful prompt with all results so far, or with
     an empty list when the run produces no results. Raises OSError on a
-    failed write; main reports it and stops (ADR-0012).
+    failed write; main reports it and stops (docs/architecture.md §5).
 
     Effect: writes a file.
 

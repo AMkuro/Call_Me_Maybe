@@ -54,7 +54,7 @@ class Parameters(BaseModel):
 class PipelineTests(unittest.TestCase):
     """Test real pipeline control flow, not the unfinished leaf algorithms."""
 
-    def test_numbers_continue_until_the_chosen_delimiter(self) -> None:
+    def test_numbers_continue_until_the_chosen_terminator(self) -> None:
         """A valid numeric prefix must not truncate a decimal."""
         for target in ('12.0,', '1.5}', '-0.25,', '0.0}'):
             with self.subTest(target=target):
@@ -108,8 +108,8 @@ class PipelineTests(unittest.TestCase):
                     )
                 self.assertEqual(decode(result), target)
 
-    def test_names_and_delimiters_round_trip_through_json(self) -> None:
-        """Escaped names and slot-owned delimiters form one valid record."""
+    def test_names_and_terminators_round_trip_through_json(self) -> None:
+        """Escaped names and slot-owned terminators form one valid record."""
         for name in ('normal', 'f"x', 'f\\path', 'f\nname'):
             with self.subTest(name=name):
                 model = object.__new__(Model)

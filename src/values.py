@@ -128,10 +128,10 @@ def allowed_slot_tokens(
 
     Judgment: takes the bytes written so far (``written``), because the
     next token of a number depends on the digits already written. The
-    bytes of one character can span tokens (ADR-0013).
+    bytes of one character can span tokens. See docs/architecture.md §4.
 
     A complete number may continue or take the terminator. No token may
-    write anything after the terminator (ADR-0012).
+    write anything after the terminator.
     """
     terminator_bytes = terminator.encode("ascii")
     if param_type == "string":
@@ -158,7 +158,7 @@ def is_slot_complete(
 ) -> bool:
     """Return True only after a whole value and its JSON ``terminator``.
 
-    A valid number without its terminator is not finished (ADR-0012).
+    A valid number without its terminator is not finished.
     """
     terminator_bytes = terminator.encode("ascii")
     state = _slot_prefix_states(written, param_type, terminator_bytes)
