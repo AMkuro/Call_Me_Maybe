@@ -91,7 +91,7 @@ class InputTests(unittest.TestCase):
                         output.write_bytes(previous)
                     stderr = io.StringIO()
                     with patch.object(
-                        entry, 'Model', side_effect=AssertionError(
+                        pipeline, 'Model', side_effect=AssertionError(
                             'model must not load for empty input'
                         ),
                     ) as model, contextlib.redirect_stderr(stderr):

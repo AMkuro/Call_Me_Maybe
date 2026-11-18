@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from src.errors import PromptError, StartupError
 from src.loader import load_functions, load_prompts
+from src import pipeline
 from src.pipeline import validate_call
 from src.vocab import load_vocab
 from tools import campus_survey, measure_application
@@ -128,7 +129,7 @@ class JSONBoundaryTests(unittest.TestCase):
             stderr = io.StringIO()
             with patch('sys.argv', ['measure', '--cases', str(path),
                                     '--output', str(root / 'out.json')]), \
-                    patch.object(measure_application, 'Model',
+                    patch.object(pipeline, 'Model',
                                  side_effect=StartupError('model sentinel')) \
                     as model, contextlib.redirect_stderr(stderr):
                 self.assertEqual(measure_application.main(), 1)

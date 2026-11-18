@@ -12,6 +12,7 @@ from src.errors import StartupError
 from src.loader import load_functions
 from src.model_port import EOS, Model
 from src.name_trie import build_name_trie
+from src import pipeline
 from src.pipeline import select_function
 from src.prompt import build_name_prompt
 from src.schema import FunctionDef
@@ -82,7 +83,7 @@ class FunctionRegistryTests(unittest.TestCase):
             stderr = io.StringIO()
             with patch('sys.argv', ['measure', '--cases', str(cases),
                                     '--output', str(output)]), \
-                    patch.object(measure_application, 'Model',
+                    patch.object(pipeline, 'Model',
                                  side_effect=StartupError('model sentinel')) \
                     as model, contextlib.redirect_stderr(stderr):
                 self.assertEqual(measure_application.main(), 1)

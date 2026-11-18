@@ -114,7 +114,7 @@ class ValidationFlowTests(unittest.TestCase):
                                 '0.1234567890123456789', '0.1']
             ]
             stderr, stdout = io.StringIO(), io.StringIO()
-            with patch.object(entry, 'Model', return_value=model), \
+            with patch.object(pipeline, 'Model', return_value=model), \
                     patch.object(Model, 'encode', side_effect=encode_name), \
                     patch.object(Model, 'decode', side_effect=(
                         lambda ids: ''.join(chr(x) for x in ids if x)

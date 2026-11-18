@@ -107,7 +107,7 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 読み込み時に作った辞書を使い、選択のたびに関数の配列を再走査しない（ADR-0016）。
 
 名前の末尾には Qwen の応答終了トークン `<|im_end|>` を含める。コード上の名前は `model_port.EOS` とし、
-`_start`と測定ツールが`build_name_trie(names, model.encode, EOS)`の引数として渡す。
+`pipeline.build_generation_resources`が`build_name_trie(names, model.encode, EOS)`の引数として渡す。
 各名前の完成経路は`encode(名前 + EOS)`で、その末端に到達したことが名前の確定である。
 例えば `fn_add` と `fn_add_numbers` が共存するとき、`fn_add` の後で EOS の経路と `_numbers` の経路が分かれる。
 SDK の decode は特殊トークンを表示しないため、終了は表示文字列ではなく ID の経路で判断する。
@@ -740,9 +740,10 @@ FunctionDef.parametersは普通の辞書なので、中身は変更できる。�
 
 - mainは1実行分のGenerationResourcesを所有し、_process_all/process_promptへ同じ参照を渡す。
   測定ツールも同じ関数セットの評価バッチで一度作り、プロンプトごとには再構築しない。
-- _startは入力検証と出力準備の後にModel、vocab、同じfunctionsからのtrieを順に作って組み立てる。
+  組立は`pipeline.build_generation_resources(functions)`の1か所で、_startと測定ツールが同じ手順で資源を作る。
+- _startは入力検証と出力準備の後に`build_generation_resources`を呼ぶ。この関数がModel、vocab、同じfunctionsからのtrieを順に作って組み立て、検証エラーを`StartupError`にする。
   異なる関数セットのtrieを渡すと、組立時のmodel_validatorが名前の不一致で拒否する。
-  同じ名前を別のトークナイザで符号化したtrieは検出しない。trieとmodelの組は_startが同じmodel.encodeで作ることで保つ。
+  同じ名前を別のトークナイザで符号化したtrieは検出しない。trieとmodelの組は`build_generation_resources`が同じmodel.encodeで作ることで保つ。
 - frozenは浅い不変性である。trieとfunctionsは上記のとおり読み取り専用だが、vocab・FunctionDef.parameters・Model内部は
   深く不変化しない。これらは構築完了後に書き換えず、モデルの内部処理は既存SDKの資源管理に任せる。
 - generated、入力の継続ids、JSON text、現在のslot、step、mode、raw_top、progressは含めない。

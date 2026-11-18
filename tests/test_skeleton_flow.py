@@ -182,13 +182,14 @@ class MainTests(unittest.TestCase):
         self.saved: list[list[dict[str, object]]] = []
         model = object.__new__(Model)
         fixtures = {
-            'parse_args': Args(output=self.output),
-            'load_functions': {'f': definition()}, 'Model': model,
-            'load_vocab': {},
+            (entry, 'parse_args'): Args(output=self.output),
+            (entry, 'load_functions'): {'f': definition()},
+            (pipeline, 'Model'): model,
+            (pipeline, 'load_vocab'): {},
         }
-        for name, result in fixtures.items():
+        for (module, name), result in fixtures.items():
             self.stack.enter_context(patch.object(
-                entry, name, return_value=result,
+                module, name, return_value=result,
             ))
         self.stack.enter_context(patch.object(
             Model, 'encode', side_effect=encode_name,

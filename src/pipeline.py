@@ -1,23 +1,26 @@
 """Handle one prompt: name -> skeleton -> values -> validation."""
 
 from collections.abc import Mapping
+from pathlib import Path
 from types import MappingProxyType
 from typing import TypeGuard
 
 from pydantic import (
-    BaseModel, ConfigDict, InstanceOf, field_validator, model_validator,
+    BaseModel, ConfigDict, InstanceOf, ValidationError, field_validator,
+    model_validator,
 )
 
 from .decoder import infer_and_select_next_token
-from .errors import PromptError
+from .errors import PromptError, StartupError
 from .json_io import loads
-from .model_port import Model
-from .name_trie import NameTrie
+from .model_port import EOS, Model
+from .name_trie import NameTrie, build_name_trie
 from .progress import GenerationProgress
 from .prompt import build_name_prompt, build_parameters_prompt
 from .schema import FunctionCall, FunctionDef, build_parameters_model
 from .skeleton import FixedText, ValueSlot, build_call_skeleton
 from .values import allowed_slot_tokens, is_slot_complete
+from .vocab import load_vocab
 
 MAX_VALUE_STEPS = 256
 
@@ -67,6 +70,26 @@ class GenerationResources(BaseModel):
         if self.functions.keys() != self.trie.names:
             raise ValueError("trie names differ from the function names")
         return self
+
+
+def build_generation_resources(
+    functions: Mapping[str, FunctionDef],
+) -> GenerationResources:
+    """Load the model, then build its vocabulary and the name tree.
+
+    Shared by the application and the measurement tool, so both generate
+    with the same resources. Raises StartupError.
+
+    Effect: loads the model and reads its vocabulary file.
+    """
+    model = Model()
+    vocab = load_vocab(Path(model.vocab_path()))
+    trie = build_name_trie(list(functions), model.encode, EOS)
+    try:
+        return GenerationResources(model=model, vocab=vocab,
+                                   functions=functions, trie=trie)
+    except ValidationError as e:
+        raise StartupError(f"invalid generation resources: {e}") from e
 
 
 def process_prompt(

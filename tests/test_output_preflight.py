@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from src import __main__ as entry
+from src import __main__ as entry, pipeline
 from src.errors import StartupError
 from src.writer import save_results
 
@@ -41,7 +41,7 @@ class OutputPreflightTests(unittest.TestCase):
 
     def assert_rejected_before_model(self, output: Path) -> None:
         """A path failure must be reported instead of attempting startup."""
-        with patch.object(entry, 'Model', side_effect=StartupError(
+        with patch.object(pipeline, 'Model', side_effect=StartupError(
             'model startup sentinel'
         )) as model, contextlib.redirect_stderr(self.stderr):
             status = entry.main(self.arguments(output))
@@ -109,7 +109,7 @@ class OutputPreflightTests(unittest.TestCase):
             self.assertEqual(list(output.parent.iterdir()), [])
             raise StartupError('model startup sentinel')
 
-        with patch.object(entry, 'Model', side_effect=startup), \
+        with patch.object(pipeline, 'Model', side_effect=startup), \
                 contextlib.redirect_stderr(self.stderr):
             self.assertEqual(entry.main(self.arguments(output)), 1)
         self.assertFalse(output.exists())
@@ -128,7 +128,7 @@ class OutputPreflightTests(unittest.TestCase):
             self.assertEqual(list(output.parent.iterdir()), [output])
             raise StartupError('model startup sentinel')
 
-        with patch.object(entry, 'Model', side_effect=startup), \
+        with patch.object(pipeline, 'Model', side_effect=startup), \
                 contextlib.redirect_stderr(self.stderr):
             self.assertEqual(entry.main(self.arguments(output)), 1)
         self.assertEqual(output.read_bytes(), previous)
@@ -139,7 +139,7 @@ class OutputPreflightTests(unittest.TestCase):
         output.write_text('previous', encoding='utf-8')
         output.chmod(0o400)
         try:
-            with patch.object(entry, 'Model', side_effect=StartupError(
+            with patch.object(pipeline, 'Model', side_effect=StartupError(
                 'model startup sentinel'
             )) as model, contextlib.redirect_stderr(self.stderr):
                 self.assertEqual(entry.main(self.arguments(output)), 1)
@@ -154,7 +154,7 @@ class OutputPreflightTests(unittest.TestCase):
         limit = os.pathconf(self.root, 'PC_NAME_MAX')
         output = self.root / ('x' * (limit - 14))
         save_results(output, [])
-        with patch.object(entry, 'Model', side_effect=StartupError(
+        with patch.object(pipeline, 'Model', side_effect=StartupError(
             'model startup sentinel'
         )) as model, contextlib.redirect_stderr(self.stderr):
             self.assertEqual(entry.main(self.arguments(output)), 1)
