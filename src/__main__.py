@@ -6,10 +6,8 @@ from collections.abc import Sequence
 from .cli import Args, parse_args
 from .display import Dashboard
 from .errors import StartupError
-from .loader import load_functions, load_prompts
 from .pipeline import process_all
 from .runtime import GenerationAssets
-from .writer import prepare_output
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -38,11 +36,8 @@ def _start(
     Effect: reads files, checks the output path, loads the model.
     """
     args = parse_args(argv)
-    functions = load_functions(args.functions_definition)
-    prompts = load_prompts(args.input)
-    prepare_output(args.output)
-    resources = GenerationAssets(functions)
-    return args, prompts, resources
+    resources = GenerationAssets(args.functions)
+    return args, args.prompts, resources
 
 
 def _end(

@@ -1,7 +1,8 @@
-"""Parse standard JSON without duplicate-key overwrite or decimal rounding."""
+"""Read and parse JSON without duplicate-key overwrite or decimal rounding."""
 
 import json
 from decimal import Decimal, DecimalException
+from pathlib import Path
 from typing import Any, NoReturn
 
 
@@ -35,3 +36,12 @@ def loads(text: str) -> Any:
     except RecursionError as e:
         raise ValueError("JSON nesting exceeds the parser recursion limit") \
             from e
+
+
+def load(path: Path) -> Any:
+    """Read a UTF-8 JSON file once, using the same strict parser as loads.
+
+    Effect: reads a file. I/O and JSON errors retain their original types;
+    the caller supplies the function-definition or prompt error context.
+    """
+    return loads(path.read_text(encoding="utf-8"))

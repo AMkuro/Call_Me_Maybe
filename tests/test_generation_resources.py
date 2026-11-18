@@ -64,7 +64,8 @@ class ResourceTests(unittest.TestCase):
             resource.vocab[2] = b'b'  # type: ignore[index]
         with patch.object(entry, 'Dashboard') as dashboard, \
                 patch.object(entry, 'process_all', return_value=True):
-            self.assertEqual(entry._end(Args(), ['x'], resource), 0)
+            self.assertEqual(entry._end(
+                Args.model_construct(), ['x'], resource), 0)
         self.assertIs(dashboard.call_args.args[2], resource.vocab)
 
     def test_ambiguous_token_paths_are_startup_errors(self) -> None:

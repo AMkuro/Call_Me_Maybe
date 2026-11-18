@@ -10,6 +10,18 @@ from .errors import StartupError
 from .schema import FunctionCall
 
 
+def _prepare_destination(path: Path) -> None:
+    """Create parents and reject an existing non-regular destination."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        mode = path.stat().st_mode
+    except FileNotFoundError:
+        pass
+    else:
+        if not stat.S_ISREG(mode):
+            raise OSError("output destination is not a regular file")
+
+
 def prepare_output(path: Path) -> None:
     """Prepare and probe an atomic-save destination before model startup.
 
@@ -18,14 +30,7 @@ def prepare_output(path: Path) -> None:
     Raises StartupError with the destination and underlying failure reason.
     """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            mode = path.stat().st_mode
-        except FileNotFoundError:
-            pass
-        else:
-            if not stat.S_ISREG(mode):
-                raise OSError("output destination is not a regular file")
+        _prepare_destination(path)
         with tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", dir=path.parent,
             prefix=f".{path.name}.", suffix=".tmp",
@@ -49,7 +54,7 @@ def save_results(path: Path, calls: list[FunctionCall]) -> None:
     then replace), so a crash keeps the results so far. Slow when there
     are many prompts (not measured).
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _prepare_destination(path)
     temporary: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(

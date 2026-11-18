@@ -43,7 +43,8 @@ Subject の最終目標には正答率90%以上、JSON・型適合率100%、全�
 ## 2. 入出力と、起動時に準備するデータ
 
 入力不備が原因の失敗を推論の失敗と混同しないため、ファイルを先に読み、検証してからモデルを起動する。
-`main` は CLI のパスを `parse_args` で受け取り、`load_functions` と `load_prompts` を呼ぶ。
+`parse_args`がCLIを解析し、その結果から`Args`を初期化する。
+`Args`のPydantic検証で`load_functions`と`load_prompts`を呼び、両方の入力を検証する。
 全ての所有JSON読み込みは`json_io.loads`へ集める。標準`json.loads`の`object_pairs_hook`で
 各オブジェクトのキー重複を辞書への上書き前に拒否し、`parse_constant`でNaN・Infinityを拒否する。
 小数は`parse_float=Decimal`で正確に読み、整数はintで受け取る。Pydanticの`validate_json`には
@@ -57,13 +58,31 @@ Subject の最終目標には正答率90%以上、JSON・型適合率100%、全�
 プロンプトの配列には1件以上が必要で、空配列 `[]` は `load_prompts` が入力不足の StartupError にする。
 この検証はモデル起動前に行い、既存の出力は変更しない（ADR-0012 の2026-11-10の変更）。
 
-`Args`の`Path`型はパスの型を確認するだけで、実在や読み書き可否は検査しない。
-入力はloaderが実際に読み、正常なら`prepare_output(args.output)`へ進む。
-`prepare_output`は必要な親ディレクトリを作り、既存の出力先が通常ファイルか確認したうえで、
-同じディレクトリに一時ファイルを開いて書き込み・flush・削除する。
-パスの不備や書き込み失敗はStartupErrorにし、`Model()`を呼ばずに終了する。
-既存出力の内容は変えず、出力ファイルがなければ確認時には作成しない。
-入力検証に失敗した場合は、この出力先の準備も行わない。
+`Args`はパスと検証済み入力を持つ起動設定である。初期化が成功した時点で、両入力の読込・JSONと
+スキーマの検証、出力先の親ディレクトリの準備、試験書き込み・flush・削除が完了している。
+既存の出力先は通常ファイルであることを確認し、内容を変更しない。出力ファイルがなければ確認時には作成しない。
+入力の検証に失敗した場合は、出力先の準備も行わない。失敗は従来どおり文脈付きのStartupErrorとし、モデルを読み込まない。
+
+読込結果は`Args`のprivate属性に保持し、`functions`と`prompts`プロパティから起動処理へ渡す。
+model_dumpの公開フィールドは既存の3パスのままで、`_start`は入力を読み直さずにモデルを構築する。
+Argsという名称はCLIに基づく起動設定という責務に適合するため維持する。
+入力を開けるかだけ先に確認して後で読み直す案は、I/Oが重複し、不正JSONでも先に出力準備へ進むため採らない。
+
+共通処理は用途ごとの既存モジュールに置く。`json_io.load(path)`がUTF-8で一度読み、既存の`loads`で解析する。
+loaderはこれを使って内容を検証し、関数定義・プロンプトそれぞれのエラー文脈を付ける。
+出力先の親作成と通常ファイルの確認はwriter内の`_prepare_destination`に集約し、
+起動時の`prepare_output`と実際の`save_results`が共用する。試験書き込みはprepare_outputでだけ行い、
+save_resultsでは実データの書き込みと原子的置換を行う。読込と保存をまとめるfile_ioモジュールは作らず、
+loaderとwriterを互いに依存させない。Argsが両者を組み合わせる。
+
+CLIの既定値は`Args.model_fields`から取得し、引数解析前にArgsを作らない。
+`--help`や不正なCLIオプションでは、入力読込や出力先の作成・試験書き込みを行わない。
+
+事前確認が保証するのは、確認時点の読込と試験書き込みの成功である。入力はその時点のスナップショットを使い、
+初期化後のファイル変更を自動では反映しない。独立に呼ばれたloaderはその都度ファイルを読み、失敗を処理する。
+出力先の権限・親ディレクトリ・容量は後から変わり得る。保存時にも親と出力先を確認するが、その確認と
+一時ファイルの作成・置換との間の競合を防ぐロックは設けない。書込・close・置換の例外処理、
+既存出力の保護、失敗時の一時ファイル削除は引き続きwriterが担当する。
 
 | 境界を越えるデータ | 内容・条件 | 次の処理での用途 |
 | --- | --- | --- |
@@ -799,7 +818,7 @@ make install・必須lint/mypy・251テストが成功した。実GPUの既知11
 - mainは1実行分のGenerationAssetsを所有し、process_all/process_promptへ同じ参照を渡す。
   測定ツールも同じ関数セットの評価バッチで一度作り、プロンプトごとには再構築しない。
   組立は`runtime.GenerationAssets(functions)`の1か所で、_startと測定ツールが同じ手順で資源を作る。
-- _startは入力検証と出力準備の後に`GenerationAssets(functions)`を呼ぶ。
+- _startはArgs初期化での入力検証・出力準備の後に、`GenerationAssets(args.functions)`を呼ぶ。
   コンストラクタがModel、vocab、同じfunctionsからのtrieを順に作り、資源の検証エラーを`StartupError`にする。
   キーとnameの一致は入力境界、経路の検証はNameTrieが担当する。
   `_names_match_trie`による再比較は、同じキーから内部構築するため不要となり削除した。
@@ -898,7 +917,7 @@ _startは`tuple[Args, list[str], GenerationAssets]`を返す。Dashboardの構�
 ### 9.8 データフローと表示の責務
 
 ```text
-_start：入力/出力先検査 → Model → vocab → 同じfunctionsからtrie → GenerationAssets
+_start：Args初期化（入力の読込・検証・出力準備） → 検証済みfunctionsでModel・vocab・trie → GenerationAssets
 __main__._end：resourcesから必要な参照を取り出してDashboardをwithで開始
   → pipeline.process_all(prompts, resources, ...) → process_prompt(prompt, resources, progress=...)
     → stage(select_function) → select_function(model, functions, trie, progress)
@@ -934,11 +953,14 @@ with終了：端末復帰 → 要約 → _endで保存エラー報告または�
 | runtime.py | GenerationAssetsの構築と資源の保持。Model、語彙、Trieを起動時に一度作る |
 | generation.py | 名前・固定文字列・値の生成、復号の照合、生成上限。資源構造体を受け取らず、必要な依存を明示引数で受け取る |
 | pipeline.py | process_allによる反復・成功ごとの保存、process_promptによる段階の調停、validate_callによる出力の受理 |
-| __main__.py | _startの入力・出力先検査、_endの端末コンテキスト管理・保存エラー報告・終了コード。起動失敗はmainで報告する |
+| cli.py | Args初期化時の入力検証・出力準備と入力スナップショットの保持。CLI解析だけで終わる場合はI/Oをしない |
+| __main__.py | _startでArgsの入力スナップショットを使って資源を構築。_endの端末コンテキスト管理・保存エラー報告・終了コード。起動失敗はmainで報告する |
 | progress.py | 既存のGenerationProgress契約と、通知ごとに呼ぶobserving判定 |
 
 ```text
-__main__ ──→ runtime ──→ model_port / name_trie / vocab
+__main__ ──→ cli（Args） ──→ loader / writer
+   │                        └──→ json_io / schema（loaderから）
+   ├──→ runtime ──→ model_port / name_trie / vocab
    │
    ├──→ pipeline ──→ generation ──→ decoder ──→ model_port
    │        │            └──→ progress

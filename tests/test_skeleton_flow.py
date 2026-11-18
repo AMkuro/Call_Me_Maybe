@@ -12,7 +12,6 @@ from unittest.mock import patch
 from pydantic import BaseModel
 
 from src import __main__ as entry, generation, pipeline, runtime
-from src.cli import Args
 from src.errors import PromptError
 from src.model_port import Model
 from src.schema import FunctionCall, FunctionDef
@@ -177,12 +176,13 @@ class MainTests(unittest.TestCase):
         self.addCleanup(self.stack.close)
         directory = self.stack.enter_context(tempfile.TemporaryDirectory())
         self.output = Path(directory) / 'calls.json'
+        self.functions = Path(directory) / 'functions.json'
+        self.prompts = Path(directory) / 'prompts.json'
+        self.functions.write_text(json.dumps([definition().model_dump()]))
         self.stderr = io.StringIO()
         self.saved: list[list[dict[str, object]]] = []
         model = object.__new__(Model)
         fixtures = {
-            (entry, 'parse_args'): Args(output=self.output),
-            (entry, 'load_functions'): {'f': definition()},
             (runtime, 'Model'): model,
             (runtime, 'load_vocab'): {},
         }
@@ -210,11 +210,14 @@ class MainTests(unittest.TestCase):
         self, prompts: list[str], results: Sequence[FunctionCall | Exception],
     ) -> int:
         """Run actual CLI orchestration with fixed per-prompt outcomes."""
-        with patch.object(entry, 'load_prompts', return_value=prompts), \
-                patch.object(pipeline, 'process_prompt',
-                             side_effect=results), \
+        self.prompts.write_text(json.dumps([{'prompt': p} for p in prompts]))
+        with patch.object(pipeline, 'process_prompt',
+                          side_effect=results), \
                 contextlib.redirect_stderr(self.stderr):
-            return entry.main([])
+            return entry.main([
+                '--functions_definition', str(self.functions),
+                '--input', str(self.prompts), '--output', str(self.output),
+            ])
 
     def test_save_error_is_reported_and_stops_processing(self) -> None:
         """A failed write exits nonzero before another prompt is processed."""

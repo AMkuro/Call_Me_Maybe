@@ -44,7 +44,8 @@ class BatchLifecycleTests(unittest.TestCase):
         """A save failure leaves the context before the error is printed."""
         stderr = io.StringIO()
         resources = MagicMock(model=object.__new__(Model), vocab={})
-        args = Args(output=Path('/tmp/cmm-lifecycle-output.json'))
+        args = Args.model_construct(
+            output=Path('/tmp/cmm-lifecycle-output.json'))
         with patch.object(entry, 'Dashboard') as dashboard, \
                 patch.object(entry, 'process_all',
                              side_effect=OSError('disk full')), \
@@ -64,5 +65,5 @@ class BatchLifecycleTests(unittest.TestCase):
                 patch.object(entry, 'process_all',
                              side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
-                entry._end(Args(), ['x'], resources)
+                entry._end(Args.model_construct(), ['x'], resources)
             dashboard.return_value.__exit__.assert_called_once()

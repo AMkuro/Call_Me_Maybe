@@ -41,16 +41,20 @@ class InputTests(unittest.TestCase):
 
     def test_cli_defaults_overrides_and_bad_options(self) -> None:
         """Default paths and explicit paths implement the Subject CLI."""
-        self.assertEqual(parse_args([]).output,
-                         Path('data/output/function_calls.json'))
-        args = parse_args(['--input', 'in.json', '--output', 'out.json',
-                           '--functions_definition', 'functions.json'])
-        self.assertEqual(args.input, Path('in.json'))
-        self.assertEqual(args.functions_definition, Path('functions.json'))
-        with contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit) as raised:
-                parse_args(['--unknown'])
-        self.assertEqual(raised.exception.code, 2)
+        with patch('src.cli.load_functions',
+                   return_value={'dynamic': definition()}), \
+                patch('src.cli.load_prompts', return_value=['request']), \
+                patch('src.cli.prepare_output'):
+            self.assertEqual(parse_args([]).output,
+                             Path('data/output/function_calls.json'))
+            args = parse_args(['--input', 'in.json', '--output', 'out.json',
+                               '--functions_definition', 'functions.json'])
+            self.assertEqual(args.input, Path('in.json'))
+            self.assertEqual(args.functions_definition, Path('functions.json'))
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    parse_args(['--unknown'])
+            self.assertEqual(raised.exception.code, 2)
 
     def test_loaders_accept_dynamic_definitions_and_prompts(self) -> None:
         """Definitions are dynamic and prompt strings preserve their input."""
