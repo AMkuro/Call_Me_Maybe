@@ -80,16 +80,17 @@ def _process_all(
     """
     calls: list[FunctionCall] = []
     for index, user_prompt in enumerate(prompts, 1):
-        dashboard.report("input", f"{index}/{len(prompts)}")
-        dashboard.report("prompt", user_prompt)
+        dashboard.prompt_started(index, user_prompt)
         try:
-            calls.append(process_prompt(user_prompt, resources,
-                                        progress=dashboard))
+            call = process_prompt(user_prompt, resources, progress=dashboard)
         except PromptError as e:
-            dashboard.report("error", str(e))
+            dashboard.prompt_failed(str(e))
             continue
+        calls.append(call)
         save_results(output, calls)
-        dashboard.report("result", calls[-1].name)
+        # Only after the save: if it fails, the summary shows this prompt
+        # as not finished rather than done.
+        dashboard.prompt_done(call.name)
     if not calls:
         save_results(output, calls)  # all failed: still write "[]"
     return len(calls) == len(prompts)

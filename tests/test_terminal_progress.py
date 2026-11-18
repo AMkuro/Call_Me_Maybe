@@ -133,15 +133,13 @@ class TerminalTests(unittest.TestCase):
 
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
-            with Dashboard(2, object.__new__(Model), {}) as dashboard:
-                report = dashboard.report
-                report('input', '1/2')
-                report('prompt', 'request\x1b[2J')
-                report('function', 'store_text')
-                report('value', 'hello')
-                report('value_tokens', '1')
-                report('warning', 'name_selection_constrained: step=1')
-                report('result', 'store_text {"text":"hello"}')
+            with Dashboard(2, object.__new__(Model), {}) as dashboard, \
+                    patch.object(Model, 'decode', return_value='x'):
+                dashboard.prompt_started(1, 'request\x1b[2J')
+                dashboard.name_token([5], mode='greedy', raw_top=6)
+                dashboard.function_selected('store_text')
+                dashboard.value_token(b'hello', 1, token=7, mode='greedy')
+                dashboard.prompt_done('store_text')
         text = output.getvalue()
         self.assertNotIn('\x1b', text)
         self.assertIn('store_text', text)
@@ -162,9 +160,9 @@ class TerminalTests(unittest.TestCase):
                                 with Dashboard(
                                     1, object.__new__(Model), {},
                                 ) as dashboard:
-                                    dashboard.report('input', '1/1')
-                                    dashboard.report(
-                                        'function', 'store_number',
+                                    dashboard.prompt_started(1, 'p')
+                                    dashboard.function_selected(
+                                        'store_number',
                                     )
                                     raise error
                 chunks = []

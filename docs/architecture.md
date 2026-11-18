@@ -387,6 +387,12 @@ SDK 呼び出しの例外は `Model` が起動時または1件の失敗へ変換
 共有資源はGenerationResourcesが保持し、mainが具体的なDashboardを別引数で接続する。
 通知先の後付け代入、Run.say、TokenChoice、生成制御コールバックは廃止した。
 
+1件の始まりと終わりは、`_process_all`がDashboardの`prompt_started(index, prompt)`・
+`prompt_done(name)`・`prompt_failed(reason)`で知らせる。この3つだけが、表示欄の全消去、1件の計時、
+完了・失敗の件数、要約の行を変える。GenerationProgressのメソッドと内部の`_show`は表示欄だけを変える。
+`prompt_done`は`save_results`の後に呼ぶ。保存に失敗した件は、要約で「not finished」に数えられる。
+表示欄の名前は`display.Row`のLiteralで、`_ROWS`・`_DRAW_NOW`・`fields`のキーをmypyが検査する。
+
 入力番号、段階、依頼、関数、引数と型、途中の値・件数に加え、名前/値とも現在の採用IDとforced/greedyを表示する。
 名前のID列はSequenceとして借り、表示は変更・保持せず同期的に整形する。
 トークンごとに通知するが、描画は既存の間隔で最新状態を表示する。全ステップの履歴保存は行わない。
@@ -518,11 +524,11 @@ TokenChoiceは変更前には観測時だけPydantic検証され、生成ID列�
 | 処理 | 名前の生成 | 値の生成 | 現行の所有者 |
 | --- | --- | --- | --- |
 | プロンプト・初期ID | 関数一覧から名前用入力 | 選択関数と固定JSONを含む入力 | 各pipeline関数 |
-| 終了判定 | leaf_nameで完成経路（名前+EOS）の葉を確認 | バイト列とslot.type・terminatorでis_value_complete | 各ループに直接記載 |
+| 終了判定 | leaf_nameで完成経路（名前+EOS）の葉を確認 | バイト列とslot.type・terminatorでis_slot_complete | 各ループに直接記載 |
 | 許可ID | next_tokens | allowed_slot_tokens | 各ループに直接記載 |
 | 生成上限 | 木の最長経路 | MAX_VALUE_STEPS | 各ループ。終了確認後、選択前に確認 |
 | 空候補・forced・モデル呼び出し | 同じ順序 | 同じ順序 | 共通の1トークン選択関数 |
-| 負の無限大マスク・argmax・不正logits拒否 | 同じ | 同じ | 既存choose_tokenを維持 |
+| 負の無限大マスク・argmax・不正logits拒否 | 同じ | 同じ | 既存constrained_argmaxを維持 |
 | 生成列への追加 | 名前のローカル列 | 値のローカル列 | 各ループに直接記載 |
 | 結果の解釈 | 選択FunctionDefを返す | 値とJSON区切りのID列を返す | 各pipeline関数 |
 | エラーの文脈 | 名前生成のエラー | 引数名・型を付けたPromptError | 共通エラーを各段階で扱う |
@@ -548,8 +554,8 @@ TokenChoiceは変更前には観測時だけPydantic検証され、生成ID列�
 
 | 情報 | 確定する場所・根拠 | 観測する処理・用途 |
 | --- | --- | --- |
-| 採用ID | select_next_tokenの1候補分岐、またはchoose_tokenの戻り値 | 名前/値の両方。画面の採用ID |
-| forced / greedy | select_next_tokenで実際に通った分岐 | 名前/値の両方。推論を省略した確定か、モデルの制約付きargmaxか |
+| 採用ID | infer_and_select_next_tokenの1候補分岐、またはconstrained_argmaxの戻り値 | 名前/値の両方。画面の採用ID |
+| forced / greedy | infer_and_select_next_tokenで実際に通った分岐 | 名前/値の両方。推論を省略した確定か、モデルの制約付きargmaxか |
 | raw_top | greedyかつ要求時だけ、同じlogitsのargmax | 名前だけ。制約警告に使い、選択方式の表示には使わない |
 | 名前の途中・ステップ数 | 名前ループのgenerated | 名前の公開decode、末尾ID、lenによる件数と警告のstep |
 | 値の途中・ステップ数 | 値ループのgeneratedとvocab | 表示するbytesとlen。IDはbytesから逆引きせず選択結果を渡す |
@@ -570,7 +576,7 @@ def infer_and_select_next_token(
 ```
 
 方式Bでは空候補以外で必ず1回Model.logitsを呼ぶ。1候補なら(token, "forced", None)を返し、診断・配列変換はしない。
-複数候補なら1回のModel.logitsと既存choose_tokenを使い、(token, "greedy", raw_topまたはNone)を返す。
+複数候補なら1回のModel.logitsと既存constrained_argmaxを使い、(token, "greedy", raw_topまたはNone)を返す。
 同点や有限の許可候補が1つしかない分布でも、複数候補からモデルを呼んだならgreedyである。
 空候補・不正logitsのエラー、マスク・argmax・同点規則は現行を維持する。
 
@@ -584,7 +590,7 @@ forcedならinclude_raw_top=Trueでもraw_topはNone、greedyならFalseの場�
 全logits返却やModel.last_logits等の隠れた状態、追加forward、softmax、上位k件は採らない。
 
 ここでのforcedは「許可IDが1つなので点数を使わない選択」である（forwardは方式Bで1回行う）。
-build_skeletonのForcedは固定JSON部品で、ADR-0026に従い各IDを1個ずつ確定する。
+build_call_suffixのForcedは固定JSON部品で、ADR-0026に従い各IDを1個ずつ確定する。
 各IDの前に1回forwardするが、既存の名前/値用TUI通知やstep数には加算しない。確定の逐次性と文脈は単体テストで検証する。
 
 ### 9.5 観測インターフェースの比較と推奨
@@ -605,7 +611,7 @@ GenerationProgressは引き続き小さな構造的型契約とし、mainがDash
 共有バッファや別スレッドの描画は終了・復帰管理を増やすため、今回も採らない。
 
 ```python
-Stage = Literal["select_name", "generate_parameters", "validate_call"]
+Stage = Literal["select_function", "generate_call_json", "validate_call"]
 
 class GenerationProgress(Protocol):
     @property
@@ -642,9 +648,9 @@ ProtocolのPythonクラスとしての性質とSubjectの留保は§9.9に記す
 
 | 通知 | 呼び出す場所 | データの利用先 |
 | --- | --- | --- |
-| stage | process_promptで各段階に入る直前 | 段階表示。引数生成開始時に現在トークン欄を初期化 |
-| function_selected | select_nameで葉から名前が確定した時 | 確定した関数名の表示 |
-| parameter_started | generate_parametersでValueSlotへ入る前 | name/type表示、値・件数・現在トークン欄の初期化。terminatorは不要 |
+| stage | process_promptで各段階に入る直前 | 段階表示。トークンを生成する段階（select_function・generate_call_json）に入る時は値・件数・現在トークン欄を消す。validate_callでは残し、検証の失敗時に最後の値が見えるようにする |
+| function_selected | select_functionで葉から名前が確定した時 | 確定した関数名の表示 |
+| parameter_started | generate_call_jsonでValueSlotへ入る前 | name/type表示、値・件数・現在トークン欄の初期化。terminatorは不要 |
 | name_token | 名前ループで採用ID追加後 | tokens[-1]を採用ID、modeを方式として表示。ID列を公開decodeし、raw_topで従来の警告を作る |
 | value_token | 値ループで採用ID追加後 | tokenを採用ID、modeを方式、writtenを途中の値、stepをトークン数として表示 |
 | available | 診断要求と各通知の前に読む | 診断ストリームが利用可能か。isattyや生成の継続フラグではない |
@@ -810,8 +816,8 @@ _startは`tuple[Args, list[str], GenerationResources]`を返す。Dashboardの�
 _start：入力/出力先検査 → Model → vocab → 同じfunctionsからtrie → GenerationResources
 main：resourcesから必要な参照を取り出してDashboardをwithで開始
   → _process_all(prompts, resources, ...) → process_prompt(prompt, resources, progress=...)
-    → stage(select_name) → select_function(model, functions, trie, progress)
-    → stage(generate_parameters) → generate_call_json(model, vocab, fn, progress)
+    → stage(select_function) → select_function(model, functions, trie, progress)
+    → stage(generate_call_json) → generate_call_json(model, vocab, fn, progress)
       → 固定IDの逐次確定 / parameter_started(name, type) → generate_value_with_delimiter(model, vocab, slot, P + O, progress)
     → O全文の復号・整合性検査 → stage(validate_call) → validate_call → prompt一致検査 → FunctionCall
   → 成功ごとに保存 → 完了/失敗通知 → 次の入力
@@ -856,7 +862,7 @@ SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・�
 | 外部のprompts/functions/vocab | 既存のloaderのstrict検証、空/重複・変換の検査を維持。資源構造体で内容を重ねて走査しない |
 | 名前の木・ValueSlot | build_name_trieが各名前+EOSをencodeし、NameTrieの検証で全経路を検査して索引を作る（起動時1回）。生成・表示では再検証しない |
 | 資源の4参照 | InstanceOfの検査、functionsの読み取り専用の複製（N件）、キーと名前・名前集合の比較。既知5関数で中央値0.002 ms。encodeもTrieの再構築もしない。vocabの内容は走査しない |
-| モデルのlogits | choose_tokenの次元・数値・非有限値・許可ID検査を維持。診断のargmax以外の配列処理を加えない |
+| モデルのlogits | constrained_argmaxの次元・数値・非有限値・許可ID検査を維持。診断のargmax以外の配列処理を加えない |
 | 採用ID・mode・raw_top | 内部の選択分岐から得るプリミティブ。新たなPydanticモデルへ毎ステップ包み直さない |
 | 固定断片・完成値・JSON全文 | 語彙バイト列とSDK復号の一致、固定encodeの一致、全文と期待断片の一致。固定部分のforwardは増やさない |
 | 完成したFunctionCall | 既存のJSON・strict型・数値保持・スキーマ検証を維持。生成制約とは異なる境界 |

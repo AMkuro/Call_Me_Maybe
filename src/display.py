@@ -10,6 +10,7 @@ import sys
 import time
 import unicodedata
 from collections.abc import Mapping, Sequence
+from typing import Literal
 
 from .decoder import SelectionMode
 from .errors import PromptError
@@ -17,16 +18,24 @@ from .model_port import Model
 from .progress import Stage
 from .schema import ParamType
 
-_ROWS = (
+Row = Literal["input", "stage", "prompt", "function", "parameter", "value",
+              "value_tokens", "token", "warning", "result", "error"]
+_ROWS: tuple[tuple[Row, str], ...] = (
     ("input", "Input"), ("stage", "Stage"), ("prompt", "Prompt"),
     ("function", "Function"), ("parameter", "Parameter"),
     ("value", "Value"), ("value_tokens", "Value tokens"),
     ("token", "Token"),
     ("warning", "Warning"), ("result", "Result"), ("error", "Error"),
 )
+# The rows that show the latest generated token. A stage that generates
+# tokens starts them empty; validation keeps them, so a failure shows the
+# last generated value.
+_TOKEN_ROWS: tuple[Row, ...] = ("value", "value_tokens", "token")
+_GENERATING_STAGES: tuple[Stage, ...] = ("select_function",
+                                         "generate_call_json")
 _FRAME_SECONDS = 0.05  # at most one redraw per interval ...
 # ... except for completed selections and prompt outcomes.
-_DRAW_NOW = ("function", "result", "error")
+_DRAW_NOW: tuple[Row, ...] = ("function", "result", "error")
 _FALLBACK_SIZE = (100, 24)
 _ENTER, _LEAVE = "\x1b[?1049h\x1b[?25l", "\x1b[?25h\x1b[?1049l"
 _CLEAR = "\x1b[H\x1b[2J"
@@ -55,7 +64,7 @@ def _clip(text: str, width: int) -> str:
     return result
 
 
-def render_progress(fields: dict[str, str], width: int, height: int) -> str:
+def render_progress(fields: Mapping[Row, str], width: int, height: int) -> str:
     """Render runtime progress as a compact, safe frame."""
     lines = ["Call Me Maybe — generation"]
     for key, label in _ROWS:
@@ -66,14 +75,15 @@ def render_progress(fields: dict[str, str], width: int, height: int) -> str:
 
 
 class Dashboard:
-    """Own one run's terminal state and consume synchronous progress.
+    """Own one run's terminal state, prompt timings and outcome counts.
 
     Use it in ``with``: leaving the block restores the terminal and prints
-    the summary, even after an exception or Ctrl-C.
+    the summary, even after an exception or Ctrl-C. Each prompt goes
+    through prompt_started, then prompt_done or prompt_failed; the
+    GenerationProgress methods between them only change displayed rows.
 
     Effect: writes stderr; reads its terminal size and the terminal type.
-
-    Judgment: observe without keyboard interaction or extra model calls.
+    It reads no keyboard input and makes no model calls beyond decoding.
     """
 
     def __init__(
@@ -86,10 +96,10 @@ class Dashboard:
         self.interactive = (self.stream.isatty()
                             and os.environ.get("TERM") != "dumb")
         self.total = total
-        self.fields = {"input": f"0/{total}"}
+        self.fields: dict[Row, str] = {"input": f"0/{total}"}
         self.counts = {"done": 0, "failed": 0}
         self.summary: list[str] = []  # held while the dashboard covers it
-        self.started = self.prompt_started = time.monotonic()
+        self.started = self.prompt_started_at = time.monotonic()
         self.last_frame = 0.0
         self.available = True
 
@@ -114,20 +124,38 @@ class Dashboard:
             + f"{time.monotonic() - self.started:.1f} s\n"
         )
 
+    def prompt_started(self, index: int, prompt: str) -> None:
+        """Clear the previous prompt's rows and start timing this one."""
+        self.fields.clear()
+        self.prompt_started_at = time.monotonic()
+        self.fields["input"] = f"{index}/{self.total}"
+        self._show("prompt", prompt)
+
+    def prompt_done(self, name: str) -> None:
+        """Count a saved result and add its summary line."""
+        self._show("result", name)
+        self._end_prompt("done", name)
+
+    def prompt_failed(self, reason: str) -> None:
+        """Count a skipped prompt and add its summary line."""
+        self._show("error", reason)
+        self._end_prompt("failed", reason)
+
     def stage(self, stage: Stage) -> None:
-        """Update the stage and clear the name token before parameters."""
-        if stage == "generate_parameters":
-            self.fields.update(value="", token="")
-        self.report("stage", stage)
+        """Show the stage, clearing token rows when it generates tokens."""
+        if stage in _GENERATING_STAGES:
+            for row in _TOKEN_ROWS:
+                self.fields.pop(row, None)
+        self._show("stage", stage)
 
     def function_selected(self, name: str) -> None:
         """Display the selected function, forcing a completed-name frame."""
-        self.report("function", name)
+        self._show("function", name)
 
     def parameter_started(self, name: str, param_type: ParamType) -> None:
         """Clear the previous value before showing this parameter."""
-        self.fields.update(value="", value_tokens="0", token="")
-        self.report("parameter", f"{name} ({param_type})")
+        self.fields.update({"value": "", "value_tokens": "0", "token": ""})
+        self._show("parameter", f"{name} ({param_type})")
 
     def name_token(
         self, tokens: Sequence[int], *, mode: SelectionMode,
@@ -135,15 +163,15 @@ class Dashboard:
     ) -> None:
         """Decode borrowed IDs now; never change or retain the sequence."""
         token = tokens[-1]
-        self.fields.update(value=_decoded(self.model, tokens),
-                           value_tokens=str(len(tokens)),
-                           token=f"{token} ({mode})")
+        self.fields.update({"value": _decoded(self.model, tokens),
+                            "value_tokens": str(len(tokens)),
+                            "token": f"{token} ({mode})"})
         if mode == "greedy" and raw_top is not None and raw_top != token:
             raw = _token_text(raw_top, self.model, self.vocab)
             selected = _token_text(token, self.model, self.vocab)
-            self.report("warning", "name_selection_constrained: "
-                        f"step={len(tokens)} raw_top={raw} "
-                        f"selected={selected}")
+            self._warn("name_selection_constrained: "
+                       f"step={len(tokens)} raw_top={raw} "
+                       f"selected={selected}")
         elif self.interactive:
             self.draw("token")
 
@@ -151,30 +179,29 @@ class Dashboard:
         self, written: bytes, step: int, *, token: int, mode: SelectionMode,
     ) -> None:
         """Update all fields for one step before drawing its latest frame."""
-        self.fields.update(value=written.decode("utf-8", errors="ignore"),
-                           value_tokens=str(step), token=f"{token} ({mode})")
+        self.fields.update({"value": written.decode("utf-8", errors="ignore"),
+                            "value_tokens": str(step),
+                            "token": f"{token} ({mode})"})
         if self.interactive:
             self.draw("token")
 
-    def report(self, label: str, text: str) -> None:
-        """Record one observation; ``input`` starts a new prompt."""
-        if label == "input":
-            self.fields.clear()
-            self.prompt_started = time.monotonic()
-        self.fields[label] = text
-        if label in ("result", "error"):
-            self.end_prompt(label, text)
+    def _show(self, row: Row, text: str) -> None:
+        """Set one row; only a terminal shows rows (redirected logs do not)."""
+        self.fields[row] = text
         if self.interactive:
-            self.draw(label)
-        elif label == "warning":
+            self.draw(row)
+
+    def _warn(self, text: str) -> None:
+        """Show a warning; a redirected stream also gets it as a log line."""
+        self._show("warning", text)
+        if not self.interactive:
             self.write(f"[{self.fields['input']}] warning: {_visible(text)}\n")
 
-    def end_prompt(self, label: str, text: str) -> None:
-        """One summary line: done (function) or failed (reason), seconds."""
-        status = "done" if label == "result" else "failed"
+    def _end_prompt(self, status: Literal["done", "failed"],
+                    what: str) -> None:
+        """One summary line: status, function or reason, and seconds."""
         self.counts[status] += 1
-        what = self.fields.get("function", "") if label == "result" else text
-        seconds = time.monotonic() - self.prompt_started
+        seconds = time.monotonic() - self.prompt_started_at
         line = (f"[{self.fields['input']}] {status:<7} {_visible(what)}  "
                 f"{seconds:.1f} s\n")
         if self.interactive:
@@ -182,10 +209,10 @@ class Dashboard:
         else:
             self.write(line)
 
-    def draw(self, label: str) -> None:
+    def draw(self, row: Row) -> None:
         """Redraw the dashboard, at most once per interval."""
         now = time.monotonic()
-        if now - self.last_frame < _FRAME_SECONDS and label not in _DRAW_NOW:
+        if now - self.last_frame < _FRAME_SECONDS and row not in _DRAW_NOW:
             return
         try:
             width, height = os.get_terminal_size(self.stream.fileno())

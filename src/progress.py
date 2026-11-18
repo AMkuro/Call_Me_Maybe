@@ -9,7 +9,9 @@ if TYPE_CHECKING:
     from .decoder import SelectionMode
     from .schema import ParamType
 
-Stage = Literal["select_name", "generate_parameters", "validate_call"]
+# Each stage is named after the pipeline function it runs, so the display
+# points at the code that is working.
+Stage = Literal["select_function", "generate_call_json", "validate_call"]
 
 
 class GenerationProgress(Protocol):

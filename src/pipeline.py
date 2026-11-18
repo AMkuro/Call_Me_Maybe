@@ -67,12 +67,12 @@ def process_prompt(
 ) -> FunctionCall:
     """Select a name, generate parameters, then validate one JSON record."""
     if progress is not None and progress.available:
-        progress.stage("select_name")
+        progress.stage("select_function")
     fn = select_function(user_prompt, model=resources.model,
                          functions=resources.functions, trie=resources.trie,
                          progress=progress)
     if progress is not None and progress.available:
-        progress.stage("generate_parameters")
+        progress.stage("generate_call_json")
     text = generate_call_json(user_prompt, fn, model=resources.model,
                               vocab=resources.vocab, progress=progress)
     if progress is not None and progress.available:

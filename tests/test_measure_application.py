@@ -40,7 +40,7 @@ class ProgressMeasurementTests(unittest.TestCase):
 
         progress = MeasurementProgress()
         ids = [1]
-        progress.stage('select_name')
+        progress.stage('select_function')
         progress.name_token(ids, mode='forced', raw_top=None)
         progress.function_selected('f')
         progress.parameter_started('a', 'number')

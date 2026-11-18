@@ -35,7 +35,7 @@ class DashboardTests(unittest.TestCase):
     def test_progress_renders_safely_within_width(self) -> None:
         """Values remain visible and escaped."""
         frame = render_progress(
-            {"input": "1/1", "stage": "generate_parameters", "result": "ok",
+            {"input": "1/1", "stage": "generate_call_json", "result": "ok",
              "value": "東京\x1b[2J", "value_tokens": "3"},
             width=30, height=40,
         )
@@ -49,13 +49,12 @@ class DashboardTests(unittest.TestCase):
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
             with Dashboard(2, object.__new__(Model), {}) as dashboard:
-                report = dashboard.report
-                report("input", "1/2")
-                report("function", "fn_a")
-                report("value", "a")
-                report("result", 'fn_a {"a": 1}')
-                report("input", "2/2")
-                report("error", "parameter 'x': limit")
+                dashboard.prompt_started(1, 'first {"a": 1}')
+                dashboard.function_selected("fn_a")
+                dashboard.value_token(b"'a'", 1, token=1, mode="forced")
+                dashboard.prompt_done("fn_a")
+                dashboard.prompt_started(2, "second")
+                dashboard.prompt_failed("parameter 'x': limit")
         text = output.getvalue()
         self.assertRegex(text, re.compile(r"^\[1/2\] done +fn_a +\d+\.\d s$",
                                           re.M))
@@ -65,6 +64,39 @@ class DashboardTests(unittest.TestCase):
             r"^2 prompts: 1 done, 1 failed, \d+\.\d s$", re.M))
         self.assertNotIn('{"a"', text)
         self.assertNotIn("'a'", text)
+
+    def test_prompt_events_own_timing_and_counts(self) -> None:
+        """Start resets rows and the timer; done/failed only count once."""
+        stream = io.StringIO()
+        with contextlib.redirect_stderr(stream):
+            dashboard = Dashboard(2, object.__new__(Model), {})
+        with patch.object(display.time, "monotonic", side_effect=[
+            10.0, 12.5, 20.0, 21.0,
+        ]):
+            dashboard.prompt_started(1, "p1")
+            dashboard.function_selected("fn_a")
+            dashboard.prompt_done("fn_a")
+            dashboard.prompt_started(2, "p2")
+            self.assertEqual(dashboard.fields,
+                             {"input": "2/2", "prompt": "p2"})
+            dashboard.prompt_failed("bad")
+        self.assertEqual(dashboard.counts, {"done": 1, "failed": 1})
+        self.assertIn("[1/2] done    fn_a  2.5 s", stream.getvalue())
+        self.assertIn("[2/2] failed  bad  1.0 s", stream.getvalue())
+
+    def test_stage_change_clears_token_rows_without_parameters(self) -> None:
+        """A function with no parameters must not keep the name's count."""
+        with contextlib.redirect_stderr(io.StringIO()):
+            dashboard = Dashboard(1, object.__new__(Model), {})
+        with patch.object(Model, "decode", return_value="fn"):
+            dashboard.name_token([1, 2], mode="forced", raw_top=None)
+        dashboard.stage("generate_call_json")
+        for row in ("value", "value_tokens", "token"):
+            self.assertNotIn(row, dashboard.fields)
+        self.assertEqual(dashboard.fields["stage"], "generate_call_json")
+        dashboard.value_token(b"1.0}", 2, token=3, mode="greedy")
+        dashboard.stage("validate_call")
+        self.assertEqual(dashboard.fields["value"], "1.0}")
 
 
 class BorrowedProgressTests(unittest.TestCase):
@@ -97,19 +129,19 @@ class BorrowedProgressTests(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             dashboard = Dashboard(1, object.__new__(Model), {})
         dashboard.interactive = True
-        frames: list[dict[str, str]] = []
+        frames: list[dict[display.Row, str]] = []
         with patch.object(dashboard, 'draw', side_effect=(
             lambda _: frames.append(dashboard.fields.copy())
         )):
             dashboard.value_token(b'\xe6', 1, token=42, mode='forced')
             dashboard.value_token(b'\xe6\x9d\xb1', 2, token=43, mode='greedy')
-            dashboard.stage('generate_parameters')
+            dashboard.stage('generate_call_json')
             dashboard.parameter_started('x', 'string')
         self.assertEqual(frames[0]['token'], '42 (forced)')
         self.assertEqual(frames[0]['value_tokens'], '1')
         self.assertEqual(frames[1]['token'], '43 (greedy)')
         self.assertEqual(frames[1]['value'], '東')
-        self.assertEqual(frames[2]['token'], '')
+        self.assertNotIn('token', frames[2])
         self.assertEqual(frames[3]['value_tokens'], '0')
         self.assertEqual(frames[3]['token'], '')
         self.assertEqual(frames[3]['parameter'], 'x (string)')
