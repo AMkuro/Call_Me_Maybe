@@ -26,7 +26,7 @@ _LAST_HEX_DIGIT = 6
 _AFTER_STRING = 7
 _AFTER_TERMINATOR = 8
 
-# Results of _slot_prefix_states. _INVALID above is the third result.
+# Results of _slot_state. _INVALID above is the third result.
 _INCOMPLETE = 0
 _COMPLETE = 1
 
@@ -82,7 +82,7 @@ def _advance_string(phase: int, data: bytes, terminator: int) -> int:
     return phase
 
 
-def _slot_prefix_states(
+def _slot_state(
     data: bytes, kind: ParamType, terminator: bytes,
 ) -> int:
     """Recognize an entire candidate, including bytes within merged tokens.
@@ -149,8 +149,8 @@ def allowed_slot_tokens(
                 if value and _advance_string(phase, value, end) != _INVALID
                 and _utf8_prefix(pending + value)]
     return [token for token, value in vocab.items()
-            if value and _slot_prefix_states(written + value, param_type,
-                                             terminator_bytes) != _INVALID]
+            if value and _slot_state(written + value, param_type,
+                                     terminator_bytes) != _INVALID]
 
 
 def is_slot_complete(
@@ -161,5 +161,5 @@ def is_slot_complete(
     A valid number without its terminator is not finished.
     """
     terminator_bytes = terminator.encode("ascii")
-    state = _slot_prefix_states(written, param_type, terminator_bytes)
+    state = _slot_state(written, param_type, terminator_bytes)
     return state == _COMPLETE

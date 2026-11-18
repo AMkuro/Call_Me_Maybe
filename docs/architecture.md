@@ -296,7 +296,7 @@ UTF-8途中の単トークンを復号して連結せず、値はbytesで制約�
 `validate_call` は全文を `json_io.loads` で読み、strictな`FunctionCall`で記録のキーと型を検証する。
 `call.name`が選択済みの`fn.name`と完全一致することも確認し、不一致なら期待した名前と実際の名前を含むPromptErrorにする。
 続いて `build_parameters_model` が選択済みの定義から作ったstrictなモデルで、必須引数、余分なキー、型を確認する。
-`process_prompt`は検証後の`call.prompt`と入力文面の完全一致も確認し、不一致をPromptErrorにする。
+`validate_call`は検証後の`call.prompt`と入力文面の完全一致も確認し、不一致をPromptErrorにする。
 内部のフィールド名とは別に元の引数名を保持し、`_private` や `model_dump` のような名前も出力に戻す。
 汎用のnumber検証はJSON整数・小数の両方を受け付けるが、bool・数値文字列・全角数字からの変換はしない。
 LLM生成の文法は§4の小数点必須・指数禁止であり、入力解析や汎用検証の受理範囲とは区別する。
@@ -1042,7 +1042,7 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
 | 対象ファイル・関数 | 実装した変更 |
 | --- | --- |
 | pipeline.py | Run/report/sayと4クロージャを廃止。GenerationResources、上位だけの資源受け取り、下位の明示依存、各ループと同期借用の観測契約を設ける |
-| decoder.py | generate/TokenChoiceを廃止。SelectionMode型別名と、選択ID・方式・任意診断IDを返す1選択関数を設ける。choose_tokenを維持 |
+| decoder.py | generate/TokenChoiceを廃止。SelectionMode型別名と、選択ID・方式・任意診断IDを返す1選択関数を設ける。constrained_argmaxを維持 |
 | progress.py | 上記の5メソッド・availableだけの型契約。コールバック・配送・実行状態は持たない |
 | display.py | name_token/value_tokenで採用IDと方式を整形し、途中内容と一緒に現在トークン欄を更新。元の描画・集計・復帰は維持 |
 | __main__.py | _startで資源を一度組み立て、_process_allへ渡す。Dashboardへは必要な参照と語彙の読み取り専用viewだけを接続 |
@@ -1061,7 +1061,7 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
 4. トークン欄・途中内容が同じステップで描画されること、引数/段階開始時にトークン欄が初期化されること、
    UTF-8途中・特殊トークン・取得不能表記・制御文字・画面幅・警告・要約・端末復帰を確認する。
    availableとisattyを分け、リダイレクトの警告、stderr故障後の生成継続も確認する。
-5. 0・1・255・256・上限超過、EOS、終了/上限/空候補の優先順位、引数順、ForcedとJSON区切り、
+5. 0・1・255・256・上限超過、EOS、終了/上限/空候補の優先順位、引数順、FixedTextとJSONの終端、
    生成後のPydantic検証、途中保存と保存失敗の契約を維持する。
 6. 資源の必須/余分/不正な参照型・frozen代入拒否、参照の同一性、構築回数、functionsとtrieの対応を検査する。
    root型の検査と内容検査を混同せず、語彙の読み取り専用viewからの更新も拒否されることを確認する。
