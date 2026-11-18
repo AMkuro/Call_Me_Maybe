@@ -1,0 +1,72 @@
+"""Counterfactual method-B forward time from the measured per-length fit.
+
+Inputs: replay JSONs. Output: fixed-token counts for spaced vs compact JSON
+and predicted forward seconds per scenario (fit, not measurement).
+"""
+
+import json
+import sys
+from pathlib import Path
+
+from src.loader import load_functions
+from src.model_port import Model
+from src.skeleton import Forced, build_skeleton
+
+A, B = 0.0791, 0.001984  # t6 fit from analyze.py (L 167-294)
+
+cases = []
+for path in sys.argv[1:]:
+    r = json.loads(Path(path).read_text())
+    cases += [c for c in r["cases"] if "method_b" in c["parameters"]]
+model = Model()
+functions = load_functions(Path("data/input/functions_definition.json"))
+
+
+def fixed_tokens(prompt: str, fn, compact: bool) -> tuple[int, int]:
+    if compact:
+        head = f'{{"prompt":{json.dumps(prompt)},"name":{json.dumps(fn.name)}'
+    else:
+        head = f'{{"prompt": {json.dumps(prompt)}, "name": {json.dumps(fn.name)}'
+    n_head = len(model.encode(head))
+    n = n_head
+    for part in build_skeleton(fn):
+        if isinstance(part, Forced):
+            text = part.text
+            if compact:
+                text = text.replace(', "parameters": {', ',"parameters":{')
+                text = text.replace('": ', '":').lstrip(" ")
+            n += len(model.encode(text))
+    return n_head, n
+
+
+def cost(prompt_len: int, n_out: int) -> float:
+    return sum(A + B * (prompt_len + i) for i in range(n_out))
+
+
+rows = []
+tot = {"measured": 0.0, "fit_now": 0.0, "compact": 0.0, "no_head": 0.0,
+       "instr_minus_30": 0.0, "think_removed": 0.0}
+for c in cases:
+    fn = functions[c["function"]]
+    n, p = c["name"], c["parameters"]
+    head_now, fixed_now = fixed_tokens(c["prompt"], fn, False)
+    head_c, fixed_c = fixed_tokens(c["prompt"], fn, True)
+    value = p["value_tokens"]
+    name_cost = cost(n["prompt_tokens"], n["output_tokens"])
+    tot["measured"] += (n["method_b"]["forward_total_s"]
+                        + p["method_b"]["forward_total_s"])
+    tot["fit_now"] += name_cost + cost(p["prompt_tokens"], p["output_tokens"])
+    tot["compact"] += name_cost + cost(p["prompt_tokens"], fixed_c + value)
+    tot["no_head"] += name_cost + cost(p["prompt_tokens"],
+                                       p["output_tokens"] - head_now)
+    tot["instr_minus_30"] += (name_cost
+                              + cost(p["prompt_tokens"] - 30, p["output_tokens"]))
+    tot["think_removed"] += (cost(n["prompt_tokens"] - 4, n["output_tokens"])
+                             + cost(p["prompt_tokens"] - 4, p["output_tokens"]))
+    rows.append({"index": c["index"], "fixed_recorded": p["fixed_json_tokens"],
+                 "fixed_recomputed": fixed_now, "fixed_compact": fixed_c,
+                 "head_now": head_now, "head_compact": head_c})
+print(json.dumps({"rows": rows, "totals_s": tot,
+                  "fixed_sum": {k: sum(r[k] for r in rows) for k in (
+                      "fixed_recorded", "fixed_recomputed", "fixed_compact",
+                      "head_now", "head_compact")}}, indent=1))

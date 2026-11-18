@@ -1,0 +1,74 @@
+"""Aggregate partA/partB replay JSON into tables and a per-length fit."""
+
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+
+cases = []
+meta = {}
+for path in sys.argv[1:]:
+    r = json.loads(Path(path).read_text())
+    # partB stopped at 95C: keep only cases whose replay was saved.
+    cases += [c for c in r["cases"] if "method_b" in c["parameters"]]
+    meta[path] = {k: r.get(k) for k in ("startup_s", "phase1_current_total_s",
+                                        "phase2_replay_total_s", "head",
+                                        "dirty_src_sdk", "env")}
+    if "profile" in r:
+        meta[path]["profile_len"] = r["profile"]["length"]
+        meta[path]["profile_wall"] = r["profile"]["wall_s"]
+        meta[path]["micro"] = r["python_microbench_s"]
+print(json.dumps(meta, indent=1))
+
+L, T = [], []
+rows = []
+tot = {k: 0.0 for k in ("cur_wall", "cur_logits", "cur_mask", "cur_choose",
+                        "b_fwd", "b_choose", "b_mask_total")}
+cnt = {k: 0 for k in ("name_out", "name_single", "out", "fixed", "vsingle",
+                      "vbranch", "cur_fwd", "b_fwd")}
+for c in cases:
+    n, p = c["name"], c["parameters"]
+    nb, pb = n["method_b"], p["method_b"]
+    L += nb["lengths"] + pb["lengths"]
+    T += nb["forward_s"] + pb["forward_s"]
+    cur_fwd = n["logits_s"].get("n", 0) + p["logits_s"].get("n", 0)
+    b_fwd = nb["forwards"] + pb["forwards"]
+    b_time = nb["forward_total_s"] + pb["forward_total_s"]
+    mask = n["mask_s"].get("sum", 0) + p["mask_s"].get("sum", 0)
+    choose_cur = n["choose_s"].get("sum", 0) + p["choose_s"].get("sum", 0)
+    b_choose = nb["choose_single_s"]["sum"] + pb["choose_single_s"]["sum"]
+    rows.append((c["index"], c["function"], n["prompt_tokens"],
+                 n["output_tokens"], n["single_candidate"], n["branch"],
+                 p["prompt_tokens"], p["output_tokens"], p["fixed_json_tokens"],
+                 p["value_tokens"], p["value_single_candidate"],
+                 p["value_branch"], cur_fwd, b_fwd, nb["max_length"],
+                 pb["max_length"], c["wall_s"], b_time, mask))
+    tot["cur_wall"] += c["wall_s"]
+    tot["cur_logits"] += n["logits_s"].get("sum", 0) + p["logits_s"].get("sum", 0)
+    tot["cur_mask"] += mask
+    tot["cur_choose"] += choose_cur
+    tot["b_fwd"] += b_time
+    tot["b_choose"] += b_choose
+    cnt["name_out"] += n["output_tokens"]
+    cnt["name_single"] += n["single_candidate"]
+    cnt["out"] += p["output_tokens"]
+    cnt["fixed"] += p["fixed_json_tokens"]
+    cnt["vsingle"] += p["value_single_candidate"]
+    cnt["vbranch"] += p["value_branch"]
+    cnt["cur_fwd"] += cur_fwd
+    cnt["b_fwd"] += b_fwd
+
+hdr = ("idx fn nameP nameOut nSingle nBranch parP parOut fixed value vSingle "
+       "vBranch curFwd bFwd nameMaxL parMaxL curWall bFwdTime mask")
+print(hdr)
+for r in rows:
+    print(" ".join(f"{x:.2f}" if isinstance(x, float) else str(x) for x in r))
+print("totals", json.dumps(tot), json.dumps(cnt))
+a = np.polyfit(np.asarray(L), np.asarray(T), 1)
+resid = np.asarray(T) - np.polyval(a, L)
+print("fit t6: intercept=%.4f slope=%.6f per token; resid sd=%.4f; L range %d-%d; n=%d"
+      % (a[1], a[0], resid.std(), min(L), max(L), len(L)))
+camp = sum(0.0852 + 0.001577 * x for x in L)
+print("campus-fit sum over B lengths: %.1f s" % camp)
+print("t6 measured sum: %.1f s" % sum(T))

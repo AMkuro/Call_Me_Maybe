@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Method-B replay on CPU with the phys16-t6 conditions of research/evo-x3/measure.sh
+# (CPU 0-15, OMP 6, MemoryMax 16G, no swap, cool to 50C first).
+# Adds a 1 s Tctl timeline and stops the run at 95C or after 1800 s.
+# Usage: run_b.sh LABEL FIRST LAST   (1-based inclusive prompt range)
+set -u
+LABEL=${1:?label}; FIRST=${2:?first}; LAST=${3:?last}
+OUT=<scratch>
+SENSOR=
+for hwmon in /sys/class/hwmon/hwmon*; do
+  case $(cat "$hwmon/name" 2>/dev/null) in
+    k10temp|coretemp|zenpower) SENSOR=$hwmon/temp1_input; break ;;
+  esac
+done
+[ -n "$SENSOR" ] || { echo 'no CPU sensor; not running' >&2; exit 3; }
+WAIT_START=$SECONDS; BEST=$(cat "$SENSOR"); LAST_DROP=$SECONDS
+while [ "$(cat "$SENSOR")" -gt 50000 ]; do
+  if [ $((SECONDS - LAST_DROP)) -ge 60 ]; then echo 'CPU did not cool' >&2; exit 3; fi
+  sleep 1
+  T=$(cat "$SENSOR"); if [ "$T" -le $((BEST - 1000)) ]; then BEST=$T; LAST_DROP=$SECONDS; fi
+done
+echo "cool_wait_s=$((SECONDS - WAIT_START)) tctl_start_mc=$(cat "$SENSOR")" > "$OUT/$LABEL.meta"
+cd <repo> || exit 1
+export CUDA_VISIBLE_DEVICES= HIP_VISIBLE_DEVICES= \
+  HF_HOME=<repo>/.cache/huggingface \
+  HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=6 \
+  PYTHONPATH=<repo>
+systemd-run --user --scope --quiet -p MemoryMax=16G -p MemorySwapMax=0 \
+  taskset -c 0-15 /usr/bin/time -f 'wall_s=%e max_rss_kib=%M' -o "$OUT/$LABEL.time" \
+  <repo>/.venv/bin/python \
+  "$OUT/replay_b.py" --first "$FIRST" --last "$LAST" \
+  --output "$OUT/$LABEL.json" 2> "$OUT/$LABEL.stderr" &
+JOB=$!
+START=$SECONDS; STOP=none
+: > "$OUT/$LABEL.temp.csv"
+while kill -0 "$JOB" 2>/dev/null; do
+  T=$(cat "$SENSOR"); echo "$((SECONDS - START)),$T" >> "$OUT/$LABEL.temp.csv"
+  if [ "$T" -ge 95000 ]; then STOP=thermal_95C; pkill -TERM -f "$OUT/replay_b.py"; fi
+  if [ $((SECONDS - START)) -ge 1800 ]; then STOP=timeout_1800s; pkill -TERM -f "$OUT/replay_b.py"; fi
+  sleep 1
+done
+wait "$JOB"; RC=$?
+{ cat "$OUT/$LABEL.time"; echo "exit_code=$RC stop=$STOP prompts=$FIRST-$LAST"
+  echo "profile=phys16-t6 mem_max=16G swap=0 cpus=0-15 omp=6"; } >> "$OUT/$LABEL.meta"
+cat "$OUT/$LABEL.meta"
+exit $RC

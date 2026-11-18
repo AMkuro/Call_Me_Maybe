@@ -191,6 +191,11 @@ and ADR-0022. VM configuration management is a selection criterion alongside
 cgroup calibration; the VM choice remains open. The AMD development host has
 no readable thermal counters, so this tool refuses to load the model there.
 
+[Method B CPU evaluation](research/2026-11-18-method-b-performance.md)
+replays the known 11 inputs with one forward before every output token
+(558 forwards, 289 s of forward time at phys16-t6) and lists the reductions
+needed for 300 s. It is a measurement and proposal, not an implementation.
+
 - `make install` recreates `.venv` from `uv.lock` (CPU torch). `uv sync` alone
   also works, as the reviewers require. torch comes from the default `cpu`
   dependency group, which uses the PyTorch CPU index.

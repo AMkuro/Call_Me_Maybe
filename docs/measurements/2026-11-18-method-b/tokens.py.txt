@@ -1,0 +1,59 @@
+"""Classify method-B output tokens and count prompt-part tokens (CPU, light)."""
+
+import json
+import sys
+from pathlib import Path
+
+from src.loader import load_functions
+from src.model_port import Model
+from src.prompt import (NAME_INSTRUCTIONS, PARAMETER_INSTRUCTIONS,
+                        build_name_prompt, _parameters_request)
+from src.vocab import load_vocab
+
+cases = []
+for path in sys.argv[1:]:
+    r = json.loads(Path(path).read_text())
+    cases += [c for c in r["cases"] if "method_b" in c["parameters"]]
+model = Model()
+vocab = load_vocab(Path(model.vocab_path()))
+functions = load_functions(Path("data/input/functions_definition.json"))
+
+out = {"cases": []}
+for c in cases:
+    ids = c["parameters"]["output_ids"]
+    text = b""
+    head_tokens = None
+    pieces = []
+    for i, t in enumerate(ids):
+        text += vocab[t]
+        pieces.append(vocab[t].decode("utf-8", "replace"))
+        if head_tokens is None and b'"parameters"' in text:
+            head_tokens = i + 1
+    fn = functions[c["function"]]
+    req = _parameters_request(c["prompt"], fn)
+    head = (f'{{"prompt": {json.dumps(c["prompt"])}, '
+            f'"name": {json.dumps(fn.name)}')
+    out["cases"].append({
+        "index": c["index"],
+        "output_tokens": len(ids),
+        "tokens_through_parameters_key": head_tokens,
+        "head_prompt_name_tokens": len(model.encode(head)),
+        "prompt_copy_tokens": len(model.encode(json.dumps(c["prompt"]))),
+        "name_copy_tokens": len(model.encode(json.dumps(fn.name))),
+        "pieces": pieces,
+        "name_prompt_tokens": c["name"]["prompt_tokens"],
+        "user_request_part_tokens": len(model.encode(req)),
+    })
+out["parts"] = {
+    "PARAMETER_INSTRUCTIONS": len(model.encode(PARAMETER_INSTRUCTIONS)),
+    "NAME_INSTRUCTIONS": len(model.encode(NAME_INSTRUCTIONS)),
+    "chat_wrapper_empty": len(model.encode(
+        "<|im_start|>system\n<|im_end|>\n<|im_start|>user\n<|im_end|>\n"
+        "<|im_start|>assistant\n<think>\n\n</think>\n\n")),
+    "think_block": len(model.encode("<think>\n\n</think>\n\n")),
+    "sep_spaced": len(model.encode(', "parameters": {"a": ')),
+    "sep_compact": len(model.encode(',"parameters":{"a":')),
+    "name_prompt_function_list": len(model.encode(
+        build_name_prompt("x", functions))),
+}
+print(json.dumps(out, ensure_ascii=False, indent=1))
