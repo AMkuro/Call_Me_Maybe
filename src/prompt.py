@@ -26,6 +26,8 @@ PARAMETER_INSTRUCTIONS = (
     " Preserve numeric signs and decimal points."
 )
 # Worked examples shown before the request: (function, request, parameters).
+# Empty in the application. Prompt experiments fill it to try few-shot
+# examples without changing how the prompt is built.
 PARAMETER_EXAMPLES: list[tuple[FunctionDef, str, dict[str, Scalar]]] = []
 
 
