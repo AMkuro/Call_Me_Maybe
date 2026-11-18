@@ -17,7 +17,8 @@ from src.errors import PromptError, StartupError
 from src.json_io import loads
 from src.loader import index_functions
 from src.pipeline import (
-    MAX_VALUE_STEPS, build_generation_resources, process_prompt,
+    MAX_NUMBER_STEPS, MAX_VALUE_STEPS, build_generation_resources,
+    process_prompt,
 )
 from src.schema import FunctionCall, FunctionDef, ParamType
 
@@ -110,6 +111,7 @@ def main() -> int:
         report: dict[str, Any] = {
             "measurement": "accuracy/stress; no timing measurements",
             "model": "Qwen/Qwen3-0.6B", "value_token_limit": MAX_VALUE_STEPS,
+            "number_token_limit": MAX_NUMBER_STEPS,
             "repetitions": args.repeat, "results": results,
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)

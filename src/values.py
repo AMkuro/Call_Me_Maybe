@@ -6,8 +6,10 @@ import re
 from .schema import ParamType
 
 _WHITESPACE = b" \t\r\n"
-# A whole number as the LLM must write it: decimal point required.
-_NUMBER = re.compile(rb"-?(?:0|[1-9][0-9]*)\.[0-9]+\Z")
+# A whole number as the LLM may write it: the fraction is optional, because
+# forbidding the terminator after an integer made the model write "1000..."
+# to the cap (owner decision, 2026-11-18).
+_NUMBER = re.compile(rb"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
 # Any prefix of _NUMBER, including the empty one.
 _NUMBER_PREFIX = re.compile(rb"-?(?:(?:0|[1-9][0-9]*)(?:\.[0-9]*)?)?\Z")
 
@@ -29,6 +31,19 @@ _AFTER_TERMINATOR = 8
 # Results of _slot_state. _INVALID above is the third result.
 _INCOMPLETE = 0
 _COMPLETE = 1
+
+
+_INTEGER_SLOT = re.compile(r"\A(\s*-?[0-9]+)(\s*[,}])\Z")
+
+
+def float_text(fragment: str) -> str:
+    """Write a completed number slot as a float literal: 10, -> 10.0,.
+
+    The model may end at an integer (fewer tokens, steadier time); the saved
+    output is float (owner decision, 2026-11-18). A string edit, so no digit
+    is lost to float conversion.
+    """
+    return _INTEGER_SLOT.sub(r"\1.0\2", fragment)
 
 
 def _utf8_prefix(data: bytes) -> bool:

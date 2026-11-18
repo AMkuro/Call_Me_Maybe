@@ -110,7 +110,8 @@ class ValidationFlowTests(unittest.TestCase):
             bodies = [
                 '{"prompt":"x","name":"dynamic","parameters":{"":'
                 + literal + '}}'
-                for literal in ['9007199254740993',
+                # generate_call_json always saves an integer with ".0".
+                for literal in ['9007199254740993.0',
                                 '0.1234567890123456789', '0.1']
             ]
             stderr, stdout = io.StringIO(), io.StringIO()

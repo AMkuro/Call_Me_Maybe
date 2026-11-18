@@ -29,13 +29,13 @@ class NumericIntegrityTests(unittest.TestCase):
 
     def test_integer_boundaries_and_large_integers_remain_exact(self) -> None:
         """Integers beyond binary64 precision or range remain Python ints."""
-        fn = definition(value='number')
+        model = build_parameters_model(definition(value='number'))
         for literal in ['0', '-2', '2', '9007199254740991',
                         '9007199254740992', '9007199254740993',
                         '-' + '9' * 400]:
             with self.subTest(literal=literal[:35]):
-                call = validate_call(record(literal), fn, 'x')
-                value = call.parameters['value']
+                checked = model.model_validate({'value': int(literal)})
+                value = checked.model_dump(by_alias=True)['value']
                 self.assertIs(type(value), int)
                 self.assertEqual(value, int(literal))
 
@@ -65,18 +65,29 @@ class NumericIntegrityTests(unittest.TestCase):
     def test_saved_json_keeps_numeric_type_and_decimal_value(self) -> None:
         """Use an independent decimal parser on the actual saved file."""
         fn = definition(value='number')
-        literals = ['9007199254740993', '9' * 400, '-12.75', '0.1',
-                    '9007199254740993.0']
+        literals = ['9007199254740993.0', '9' * 300 + '.0', '-12.75', '0.1',
+                    '-0.0']
         calls = [validate_call(record(literal), fn, 'x')
                  for literal in literals]
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / 'calls.json'
             save_results(path, calls)
             saved = json.loads(path.read_text(), parse_float=Decimal)
-        for literal, call in zip(literals, saved):
+            standard = json.loads(path.read_text())
+        for literal, call, standard_call in zip(literals, saved, standard):
             value = call['parameters']['value']
-            self.assertIn(type(value), (int, Decimal))
+            self.assertIs(type(value), Decimal)
+            self.assertIs(type(standard_call['parameters']['value']), float)
             self.assertEqual(Decimal(str(value)), Decimal(literal))
+
+    def test_generated_integers_require_float_spelling_and_range(self) -> None:
+        """Generated records reject integer spelling and float overflow."""
+        for literal in ['2', '9007199254740993', '9' * 400,
+                        '9' * 400 + '.0']:
+            with self.subTest(literal=literal[:35]):
+                with self.assertRaises(PromptError):
+                    validate_call(record(literal), definition(value='number'),
+                                  'x')
 
     def test_strict_numeric_and_boolean_types(self) -> None:
         """Do not interpret numeric strings, bools or boolean-like strings."""

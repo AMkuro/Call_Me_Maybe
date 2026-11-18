@@ -102,6 +102,21 @@ class ForcedJsonTests(unittest.TestCase):
         self.assertEqual(self.contexts,
                          [[80] + list(b'{"x": '[:end]) for end in range(6)])
 
+    def test_integer_is_saved_as_float_text_but_not_forwarded(self) -> None:
+        """The model ends at 10; Python saves 10.0 (owner, 2026-11-18)."""
+        fn = self.definition('timer', minutes='number', repeat='boolean')
+        self.target = (b'{"prompt":"t","name":"timer","parameters":'
+                       b'{"minutes": 10,"repeat": true}}')
+        text = pipeline.generate_call_json('t', fn, model=self.model,
+                                           vocab=self.vocab)
+        self.assertEqual(text, '{"prompt":"t","name":"timer","parameters":'
+                         '{"minutes": 10.0,"repeat": true}}')
+        # The context keeps what the model wrote; ".0" is never forwarded.
+        outputs = [bytes(ids[1:]) for ids in self.contexts]
+        self.assertIn(b'{"prompt":"t","name":"timer","parameters":'
+                      b'{"minutes": 10,"repeat": ', outputs)
+        self.assertFalse(any(b'10.0' in output for output in outputs))
+
     def test_special_prompt_name_keys_preserve_meaning(self) -> None:
         """Copied special spellings must never become control IDs."""
         fn = self.definition('new' + self.special,

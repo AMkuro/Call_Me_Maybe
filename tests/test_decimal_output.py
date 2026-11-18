@@ -18,12 +18,14 @@ from src.model_port import Model
 from src.name_trie import NameTrie
 from src.schema import FunctionCall, FunctionDef
 from src.skeleton import ValueSlot
-from src.values import allowed_slot_tokens, is_slot_complete
+from src.values import allowed_slot_tokens, float_text, is_slot_complete
 from src.writer import save_results
 
 VALID = ('0.0', '-0.0', '2.0', '2.75', '-42.125', '9007199254740993.0',
          '0.00000001', '123456789012345678901234567890.0', '2.00')
-INVALID = ('2', '-2', '2.', '.5', '+2.0', '01.0', '1e10', '1.0e10',
+# The terminator may follow an integer (owner decision, 2026-11-18).
+INTEGERS = ('0', '-0', '2', '-2', '10', '9007199254740993')
+INVALID = ('2.', '.5', '+2.0', '01.0', '01', '-', '1e10', '1.0e10',
            '1.0E-5', 'NaN', 'Infinity', '1.0, extra')
 
 
@@ -59,7 +61,7 @@ class DecimalGrammarTests(unittest.TestCase):
     def test_every_valid_prefix_reaches_both_terminators(self) -> None:
         """No legal next byte is masked before the complete decimal value."""
         vocab = {token: bytes([token]) for token in range(128)}
-        for literal in VALID:
+        for literal in VALID + INTEGERS:
             for terminator in (',', '}'):
                 with self.subTest(literal=literal, terminator=terminator):
                     written = b''
@@ -84,18 +86,19 @@ class DecimalGrammarTests(unittest.TestCase):
                         payload, 'number', terminator))
                     self.assertEqual(allowed_slot_tokens(
                         {9: payload}, 'number', b'', terminator), [])
-        for prefix in (b'2', b'-2', b'2.'):
+        for prefix, allowed in ((b'2', [9]), (b'-2', [9]), (b'2.', []),
+                                (b'-', [])):
             for terminator in (',', '}'):
                 self.assertEqual(allowed_slot_tokens(
                     {9: terminator.encode()}, 'number', prefix, terminator,
-                ), [])
+                ), allowed)
 
     def test_merged_token_candidates_obey_the_whole_token(self) -> None:
         """A token cannot hide an exponent or trailing material."""
         vocab = {1: b'2.0', 2: b'2.0,', 3: b'.0}', 4: b'1e10',
                  5: b'1.0e10', 6: b'0,', 7: b'2.0, extra'}
         self.assertEqual(allowed_slot_tokens(vocab, 'number', b'', ','),
-                         [1, 2])
+                         [1, 2, 6])
         self.assertEqual(allowed_slot_tokens(vocab, 'number', b'2', '}'),
                          [1, 3])
         self.assertEqual(allowed_slot_tokens(vocab, 'number', b'2.', ','),
@@ -103,10 +106,19 @@ class DecimalGrammarTests(unittest.TestCase):
         self.assertTrue(is_slot_complete(b'2.0}', 'number', '}'))
         self.assertFalse(is_slot_complete(b'2.0', 'number', '}'))
 
+    def test_float_text_adds_only_a_missing_fraction(self) -> None:
+        """String edit, so large integers keep every digit."""
+        for fragment, saved in (('10,', '10.0,'), ('-0}', '-0.0}'),
+                                (' 7 }', ' 7.0 }'), ('2.5,', '2.5,'),
+                                ('9007199254740993,', '9007199254740993.0,')):
+            with self.subTest(fragment=fragment):
+                self.assertEqual(float_text(fragment), saved)
+
     def test_fraction_selects_from_forced_context(self) -> None:
-        """The model chooses 5, with the forced decimal prefix in context."""
+        """The model chooses 05, with the forced decimal prefix in context."""
         model = object.__new__(Model)
-        vocab = {1: b'2.', 2: b'0}', 3: b'5}', 4: b'1e10'}
+        # 00} and 05} cannot start a number, so 2. is the only first token.
+        vocab = {1: b'2.', 2: b'00}', 3: b'05}', 4: b'1e10'}
         scores = [0.0, 0.0, 1.0, 2.0, 1000.0]
         slot = ValueSlot(name='x', type='number', terminator='}')
         with patch.object(Model, 'logits', return_value=scores) as forward, \
@@ -114,16 +126,16 @@ class DecimalGrammarTests(unittest.TestCase):
             ids = pipeline.generate_slot(
                 slot, [90, 91], model=model, vocab=vocab)
         self.assertEqual(ids, [1, 3])
-        self.assertEqual(b''.join(vocab[t] for t in ids), b'2.5}')
+        self.assertEqual(b''.join(vocab[t] for t in ids), b'2.05}')
         self.assertEqual([c.args for c in forward.call_args_list],
                          [([90, 91],), ([90, 91, 1],)])
         encode.assert_not_called()
 
-    def test_real_number_grammar_completes_at_256_not_257(self) -> None:
-        """Use the actual number mask and termination at the existing cap."""
+    def test_real_number_grammar_completes_at_32_not_33(self) -> None:
+        """A number stops at its own cap, so a run of digits fails early."""
         model = object.__new__(Model)
         vocab = {1: b'1', 2: b'.', 3: b'0', 4: b'}'}
-        for length in (256, 257):
+        for length in (32, 33):
             target = b'1' * (length - 3) + b'.0}'
 
             def logits(ids: list[int]) -> list[float]:
@@ -136,13 +148,13 @@ class DecimalGrammarTests(unittest.TestCase):
             with self.subTest(length=length), \
                     patch.object(Model, 'logits', side_effect=logits):
                 slot = ValueSlot(name='x', type='number', terminator='}')
-                if length == 256:
+                if length == 32:
                     ids = pipeline.generate_slot(
                         slot, [], model=model, vocab=vocab)
                     self.assertEqual(b''.join(vocab[t] for t in ids), target)
                 else:
                     with self.assertRaisesRegex(
-                            PromptError, 'token limit 256'):
+                            PromptError, 'token limit 32'):
                         pipeline.generate_slot(
                             slot, [], model=model, vocab=vocab)
 
@@ -194,6 +206,16 @@ class DecimalSaveTests(unittest.TestCase):
                                              literal))
                 with self.assertRaisesRegex(PromptError, reason):
                     generated(literal)
+
+    def test_saved_numbers_must_load_as_float(self) -> None:
+        """Python's json must read every number argument as a finite float."""
+        for literal in ('2', '-7'):
+            with self.subTest(literal=literal), \
+                    self.assertRaisesRegex(PromptError, 'float'):
+                generated(literal)
+        saved = generated('2.0')._generated_json
+        assert saved is not None
+        self.assertIsInstance(json.loads(saved)['parameters']['x'], float)
 
     def test_generated_text_must_pass_validation(self) -> None:
         """An unvalidated body cannot enter the normal trusted-text path."""

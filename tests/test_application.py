@@ -178,19 +178,20 @@ class StructureTests(unittest.TestCase):
         """Pydantic attribute names never replace dynamic JSON keys."""
         fn = definition(**{'_private': 'number', 'model_dump': 'string',
                            'a-b': 'boolean', '': 'string'})
-        parameters = {'_private': 2, 'model_dump': 'yes', 'a-b': True, '': ''}
+        parameters = {'_private': 2.0, 'model_dump': 'yes',
+                      'a-b': True, '': ''}
         result = build_parameters_model(fn).model_validate(parameters)
         self.assertEqual(result.model_dump(by_alias=True), parameters)
         call = validate_call(json.dumps({
             'prompt': 'test', 'name': fn.name, 'parameters': parameters,
         }), fn, 'test')
         self.assertEqual(call.parameters, parameters)
-        self.assertIs(type(call.parameters['_private']), int)
+        self.assertIs(type(call.parameters['_private']), float)
 
     def test_matching_function_name_and_arguments_are_accepted(self) -> None:
         """Return a valid record unchanged for the selected definition."""
         data = {'prompt': 'test', 'name': 'dynamic',
-                'parameters': {'value': 2}}
+                'parameters': {'value': 2.0}}
         call = validate_call(json.dumps(data), definition(value='number'),
                              'test')
         self.assertEqual(call.model_dump(), data)

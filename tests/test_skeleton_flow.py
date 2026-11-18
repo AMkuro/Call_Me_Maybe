@@ -147,7 +147,7 @@ class PipelineTests(unittest.TestCase):
         """The output uses normalized numbers and preserves other types."""
         text = json.dumps({
             'prompt': 'x', 'name': 'f',
-            'parameters': {'number': 12, 'text': '12', 'flag': True},
+            'parameters': {'number': 12.0, 'text': '12', 'flag': True},
         })
         with patch.object(pipeline, 'build_parameters_model',
                           return_value=Parameters):

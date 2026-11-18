@@ -232,9 +232,9 @@ class GrammarTests(unittest.TestCase):
     """Allow every valid prefix and reject bytes past slot terminators."""
 
     def test_number_prefixes_and_completion(self) -> None:
-        """Decimal-only numbers continue until the actual terminator."""
+        """Integers and decimals continue until the actual terminator."""
         for value in ['0.0', '-0.0', '12.0', '1.5', '-0.25', '9' * 400 + '.0',
-                      '0.12345678901234567']:
+                      '0.12345678901234567', '0', '-0', '12', '-7']:
             for terminator in [',', '}']:
                 data = value.encode() + terminator.encode()
                 for index in range(len(data)):
@@ -255,10 +255,9 @@ class GrammarTests(unittest.TestCase):
                  4: b'e2', 5: b'}', 6: b'', 7: b'0'}
         self.assertEqual(set(allowed_slot_tokens(
             vocab, 'number', b'12', ',',
-        )), {0, 1, 7})
-        for value in [b'01,', b'+1,', b'.1,', b'1.,', b'NaN,',
-                      b'1e3,', b'1.0e3,', b'1,', b'1, ', b'1,true',
-                      b'1}']:
+        )), {0, 1, 2, 7})
+        for value in [b'01,', b'+1,', b'.1,', b'1.,', b'NaN,', b'-,',
+                      b'1e3,', b'1.0e3,', b'1, ', b'1,true', b'1}']:
             self.assertFalse(is_slot_complete(value, 'number', ','))
 
     def test_boolean_grammar(self) -> None:

@@ -1,5 +1,7 @@
 """Handle one prompt: name -> skeleton -> values -> validation."""
 
+import json
+import math
 from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
@@ -19,10 +21,13 @@ from .progress import GenerationProgress
 from .prompt import build_name_prompt, build_parameters_prompt
 from .schema import FunctionCall, FunctionDef, build_parameters_model
 from .skeleton import FixedText, ValueSlot, build_call_skeleton
-from .values import allowed_slot_tokens, is_slot_complete
+from .values import allowed_slot_tokens, float_text, is_slot_complete
 from .vocab import load_vocab
 
 MAX_VALUE_STEPS = 256
+# Bound repeated digit generation before it costs 256 forwards;
+# this token budget is separate from numeric precision and range checks.
+MAX_NUMBER_STEPS = 32
 
 
 def _observing(
@@ -196,16 +201,20 @@ def generate_call_json(
     Only this function extends ``output_ids``. Each part receives the
     prompt and the output so far as its context, and returns its own IDs.
     ``fragments`` holds each part's expected text to check the whole.
+    ``saved`` is the returned text: the same, except that an integer number
+    gains ".0" (float_text). The context keeps the model's own integer.
     """
     prompt_ids = model.encode(build_parameters_prompt(user_prompt, fn))
     output_ids: list[int] = []
     fragments: list[str] = []
+    saved: list[str] = []
     for part in build_call_skeleton(user_prompt, fn):
         context = prompt_ids + output_ids
         if isinstance(part, FixedText):
             part_ids = _commit_fixed_text(part.text, context, model=model,
                                           vocab=vocab)
             fragments.append(part.text)
+            saved.append(part.text)
         else:
             if _observing(progress):
                 progress.parameter_started(part.name, part.type)
@@ -213,11 +222,13 @@ def generate_call_json(
                                      progress=progress)
             fragments.append(_decode_and_verify_output(part_ids, model=model,
                                                        vocab=vocab))
+            saved.append(float_text(fragments[-1]) if part.type == "number"
+                         else fragments[-1])
         output_ids.extend(part_ids)
     text = _decode_and_verify_output(output_ids, model=model, vocab=vocab)
     if text != "".join(fragments):
         raise PromptError("full JSON decoding differs from its fragments")
-    return text
+    return "".join(saved)
 
 
 def generate_slot(
@@ -231,16 +242,16 @@ def generate_slot(
     """Generate one ValueSlot: a value and its terminator, within the cap."""
     generated: list[int] = []
     written = b""  # the bytes of generated, extended with each token
+    limit = MAX_NUMBER_STEPS if slot.type == "number" else MAX_VALUE_STEPS
     try:
         while True:
             if is_slot_complete(written, slot.type, slot.terminator):
                 return generated
             allowed = allowed_slot_tokens(vocab, slot.type, written,
                                           slot.terminator)
-            if len(generated) >= MAX_VALUE_STEPS:
+            if len(generated) >= limit:
                 raise PromptError(
-                    f"token limit {MAX_VALUE_STEPS} "
-                    "reached before a terminator"
+                    f"token limit {limit} reached before a terminator"
                 )
             token, mode, _ = infer_and_select_next_token(
                 model, ids + generated, allowed)
@@ -261,9 +272,10 @@ def validate_call(
     """Turn generated JSON into a checked record that keeps that JSON.
 
     The record must parse, copy ``user_prompt`` exactly, name ``fn`` and
-    match its parameters. Only then is ``text`` kept as the record's
+    match its parameters, and Python's json must read every number
+    argument as a finite float. Only then is ``text`` kept as the record's
     _generated_json, which save_results writes unchanged so the number
-    spelling the LLM chose survives (REQ-031).
+    spelling survives (REQ-031; an integer only gained ".0").
     """
     try:
         call = FunctionCall.model_validate(loads(text))
@@ -275,6 +287,13 @@ def validate_call(
                 f"got {call.name!r}",
             )
         parameters = build_parameters_model(fn).model_validate(call.parameters)
+        # The saved output must be float: Python's json reads each number so.
+        loaded = json.loads(text)["parameters"]
+        for name, spec in fn.parameters.items():
+            value = loaded[name]
+            if spec.type == "number" and not (
+                    isinstance(value, float) and math.isfinite(value)):
+                raise ValueError(f"{name!r} does not load as a finite float")
     except ValueError as e:  # JSON errors and pydantic's are ValueErrors
         raise PromptError(f"invalid output: {e}") from e
     checked = FunctionCall(
