@@ -98,10 +98,14 @@ def select_function(
     trie: NameTrie,
     progress: GenerationProgress | None = None,
 ) -> FunctionDef:
-    """Follow the name tree until a leaf, selecting one token at a time."""
+    """Follow the name tree until a leaf, selecting one token at a time.
+
+    No step limit is needed: each selected token is one of the allowed
+    ones, so the path grows by one known step, and every path of the
+    finite tree ends at a leaf.
+    """
     prompt_ids = model.encode(build_name_prompt(user_prompt, functions))
     generated: list[int] = []
-    limit = trie.max_name_steps()
     try:
         while True:
             name = trie.leaf_name(generated)
@@ -110,10 +114,6 @@ def select_function(
                     progress.function_selected(name)
                 return functions[name]
             allowed = trie.next_tokens(generated)
-            if len(generated) >= limit:
-                raise PromptError(
-                    f"token limit {limit} reached before a terminator"
-                )
             token, mode, raw_top = infer_and_select_next_token(
                 model, prompt_ids + generated, allowed,
                 include_raw_top=_observing(progress),

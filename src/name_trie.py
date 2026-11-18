@@ -93,10 +93,6 @@ class NameTrie(BaseModel):
         """Return the name at a leaf, or None on a valid unfinished path."""
         return self._names.get(self._known_prefix(prefix))
 
-    def max_name_steps(self) -> int:
-        """Return the longest full path, without a fixed name-length cap."""
-        return max(map(len, self._names))
-
     def _known_prefix(self, prefix: Sequence[int]) -> TokenPath:
         """Return ``prefix`` as an index key; an unknown path is an error."""
         key = tuple(prefix)

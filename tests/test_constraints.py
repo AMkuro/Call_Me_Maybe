@@ -80,7 +80,6 @@ class TrieTests(unittest.TestCase):
         self.assertEqual(dict(trie.paths), {'ab': (97, 98, 7), 'a': (97, 7)})
         self.assertEqual(trie.next_tokens([97]), [98, 7])  # input order
         self.assertEqual(trie.leaf_name([97, 7]), 'a')
-        self.assertEqual(trie.max_name_steps(), 3)
 
     def test_next_tokens_are_unique_in_first_seen_order(self) -> None:
         """Shared prefixes list each next token once, in input order."""
@@ -91,7 +90,6 @@ class TrieTests(unittest.TestCase):
         self.assertEqual(trie.next_tokens([1, 3]), [0, 9])
         self.assertEqual(trie.next_tokens([1, 3, 0]), [])  # full path
         self.assertEqual(trie.leaf_name([1, 3, 9, 0]), 'b')
-        self.assertEqual(trie.max_name_steps(), 4)
 
     def test_multi_token_eos_is_followed_to_the_full_path(self) -> None:
         """A terminator of several tokens is just more steps on the path."""

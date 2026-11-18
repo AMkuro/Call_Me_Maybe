@@ -111,7 +111,7 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 各名前の完成経路は`encode(名前 + EOS)`で、その末端に到達したことが名前の確定である。
 例えば `fn_add` と `fn_add_numbers` が共存するとき、`fn_add` の後で EOS の経路と `_numbers` の経路が分かれる。
 SDK の decode は特殊トークンを表示しないため、終了は表示文字列ではなく ID の経路で判断する。
-EOS のIDとの比較はしない。生成上限は名前の木の最長経路から計算する。
+EOS のIDとの比較はしない。名前には生成上限を持たない。選ぶIDは常に許可IDの中にあるので経路は1つずつ伸び、有限の木のどの経路も葉で終わるため、選択は必ず止まる。許可外のIDで経路が外れた場合は、次の`leaf_name`が`PromptError`にする。
 
 #### 名前の木の不変条件と検証場所
 
@@ -128,7 +128,7 @@ class NameTrie(BaseModel):          # frozen, extra="forbid", strict
     paths: Mapping[str, tuple[int, ...]]   # 名前 → encode(名前 + EOS)
     _next: Mapping[tuple[int, ...], tuple[int, ...]]  # 正しい接頭辞 → 次に許すID
     _names: Mapping[tuple[int, ...], str]             # 完成経路 → 名前
-    # 索引の照会はメソッドだけ: next_tokens(prefix)、leaf_name(prefix)、max_name_steps()
+    # 索引の照会はメソッドだけ: next_tokens(prefix)、leaf_name(prefix)
 ```
 
 構築から確定までの流れ:
@@ -330,12 +330,12 @@ numberを文字列化せず、入力側の数値解析も変更しない。
 
 ## 4. 候補トークンの判定と終了条件
 
-`select_function`と`generate_slot`が自分の生成列と上限を所有する。
+`select_function`と`generate_slot`が自分の生成列を所有し、`generate_slot`は値の上限も所有する。
 名前は木、値は型の文法を直接照会し、共通の`infer_and_select_next_token(model, ids, allowed)`で1トークンを選ぶ。
 制約判定・終了判定・採用後の処理をコールバックへ渡さない。
 
-1. 完了なら名前は元のFunctionDef、値は生成ID列を返す。上限ちょうどの完了も成功する。
-2. 未完了で生成上限に達していたら、終端未到達を示す PromptError にする。
+1. 完了なら名前は元のFunctionDef、値は生成ID列を返す。値の上限ちょうどの完了も成功する。
+2. 値が未完了で生成上限に達していたら、終端未到達を示す PromptError にする。
 3. 続けられる候補がなければ PromptError にする。
 4. 全文脈で logits を一度取得する（方式B）。候補が1個ならその ID を強制する。
 5. `constrained_argmax` が候補外を負の無限大にした点数列から最大の ID を選び、生成列へ追加する。
@@ -543,7 +543,7 @@ TokenChoiceは変更前には観測時だけPydantic検証され、生成ID列�
 | プロンプト・初期ID | 関数一覧から名前用入力 | 選択関数と固定JSONを含む入力 | 各pipeline関数 |
 | 終了判定 | leaf_nameで完成経路（名前+EOS）の葉を確認 | バイト列とslot.type・terminatorでis_slot_complete | 各ループに直接記載 |
 | 許可ID | next_tokens | allowed_slot_tokens | 各ループに直接記載 |
-| 生成上限 | 木の最長経路 | MAX_VALUE_STEPS | 各ループ。終了確認後、選択前に確認 |
+| 生成上限 | なし（§3: 有限の木の経路は葉で終わる） | MAX_VALUE_STEPS | 値のループ。終了確認後、選択前に確認 |
 | 空候補・forced・モデル呼び出し | 同じ順序 | 同じ順序 | 共通の1トークン選択関数 |
 | 負の無限大マスク・argmax・不正logits拒否 | 同じ | 同じ | 既存constrained_argmaxを維持 |
 | 生成列への追加 | 名前のローカル列 | 値のローカル列 | 各ループに直接記載 |
@@ -841,9 +841,9 @@ main：resourcesから必要な参照を取り出してDashboardをwithで開始
 with終了：端末復帰 → 要約 → mainの終了コード
 ```
 
-各名前/値ループは、終了確認→許可ID計算→上限確認→1選択→ID追加→1ステップの通知の順に書く。
+各名前/値ループは、終了確認→許可ID計算→上限確認（値だけ）→1選択→ID追加→1ステップの通知の順に書く。
 方式Bでは候補数によらずprefix_ids + generatedを選択関数へ渡す。
-上限ちょうどの終了は成功し、未完成で上限と空候補が同時なら上限エラーを優先する。
+値では、上限ちょうどの終了は成功し、未完成で上限と空候補が同時なら上限エラーを優先する。
 
 - 名前: `token, mode, raw_top`を受け、ID追加後にgeneratedをSequence[int]としてmode/raw_topとともにname_tokenへ同期的に渡す。
   採用IDは列の末尾、件数と警告のstepはそのlenから分かる。

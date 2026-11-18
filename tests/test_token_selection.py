@@ -95,6 +95,22 @@ class SelectionTests(unittest.TestCase):
                     'x', model=object.__new__(Model), functions={'a': fn},
                     trie=NameTrie(paths={'a': (1, 0)}))
 
+    def test_a_token_off_the_tree_stops_name_selection(self) -> None:
+        """Without a step limit, leaving the tree is still an error."""
+        fn = FunctionDef.model_validate({
+            'name': 'a', 'description': 'd', 'parameters': {},
+            'returns': {'type': 'string'}})
+        with patch.object(Model, 'encode', return_value=[50]), \
+                patch.object(pipeline, 'build_name_prompt',
+                             return_value='N'), \
+                patch.object(pipeline, 'infer_and_select_next_token',
+                             return_value=(9, 'greedy', None)):
+            with self.assertRaisesRegex(
+                    PromptError, r'^function name: invalid token path'):
+                pipeline.select_function(
+                    'x', model=object.__new__(Model), functions={'a': fn},
+                    trie=NameTrie(paths={'a': (1, 0)}))
+
     def test_no_ranking_or_probability_work(self) -> None:
         """Selection and warnings require neither top-k nor softmax."""
         with patch.object(Model, 'logits', return_value=[3.0, 1.0, 2.0]), \
