@@ -41,6 +41,26 @@ _ENTER, _LEAVE = "\x1b[?1049h\x1b[?25l", "\x1b[?25h\x1b[?1049l"
 _CLEAR = "\x1b[H\x1b[2J"
 
 
+def _decoded(model: Model, tokens: Sequence[int]) -> str:
+    """Decode synchronously; only non-list inputs need a boundary copy."""
+    ids = tokens if isinstance(tokens, list) else list(tokens)
+    try:
+        return model.decode(ids) or "<EOS/special>"
+    except PromptError:
+        return f"<text unavailable; ids={ids}>"
+
+
+def _token_text(token: int, model: Model, vocab: Mapping[int, bytes]) -> str:
+    """Quote token bytes, preserving partial UTF-8 and special-token text."""
+    data = vocab.get(token)
+    if data is None:
+        return repr(_decoded(model, [token]))
+    try:
+        return repr(data.decode("utf-8"))
+    except UnicodeDecodeError:
+        return repr(data)
+
+
 def _visible(text: str) -> str:
     """Escape control characters so input cannot issue terminal commands."""
     return "".join(
@@ -128,34 +148,52 @@ class Dashboard:
         """Clear the previous prompt's rows and start timing this one."""
         self.fields.clear()
         self.prompt_started_at = time.monotonic()
-        self.fields["input"] = f"{index}/{self.total}"
-        self._show("prompt", prompt)
+        self.fields.update({"input": f"{index}/{self.total}",
+                            "prompt": prompt})
+        self.draw("prompt")
 
     def prompt_done(self, name: str) -> None:
         """Count a saved result and add its summary line."""
-        self._show("result", name)
+        self.fields["result"] = name
+        self.draw("result")
         self._end_prompt("done", name)
 
     def prompt_failed(self, reason: str) -> None:
         """Count a skipped prompt and add its summary line."""
-        self._show("error", reason)
+        self.fields["error"] = reason
+        self.draw("error")
         self._end_prompt("failed", reason)
+
+    def _end_prompt(self, status: Literal["done", "failed"],
+                    what: str) -> None:
+        """One summary line: status, function or reason, and seconds."""
+        self.counts[status] += 1
+        seconds = time.monotonic() - self.prompt_started_at
+        line = (f"[{self.fields['input']}] {status:<7} {_visible(what)}  "
+                f"{seconds:.1f} s\n")
+        if self.interactive:
+            self.summary.append(line)
+        else:
+            self.write(line)
 
     def stage(self, stage: Stage) -> None:
         """Show the stage, clearing token rows when it generates tokens."""
         if stage in _GENERATING_STAGES:
             for row in _TOKEN_ROWS:
                 self.fields.pop(row, None)
-        self._show("stage", stage)
+        self.fields["stage"] = stage
+        self.draw("stage")
 
     def function_selected(self, name: str) -> None:
         """Display the selected function, forcing a completed-name frame."""
-        self._show("function", name)
+        self.fields["function"] = name
+        self.draw("function")
 
     def parameter_started(self, name: str, param_type: ParamType) -> None:
         """Clear the previous value before showing this parameter."""
-        self.fields.update({"value": "", "value_tokens": "0", "token": ""})
-        self._show("parameter", f"{name} ({param_type})")
+        self.fields.update({"value": "", "value_tokens": "0", "token": "",
+                            "parameter": f"{name} ({param_type})"})
+        self.draw("parameter")
 
     def name_token(
         self, tokens: Sequence[int], *, mode: SelectionMode,
@@ -172,7 +210,7 @@ class Dashboard:
             self._warn("name_selection_constrained: "
                        f"step={len(tokens)} raw_top={raw} "
                        f"selected={selected}")
-        elif self.interactive:
+        else:
             self.draw("token")
 
     def value_token(
@@ -182,35 +220,19 @@ class Dashboard:
         self.fields.update({"value": written.decode("utf-8", errors="ignore"),
                             "value_tokens": str(step),
                             "token": f"{token} ({mode})"})
-        if self.interactive:
-            self.draw("token")
-
-    def _show(self, row: Row, text: str) -> None:
-        """Set one row; only a terminal shows rows (redirected logs do not)."""
-        self.fields[row] = text
-        if self.interactive:
-            self.draw(row)
+        self.draw("token")
 
     def _warn(self, text: str) -> None:
         """Show a warning; a redirected stream also gets it as a log line."""
-        self._show("warning", text)
+        self.fields["warning"] = text
+        self.draw("warning")
         if not self.interactive:
             self.write(f"[{self.fields['input']}] warning: {_visible(text)}\n")
 
-    def _end_prompt(self, status: Literal["done", "failed"],
-                    what: str) -> None:
-        """One summary line: status, function or reason, and seconds."""
-        self.counts[status] += 1
-        seconds = time.monotonic() - self.prompt_started_at
-        line = (f"[{self.fields['input']}] {status:<7} {_visible(what)}  "
-                f"{seconds:.1f} s\n")
-        if self.interactive:
-            self.summary.append(line)
-        else:
-            self.write(line)
-
     def draw(self, row: Row) -> None:
-        """Redraw the dashboard, at most once per interval."""
+        """Draw terminal frames; selections and outcomes bypass throttling."""
+        if not self.interactive:
+            return
         now = time.monotonic()
         if now - self.last_frame < _FRAME_SECONDS and row not in _DRAW_NOW:
             return
@@ -231,23 +253,3 @@ class Dashboard:
                 self.stream.flush()
             except OSError:
                 self.available = False
-
-
-def _token_text(token: int, model: Model, vocab: Mapping[int, bytes]) -> str:
-    """Quote token bytes, preserving partial UTF-8 and special-token text."""
-    data = vocab.get(token)
-    if data is None:
-        return repr(_decoded(model, [token]))
-    try:
-        return repr(data.decode("utf-8"))
-    except UnicodeDecodeError:
-        return repr(data)
-
-
-def _decoded(model: Model, tokens: Sequence[int]) -> str:
-    """Decode synchronously; only non-list inputs need a boundary copy."""
-    ids = tokens if isinstance(tokens, list) else list(tokens)
-    try:
-        return model.decode(ids) or "<EOS/special>"
-    except PromptError:
-        return f"<text unavailable; ids={ids}>"

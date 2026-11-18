@@ -480,9 +480,28 @@ SDK 呼び出しの例外は `Model` が起動時または1件の失敗へ変換
 
 1件の始まりと終わりは、`pipeline.process_all`がDashboardの`prompt_started(index, prompt)`・
 `prompt_done(name)`・`prompt_failed(reason)`で知らせる。この3つだけが、表示欄の全消去、1件の計時、
-完了・失敗の件数、要約の行を変える。GenerationProgressのメソッドと内部の`_show`は表示欄だけを変える。
+完了・失敗の件数、要約の行を変える。GenerationProgressのメソッドは表示欄だけを変える。
 `prompt_done`は`save_results`の後に呼ぶ。保存に失敗した件は、要約で「not finished」に数えられる。
 表示欄の名前は`display.Row`のLiteralで、`_ROWS`・`_DRAW_NOW`・`fields`のキーをmypyが検査する。
+
+補助関数はDashboardの前に、デコード系（`_decoded`、`_token_text`）、
+描画系（`_visible`、`_clip`、`render_progress`）の順にまとめる。
+クラス内は初期化・端末管理、1件の開始と終了（共通の_end_promptを含む）、生成の通知、警告・描画・書込みの順に配置する。
+呼び出し元に共通処理を隣接させ、末尾では`_warn` → `draw` → `write`と実際の出力まで追えるようにする。
+
+表示イベントは必要なfieldsの更新を終えてからdrawを一度呼ぶ。引数開始時はparameterとトークン3行を一度に更新する。
+1行更新専用の_showは廃止し、初期化・削除・複数行更新をまとめる汎用APIも追加しない。
+これらはイベントごとに意味が違うため、直接の辞書操作を保つほうが更新内容を読み取れる。
+drawはリダイレクト時に時計・端末サイズ・描画へ進まず、端末では既存の50 ms間隔と
+function/result/errorの即時描画を判断する。警告は即時描画の対象に追加しない。
+_warnは警告行を更新してdrawを呼び、リダイレクト時は警告ログを出す。
+writeは文字列の書き込みとflush、OSError時のavailable=Falseだけを担当する。
+
+デコードの補助関数は表示状態を変更せず、診断用の文字列を返すのでクラス外に残す。
+生成に使う最終出力のデコード照合はgenerationに置いたままとする。
+固定時刻で変更前後を比較し、端末／リダイレクトと書込み・flush・デコード故障の12条件で、
+出力文字列・表示状態・件数・要約・available・最終描画時刻・I/O回数・decode呼出し・時計呼出しの一致を確認した。
+この比較は表示の決定的な回帰確認であり、実モデルの精度や実行時間の測定ではない。
 
 入力番号、段階、依頼、関数、引数と型、途中の値・件数に加え、名前/値とも現在の採用IDとforced/greedyを表示する。
 名前のID列はSequenceとして借り、表示は変更・保持せず同期的に整形する。

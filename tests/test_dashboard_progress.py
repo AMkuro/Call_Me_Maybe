@@ -84,6 +84,82 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("[1/2] done    fn_a  2.5 s", stream.getvalue())
         self.assertIn("[2/2] failed  bad  1.0 s", stream.getvalue())
 
+    def test_draw_skips_redirected_stream_before_rendering(self) -> None:
+        """All redraw requests share the non-interactive early return."""
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            dashboard = Dashboard(1, object.__new__(Model), {})
+        with patch.object(display.time, 'monotonic',
+                          side_effect=AssertionError('must not render')):
+            dashboard.draw('result')
+        self.assertEqual(output.getvalue(), '')
+        self.assertEqual(dashboard.last_frame, 0.0)
+
+    def test_frame_interval_and_forced_outcomes(self) -> None:
+        """Token frames throttle at 50 ms; selections and outcomes force."""
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            dashboard = Dashboard(2, object.__new__(Model), {})
+        dashboard.interactive = True
+        with patch.object(display.time, 'monotonic',
+                          return_value=10.0) as clock:
+            dashboard.prompt_started(1, 'first')
+            output.seek(0)
+            output.truncate()
+            clock.return_value = 10.01
+            dashboard.value_token(b'1', 1, token=1, mode='forced')
+            self.assertEqual(output.getvalue(), '')
+            self.assertEqual(dashboard.fields['token'], '1 (forced)')
+            clock.return_value = 10.049
+            dashboard.value_token(b'12', 2, token=2, mode='greedy')
+            self.assertEqual(output.getvalue(), '')
+            clock.return_value = 10.05
+            dashboard.value_token(b'123', 3, token=3, mode='greedy')
+            self.assertEqual(output.getvalue().count(display._CLEAR), 1)
+            clock.return_value = 10.06
+            dashboard.function_selected('f')
+            clock.return_value = 10.07
+            dashboard.prompt_done('f')
+            clock.return_value = 10.08
+            dashboard.prompt_started(2, 'second')
+            clock.return_value = 10.09
+            dashboard.prompt_failed('bad')
+        self.assertEqual(output.getvalue().count(display._CLEAR), 4)
+        self.assertEqual(dashboard.counts, {'done': 1, 'failed': 1})
+        self.assertEqual(dashboard.last_frame, 10.09)
+
+    def test_warning_frame_contains_consistent_token_fields(self) -> None:
+        """A warning frame includes the same step's value, count and token."""
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            dashboard = Dashboard(1, object.__new__(Model), {1: b'a', 2: b'b'})
+        dashboard.interactive = True
+        with patch.object(display.time, 'monotonic', return_value=10.0), \
+                patch.object(Model, 'decode', return_value='a'):
+            dashboard.name_token([1], mode='greedy', raw_top=2)
+        text = output.getvalue()
+        self.assertEqual(text.count(display._CLEAR), 1)
+        self.assertIn('Value: a', text)
+        self.assertIn('Value tokens: 1', text)
+        self.assertIn('Token: 1 (greedy)', text)
+        self.assertIn("Warning: name_selection_constrained: step=1", text)
+
+    def test_flush_failure_preserves_counts_and_stops_writes(self) -> None:
+        """A failed diagnostic flush leaves prompt completion bookkeeping."""
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            dashboard = Dashboard(2, object.__new__(Model), {})
+        with patch.object(output, 'write', wraps=output.write) as writes, \
+                patch.object(output, 'flush', side_effect=OSError('closed')):
+            with dashboard:
+                dashboard.prompt_started(1, 'first')
+                dashboard.prompt_done('f')
+                dashboard.prompt_started(2, 'second')
+                dashboard.prompt_failed('bad')
+        self.assertFalse(dashboard.available)
+        self.assertEqual(dashboard.counts, {'done': 1, 'failed': 1})
+        self.assertEqual(writes.call_count, 1)
+
     def test_stage_change_clears_token_rows_without_parameters(self) -> None:
         """A function with no parameters must not keep the name's count."""
         with contextlib.redirect_stderr(io.StringIO()):
