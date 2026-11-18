@@ -1,0 +1,45 @@
+"""Compare instr_exp runs with A: per-suite counts, cap hits, changes, estimate.
+
+Usage: instr_analyze.py LABEL [LABEL ...]   (A is always the reference)
+"""
+import json
+import sys
+from pathlib import Path
+
+S = Path(__file__).parent
+labels = sys.argv[1:]
+runs = {c: json.loads((S / f'instr-{c}.json').read_text()) for c in ['A', *labels]}
+
+
+def params(r):
+    return json.loads(r['generated_text'])['parameters'] if r.get('completed') else None
+
+
+def standard_estimate(run):
+    st = run['summary']['standard11']
+    f = st['forwards_select_name'] + st['forwards_generate_parameters']
+    L = st['forward_length_sum_select_name'] + st['forward_length_sum_generate_parameters']
+    return f, L, 0.0791 * f + 0.001984 * L
+
+
+fa, La, ta = standard_estimate(runs['A'])
+print('label | joint per suite (std cal chg bnd unseen) | all42 | caps | errors | '
+      'std11 prompt tokens | std11 forwards lensum est (diff)')
+for c, run in runs.items():
+    rows = [r for v in run['suites'].values() for r in v]
+    joint = ' '.join(str(s['joint_correct']) for s in run['summary'].values())
+    caps = sum('token limit' in r.get('error', '') for r in rows)
+    errors = sum(not r.get('completed') for r in rows)
+    f, L, t = standard_estimate(run)
+    print(f'{c} | {joint} | {sum(bool(r["joint_correct"]) for r in rows)} | {caps} | {errors} | '
+          f'{run["summary"]["standard11"]["param_prompt_tokens"]} | {f} {L} {t:.1f}s ({t - ta:+.1f}s)')
+print('--- per-case differences from A (joint change or different parameters)')
+for c in labels:
+    for k, rows in runs['A']['suites'].items():
+        for a, n in zip(rows, runs[c]['suites'][k]):
+            if a.get('joint_correct') != n.get('joint_correct') or params(a) != params(n):
+                mark = {(True, False): 'LOST', (False, True): 'GAINED'}.get(
+                    (bool(a['joint_correct']), bool(n['joint_correct'])), 'both-wrong')
+                print(f'{c} {a["id"]} [{mark}]')
+                print('   A :', json.dumps(params(a), ensure_ascii=False))
+                print(f'   {c}:', json.dumps(params(n), ensure_ascii=False), n.get('error', ''))

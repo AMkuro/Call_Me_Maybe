@@ -1,0 +1,17 @@
+"""Tokens saved by dropping each instruction sentence (tokenizer only)."""
+from pathlib import Path
+
+from src.model_port import Model
+from src.prompt import _chat
+
+src = Path(__file__).with_name('instr_exp.py').read_text()
+ns = {}
+exec(src[src.index('SENTENCES = ['):src.index('def instructions')],
+     {'prompts': __import__('src.prompt', fromlist=['x'])}, ns)
+S = ns['SENTENCES']
+model = Model()
+full = len(model.encode(_chat(' '.join(S), 'x')))
+print('full system+frame tokens', full)
+for i, s in enumerate(S, 1):
+    rest = ' '.join(t for j, t in enumerate(S, 1) if j != i)
+    print(f'S{i} saves {full - len(model.encode(_chat(rest, "x")))}: {s}')
