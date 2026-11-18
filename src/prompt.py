@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping
 
 from .schema import FunctionDef, Scalar
-from .skeleton import FixedText, build_call_suffix
+from .skeleton import FixedText, build_call_skeleton
 
 NAME_INSTRUCTIONS = (
     "Choose the function matching the request. Reply with its exact name only."
@@ -73,13 +73,15 @@ def _parameters_request(user_prompt: str, fn: FunctionDef) -> str:
 
 def build_example_call_json(user_prompt: str, fn: FunctionDef,
                             parameters: dict[str, Scalar]) -> str:
-    """The JSON text the pipeline would produce: same head and skeleton."""
-    text = (f'{{"prompt":{json.dumps(user_prompt)},'
-            f'"name":{json.dumps(fn.name)}')
-    for part in build_call_suffix(fn):
-        text += (part.text if isinstance(part, FixedText) else
-                 json.dumps(parameters[part.name]) + part.terminator)
-    return text
+    """The JSON text generate_call_json writes, from the same skeleton.
+
+    Fixed text is identical; each value is json.dumps of the given one.
+    """
+    return "".join(
+        part.text if isinstance(part, FixedText)
+        else json.dumps(parameters[part.name]) + part.terminator
+        for part in build_call_skeleton(user_prompt, fn)
+    )
 
 
 def build_parameters_prompt(user_prompt: str, fn: FunctionDef) -> str:

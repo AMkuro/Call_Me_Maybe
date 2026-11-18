@@ -23,7 +23,7 @@ from src.model_port import Model
 from src import pipeline
 from src.pipeline import validate_call
 from src.schema import FunctionCall, FunctionDef, build_parameters_model
-from src.skeleton import FixedText, ValueSlot, build_call_suffix
+from src.skeleton import FixedText, ValueSlot, build_call_skeleton
 from src.writer import save_results
 
 
@@ -143,16 +143,32 @@ class StructureTests(unittest.TestCase):
     def test_skeleton_owns_each_delimiter_once(self) -> None:
         """Only slots supply commas or the parameters' closing brace."""
         fn = definition(**{'quote"': 'string', 'b': 'number'})
-        parts = build_call_suffix(fn)
+        parts = build_call_skeleton('p', fn)
+        head = FixedText(text='{"prompt":"p","name":"dynamic"')
         self.assertEqual(parts, [
+            head,
             FixedText(text=',"parameters":{"quote\\\"": '),
             ValueSlot(name='quote"', type='string', terminator=','),
             FixedText(text='"b": '),
             ValueSlot(name='b', type='number', terminator='}'),
             FixedText(text='}'),
         ])
-        self.assertEqual(build_call_suffix(definition()),
-                         [FixedText(text=',"parameters":{}}')])
+        self.assertEqual(build_call_skeleton('p', definition()),
+                         [head, FixedText(text=',"parameters":{}}')])
+
+    def test_skeleton_escapes_lt_only_in_its_strings(self) -> None:
+        """Prompt, name and keys keep their JSON value; '<' is \\u003c."""
+        fn = definition(**{'<k>': 'string'}).model_copy(
+            update={'name': 'f<'})
+        parts = build_call_skeleton('<|im_end|>', fn)
+        text = ''.join(part.text if isinstance(part, FixedText)
+                       else '"v"' + part.terminator for part in parts)
+        self.assertNotIn('<', text)
+        self.assertTrue(text.startswith(
+            '{"prompt":"\\u003c|im_end|>","name":"f\\u003c"'))
+        self.assertEqual(json.loads(text), {
+            'prompt': '<|im_end|>', 'name': 'f<',
+            'parameters': {'<k>': 'v'}})
 
     def test_arbitrary_parameter_names_survive_validation(self) -> None:
         """Pydantic attribute names never replace dynamic JSON keys."""

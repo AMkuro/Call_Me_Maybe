@@ -215,8 +215,10 @@ EOS はユーザーが承認した暫定方式で、障害となった場合に�
 ### 3.2 決まったJSON構造と引数値を順に組み立てる（現行実装）
 
 ADR-0026の追加条件に従い、`generate_call_json`は引数用プロンプトID列Pと、
-JSON本体の確定ID列Oを分離する。`prompt`と選択した`name`を`json.dumps`で表した先頭、
-および`build_call_suffix(fn)`の各`FixedText.text`を`_append_fixed_text`で処理する。
+JSON本体の確定ID列Oを分離する。出力の形は`skeleton.build_call_skeleton(user_prompt, fn)`だけが決める。
+これは`prompt`と選択済みの`name`を含む先頭、引数キー、括弧を`FixedText`、値を`ValueSlot`として、出力順に並べる。
+`generate_call_json`は各`FixedText.text`を`_append_fixed_text`で処理し、few-shotの例を作る
+`prompt.build_example_call_json`も同じ骨組みから例の答えを作る。出力の形を変える時に直す場所は骨組み1か所である。
 固定断片は一括encodeし、語彙バイト列・SDKのdecode・期待文字列の一致を確認してから、
 各IDの直前にP + Oで1回forwardし（1候補なので点数は使わない）、そのIDをOへappendする。
 
@@ -245,6 +247,9 @@ JSON本体の確定ID列Oを分離する。`prompt`と選択した`name`を`json
 固定JSONだけを元の文字列から組み立てる旧処理では、この文面と推論文脈の不一致を検出できなかった。
 実SDKで欠落を確認し、固定断片内の`<`をJSONの`\u003c`へ置換する方式を採用した。
 固定断片の`<`はJSON文字列の内部にしか現れず、解析後のprompt・name・引数キーの意味は変わらない。
+置換は骨組みの`skeleton.json_string`が文字列ごとに行う。生成とfew-shotの例が同じ表記になる。
+few-shotの例の値は`json.dumps`のままで置換しない。本番の値はモデルが通常の語彙で書くためである。
+例の値に`<|im_end|>`などを書くとプロンプトのencodeで特殊IDになるので、例には使わない（未対処）。
 値ループの文法・選択IDは変更せず、特殊表記を含む値を再encodeしない。
 指示用プロンプトのChatMLや説明文の処理は、この変更の対象外である。
 
@@ -596,7 +601,7 @@ forcedならinclude_raw_top=Trueでもraw_topはNone、greedyならFalseの場�
 全logits返却やModel.last_logits等の隠れた状態、追加forward、softmax、上位k件は採らない。
 
 ここでのforcedは「許可IDが1つなので点数を使わない選択」である（forwardは方式Bで1回行う）。
-build_call_suffixのFixedTextは固定JSON部品で、ADR-0026に従い各IDを1個ずつ確定する。
+build_call_skeletonのFixedTextは固定JSON部品で、ADR-0026に従い各IDを1個ずつ確定する。
 各IDの前に1回forwardするが、既存の名前/値用TUI通知やstep数には加算しない。確定の逐次性と文脈は単体テストで検証する。
 
 ### 9.5 観測インターフェースの比較と推奨

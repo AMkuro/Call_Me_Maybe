@@ -17,7 +17,7 @@ from src.cli import Args
 from src.errors import PromptError
 from src.model_port import Model
 from src.schema import FunctionCall, FunctionDef
-from src.skeleton import FixedText, ValueSlot
+from src.skeleton import ValueSlot
 from test_constraints import encode_name
 
 
@@ -120,24 +120,11 @@ class PipelineTests(unittest.TestCase):
                     },
                     'returns': {'type': 'number'},
                 })
-                parts = [
-                    FixedText(text=', "parameters": {"a": '),
-                    ValueSlot.model_validate({
-                        'name': 'a', 'type': 'number', 'terminator': ',',
-                    }),
-                    FixedText(text=' "b": '),
-                    ValueSlot.model_validate({
-                        'name': 'b', 'type': 'boolean', 'terminator': '}',
-                    }),
-                    FixedText(text='}'),
-                ]
                 with patch.object(Model, 'encode', side_effect=encode), \
                         patch.object(Model, 'decode', side_effect=decode), \
                         patch.object(Model, 'logits', return_value=[0.0]), \
                         patch.object(pipeline, 'build_parameters_prompt',
                                      return_value=''), \
-                        patch.object(pipeline, 'build_call_suffix',
-                                     return_value=parts), \
                         patch.object(pipeline,
                                      'generate_slot',
                                      side_effect=[encode('12.0,'),

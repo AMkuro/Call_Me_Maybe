@@ -1,7 +1,5 @@
 """Handle one prompt: name -> skeleton -> values -> validation."""
 
-import json
-
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import TypeGuard
@@ -18,7 +16,7 @@ from .name_trie import NameTrie, leaf_name, max_name_steps, next_tokens
 from .progress import GenerationProgress
 from .prompt import build_name_prompt, build_parameters_prompt
 from .schema import FunctionCall, FunctionDef, build_parameters_model
-from .skeleton import FixedText, ValueSlot, build_call_suffix
+from .skeleton import FixedText, ValueSlot, build_call_skeleton
 from .values import allowed_slot_tokens, is_slot_complete
 
 MAX_VALUE_STEPS = 256
@@ -154,8 +152,6 @@ def _append_fixed_text(
 
     Method B: each fixed ID is a unique candidate on P + O, like any token.
     """
-    # '<' occurs only inside JSON strings here; escaping avoids control IDs.
-    text = text.replace("<", r"\u003c")
     tokens = model.encode(text)
     if _decode_and_verify_output(tokens, model=model, vocab=vocab) != text:
         raise PromptError("fixed JSON text differs from its encoded tokens")
@@ -177,13 +173,8 @@ def generate_call_json(
     """Commit JSON IDs in order and verify their complete decoded record."""
     prompt_ids = model.encode(build_parameters_prompt(user_prompt, fn))
     output_ids: list[int] = []
-    head = (
-        f'{{"prompt":{json.dumps(user_prompt)},'
-        f'"name":{json.dumps(fn.name)}'
-    )
-    fragments = [_append_fixed_text(head, prompt_ids, output_ids,
-                                    model=model, vocab=vocab)]
-    for part in build_call_suffix(fn):
+    fragments: list[str] = []
+    for part in build_call_skeleton(user_prompt, fn):
         if isinstance(part, FixedText):
             fragments.append(_append_fixed_text(part.text, prompt_ids,
                                                 output_ids, model=model,

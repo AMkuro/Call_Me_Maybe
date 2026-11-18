@@ -1,4 +1,4 @@
-"""The forced part of the output and the places the model fills in."""
+"""The layout of one output record: fixed JSON text and values to generate."""
 
 import json
 from typing import Literal
@@ -9,7 +9,7 @@ from .schema import FunctionDef, ParamType
 
 
 class FixedText(BaseModel):
-    """Text written as is: keys, quotes, colons, braces."""
+    """JSON text written as is: braces, keys, the prompt and the name."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -26,26 +26,36 @@ class ValueSlot(BaseModel):
     terminator: Literal[",", "}"]
 
 
-def build_call_suffix(fn: FunctionDef) -> list[FixedText | ValueSlot]:
-    """Lay out what follows the escaped name: ``,"parameters":{"k": ...}}``.
+def json_string(text: str) -> str:
+    """Return ``text`` as a JSON string literal with ``<`` escaped.
 
-    Judgment: lays out only what follows the name; the name is chosen
-    through the tree, so it is not part of the skeleton. The head
-    ``{"prompt":...,"name":"..."`` is built by pipeline (the prompt is
-    copied from the input, never generated). Open: should the skeleton
-    include the head?
-
-    Each slot owns its following comma, or the parameters' closing brace
-    for the last slot. FixedText text must not repeat that terminator
-    (ADR-0012). With no parameters, force ``,"parameters":{}}``.
+    The SDK encodes text such as ``<|im_end|>`` as one special token, and
+    its decode drops that token. Written as ``\\u003c`` the same JSON value
+    stays in ordinary tokens. ``<`` occurs only inside strings here.
     """
+    return json.dumps(text).replace("<", r"\u003c")
+
+
+def build_call_skeleton(
+    user_prompt: str, fn: FunctionDef,
+) -> list[FixedText | ValueSlot]:
+    """Lay out ``{"prompt":...,"name":...,"parameters":{"k": ...}}``.
+
+    The prompt and the name are fixed text: the prompt is copied from the
+    input and the name was already chosen through the name tree. Only the
+    parameter values are generated. Each slot owns its terminator (a comma,
+    or the parameters' closing brace for the last slot), so no fixed text
+    repeats it. With no parameters, everything is fixed text.
+    """
+    head = FixedText(text=f'{{"prompt":{json_string(user_prompt)},'
+                          f'"name":{json_string(fn.name)}')
     if not fn.parameters:
-        return [FixedText(text=',"parameters":{}}')]
-    parts: list[FixedText | ValueSlot] = []
+        return [head, FixedText(text=',"parameters":{}}')]
+    parts: list[FixedText | ValueSlot] = [head]
     for index, (name, spec) in enumerate(fn.parameters.items()):
         prefix = ',"parameters":{' if index == 0 else ''
         # Keep ": ": without it Qwen3 never ended "2.0" (2026-11-18 GPU run).
-        parts.append(FixedText(text=prefix + json.dumps(name) + ': '))
+        parts.append(FixedText(text=prefix + json_string(name) + ': '))
         parts.append(ValueSlot(
             name=name, type=spec.type,
             terminator='}' if index == len(fn.parameters) - 1 else ',',
