@@ -87,12 +87,7 @@ def process_prompt(
                               vocab=resources.vocab, progress=progress)
     if _observing(progress):
         progress.stage("validate_call")
-    call = validate_call(text, fn)
-    if call.prompt != user_prompt:
-        raise PromptError("invalid output: prompt differs from the input")
-    # Preserve the LLM-selected number lexemes after successful validation.
-    call._generated_json = text
-    return call
+    return validate_call(text, fn, user_prompt)
 
 
 def select_function(
@@ -237,10 +232,20 @@ def generate_slot(
         ) from e
 
 
-def validate_call(text: str, fn: FunctionDef) -> FunctionCall:
-    """Parse and validate a record against the selected function."""
+def validate_call(
+    text: str, fn: FunctionDef, user_prompt: str,
+) -> FunctionCall:
+    """Turn generated JSON into a checked record that keeps that JSON.
+
+    The record must parse, copy ``user_prompt`` exactly, name ``fn`` and
+    match its parameters. Only then is ``text`` kept as the record's
+    _generated_json, which save_results writes unchanged so the number
+    spelling the LLM chose survives (REQ-031).
+    """
     try:
         call = FunctionCall.model_validate(loads(text))
+        if call.prompt != user_prompt:
+            raise ValueError("prompt differs from the input")
         if call.name != fn.name:
             raise ValueError(
                 f"function name mismatch: expected {fn.name!r}, "
@@ -249,7 +254,9 @@ def validate_call(text: str, fn: FunctionDef) -> FunctionCall:
         parameters = build_parameters_model(fn).model_validate(call.parameters)
     except ValueError as e:  # JSON errors and pydantic's are ValueErrors
         raise PromptError(f"invalid output: {e}") from e
-    return FunctionCall(
+    checked = FunctionCall(
         prompt=call.prompt, name=call.name,
         parameters=parameters.model_dump(by_alias=True),
     )
+    checked._generated_json = text
+    return checked

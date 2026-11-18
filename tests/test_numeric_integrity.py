@@ -34,7 +34,8 @@ class NumericIntegrityTests(unittest.TestCase):
                         '9007199254740992', '9007199254740993',
                         '-' + '9' * 400]:
             with self.subTest(literal=literal[:35]):
-                value = validate_call(record(literal), fn).parameters['value']
+                call = validate_call(record(literal), fn, 'x')
+                value = call.parameters['value']
                 self.assertIs(type(value), int)
                 self.assertEqual(value, int(literal))
 
@@ -44,7 +45,7 @@ class NumericIntegrityTests(unittest.TestCase):
         for literal in ['0.1', '2.5', '-12.75', '1.00', '-0.0',
                         '1e-300', '9007199254740993.0']:
             with self.subTest(literal=literal):
-                call = validate_call(record(literal), fn)
+                call = validate_call(record(literal), fn, 'x')
                 encoded = json.dumps(call.parameters, allow_nan=False)
                 parsed = json.loads(encoded, parse_float=Decimal)
                 self.assertNotIsInstance(parsed['value'], str)
@@ -59,14 +60,15 @@ class NumericIntegrityTests(unittest.TestCase):
                         '1e-999', '-1e-999', 'NaN', 'Infinity', '-Infinity']:
             with self.subTest(literal=literal):
                 with self.assertRaises(PromptError):
-                    validate_call(record(literal), fn)
+                    validate_call(record(literal), fn, 'x')
 
     def test_saved_json_keeps_numeric_type_and_decimal_value(self) -> None:
         """Use an independent decimal parser on the actual saved file."""
         fn = definition(value='number')
         literals = ['9007199254740993', '9' * 400, '-12.75', '0.1',
                     '9007199254740993.0']
-        calls = [validate_call(record(literal), fn) for literal in literals]
+        calls = [validate_call(record(literal), fn, 'x')
+                 for literal in literals]
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / 'calls.json'
             save_results(path, calls)
@@ -114,7 +116,7 @@ class NumericIntegrityTests(unittest.TestCase):
             self.skipTest('this interpreter has no integer-string limit')
         with self.assertRaisesRegex(PromptError, 'limit|digits'):
             validate_call(record('9' * (limit + 1)),
-                          definition(value='number'))
+                          definition(value='number'), 'x')
 
     def test_measurement_does_not_cast_huge_integers_to_float(self) -> None:
         """Scoring an exact integer outside float range must not overflow."""

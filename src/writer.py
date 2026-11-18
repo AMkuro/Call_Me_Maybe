@@ -65,8 +65,9 @@ def save_results(path: Path, calls: list[FunctionCall]) -> None:
                     if index:
                         output.write(",\n")
                     output.write("  ")
-                    # Generated records were already parsed and validated.
-                    # Re-encoding their numbers could add exponent notation
+                    # validate_call set _generated_json only after checking
+                    # it, so it is written without parsing it again.
+                    # Re-encoding its numbers could add exponent notation
                     # or lose the decimal digits selected by the LLM.
                     if call._generated_json is not None:
                         output.write(call._generated_json)

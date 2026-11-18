@@ -161,8 +161,12 @@ class StructureTests(unittest.TestCase):
         fn = definition(**{'<k>': 'string'}).model_copy(
             update={'name': 'f<'})
         parts = build_call_skeleton('<|im_end|>', fn)
-        text = ''.join(part.text if isinstance(part, FixedText)
-                       else '"v"' + part.terminator for part in parts)
+        text = ''
+        for part in parts:
+            if isinstance(part, FixedText):
+                text += part.text
+            else:
+                text += '"v"' + part.terminator
         self.assertNotIn('<', text)
         self.assertTrue(text.startswith(
             '{"prompt":"\\u003c|im_end|>","name":"f\\u003c"'))
@@ -179,7 +183,7 @@ class StructureTests(unittest.TestCase):
         self.assertEqual(result.model_dump(by_alias=True), parameters)
         call = validate_call(json.dumps({
             'prompt': 'test', 'name': fn.name, 'parameters': parameters,
-        }), fn)
+        }), fn, 'test')
         self.assertEqual(call.parameters, parameters)
         self.assertIs(type(call.parameters['_private']), int)
 
@@ -187,8 +191,19 @@ class StructureTests(unittest.TestCase):
         """Return a valid record unchanged for the selected definition."""
         data = {'prompt': 'test', 'name': 'dynamic',
                 'parameters': {'value': 2}}
-        call = validate_call(json.dumps(data), definition(value='number'))
+        call = validate_call(json.dumps(data), definition(value='number'),
+                             'test')
         self.assertEqual(call.model_dump(), data)
+
+    def test_validation_owns_prompt_check_and_generated_text(self) -> None:
+        """Only a fully checked record keeps its generated JSON text."""
+        text = ('{"prompt":"test","name":"dynamic",'
+                '"parameters":{"value": 2.50}}')
+        call = validate_call(text, definition(value='number'), 'test')
+        self.assertEqual(call._generated_json, text)
+        with self.assertRaisesRegex(PromptError,
+                                    'prompt differs from the input'):
+            validate_call(text, definition(value='number'), 'other')
 
     def test_wrong_name_with_valid_arguments_is_rejected(self) -> None:
         """A compatible argument shape cannot hide a different function."""
@@ -198,7 +213,7 @@ class StructureTests(unittest.TestCase):
                                    'parameters': {'value': 2}})
                 with self.assertRaisesRegex(PromptError,
                                             'name mismatch') as error:
-                    validate_call(text, definition(value='number'))
+                    validate_call(text, definition(value='number'), 'test')
                 self.assertIn(repr('dynamic'), str(error.exception))
                 self.assertIn(repr(name), str(error.exception))
 
@@ -207,7 +222,7 @@ class StructureTests(unittest.TestCase):
         text = json.dumps({'prompt': 'test', 'name': 'dynamic',
                            'parameters': {'value': '2'}})
         with self.assertRaises(PromptError):
-            validate_call(text, definition(value='number'))
+            validate_call(text, definition(value='number'), 'test')
 
     def test_missing_extra_and_nonfinite_values_are_rejected(self) -> None:
         """Generated records cannot omit fields or serialize NaN/Infinity."""

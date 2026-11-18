@@ -307,7 +307,7 @@ BeforeValidatorとして適用し、有限のfloat候補を`json.dumps`→Decima
 `0.1`はJSON再出力が一致するため受理し、二進数として厳密な表現は要求しない。
 非有限値、オーバーフロー、非ゼロ値のゼロへのアンダーフローも拒否する。
 戻り値の公開parametersには検証後のint/float等を入れる。REQ-031に従い、
-`process_prompt`は全検証とprompt一致の確認後、生成本文を`FunctionCall._generated_json`へ保持する。
+`validate_call`はprompt一致・関数名・引数の全検証の後で、生成本文を`FunctionCall._generated_json`へ保持する。
 `save_results`はこの本文を再encodeせず、JSON配列の各要素としてそのまま書く。
 `9007199254740993.0`が内部でintになっても、保存時の小数点、符号、末尾ゼロを失わない。
 numberを文字列化せず、入力側の数値解析も変更しない。

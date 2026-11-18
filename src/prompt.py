@@ -77,11 +77,13 @@ def build_example_call_json(user_prompt: str, fn: FunctionDef,
 
     Fixed text is identical; each value is json.dumps of the given one.
     """
-    return "".join(
-        part.text if isinstance(part, FixedText)
-        else json.dumps(parameters[part.name]) + part.terminator
-        for part in build_call_skeleton(user_prompt, fn)
-    )
+    text = ""
+    for part in build_call_skeleton(user_prompt, fn):
+        if isinstance(part, FixedText):
+            text += part.text
+        else:
+            text += json.dumps(parameters[part.name]) + part.terminator
+    return text
 
 
 def build_parameters_prompt(user_prompt: str, fn: FunctionDef) -> str:

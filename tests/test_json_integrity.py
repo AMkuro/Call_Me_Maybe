@@ -93,7 +93,7 @@ class JSONBoundaryTests(unittest.TestCase):
             '"parameters":{"value":1,"value":2}}',
         ]:
             with self.assertRaisesRegex(PromptError, 'duplicate JSON key'):
-                validate_call(text, fn)
+                validate_call(text, fn, 'x')
 
     def test_vocabulary_rejects_bad_json(self) -> None:
         """A repeated byte-token spelling must not silently change its ID."""

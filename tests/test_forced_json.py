@@ -126,7 +126,8 @@ class ForcedJsonTests(unittest.TestCase):
         text = self.run_record('José あ 🙂', fn, values)
         self.assertEqual(json.loads(text), {'prompt': 'José あ 🙂',
                          'name': fn.name, 'parameters': values})
-        self.assertEqual(pipeline.validate_call(text, fn).parameters, values)
+        call = pipeline.validate_call(text, fn, 'José あ 🙂')
+        self.assertEqual(call.parameters, values)
         self.assertEqual(self.decode(self.decodings[-1]), text)
         self.assertTrue(any(b'"number": -12.5,"text": ' in bytes(ids[1:])
                             for ids in self.contexts))

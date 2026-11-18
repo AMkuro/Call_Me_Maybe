@@ -151,7 +151,7 @@ class PipelineTests(unittest.TestCase):
         })
         with patch.object(pipeline, 'build_parameters_model',
                           return_value=Parameters):
-            result = pipeline.validate_call(text, definition())
+            result = pipeline.validate_call(text, definition(), 'x')
         self.assertIs(type(result.parameters['number']), float)
         self.assertEqual(result.model_dump(), {
             'prompt': 'x', 'name': 'f',
@@ -165,7 +165,7 @@ class PipelineTests(unittest.TestCase):
             with self.assertRaises(PromptError):
                 pipeline.validate_call(
                     '{"prompt":"x","name":"f","parameters":{}}',
-                    definition(),
+                    definition(), 'x',
                 )
 
 
