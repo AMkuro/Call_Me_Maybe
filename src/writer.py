@@ -58,12 +58,12 @@ def save_results(path: Path, calls: list[FunctionCall]) -> None:
         ) as output:
             temporary = Path(output.name)
             if not calls:
-                output.write("[]\\n".replace("\\\\n", "\\n"))
+                output.write("[]\n")
             else:
-                output.write("[\\n".replace("\\\\n", "\\n"))
+                output.write("[\n")
                 for index, call in enumerate(calls):
                     if index:
-                        output.write(",\\n".replace("\\\\n", "\\n"))
+                        output.write(",\n")
                     output.write("  ")
                     # Generated records were already parsed and validated.
                     # Re-encoding their numbers could add exponent notation
@@ -74,7 +74,7 @@ def save_results(path: Path, calls: list[FunctionCall]) -> None:
                         json.dump(call.model_dump(), output,
                                   ensure_ascii=True, allow_nan=False,
                                   indent=2)
-                output.write("\\n]\\n".replace("\\\\n", "\\n"))
+                output.write("\n]\n")
         os.replace(temporary, path)
     finally:
         if temporary is not None:

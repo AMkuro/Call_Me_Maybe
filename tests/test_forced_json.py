@@ -246,7 +246,7 @@ class ForcedJsonTests(unittest.TestCase):
         )
         text = ('{"prompt":"request","name":"f","parameters":'
                 '{"n":9007199254740993.0}}')
-        with patch.object(pipeline, 'select_name', return_value=fn), \\
+        with patch.object(pipeline, 'select_name', return_value=fn), \
                 patch.object(pipeline, 'generate_parameters',
                              return_value=text):
             call = pipeline.process_prompt('request', resources)
