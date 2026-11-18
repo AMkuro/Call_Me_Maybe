@@ -80,7 +80,7 @@ class ObservationTests(unittest.TestCase):
         model = object.__new__(Model)
         vocab = {1: b'1', 2: b'2', 3: b'.0}', 7: b'f'}
         vocab.update({128 + char: bytes([char]) for char in range(128)})
-        resource = pipeline.GenerationResources(
+        resource = pipeline.GenerationAssets.model_construct(
             model=model, vocab=vocab, functions={'f': fn}, trie=trie,
         )
         results = []

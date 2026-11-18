@@ -43,7 +43,7 @@ def generated(literal: str, prompt: str = '依頼') -> FunctionCall:
     """Keep real validation and the production raw-text setter."""
     fn = definition()
     model = object.__new__(Model)
-    resources = pipeline.GenerationResources(
+    resources = pipeline.GenerationAssets.model_construct(
         model=model, vocab={}, functions={'record': fn},
         trie=NameTrie(paths={'record': (1,)}),
     )
@@ -290,7 +290,7 @@ class DecimalSaveTests(unittest.TestCase):
 
         model = object.__new__(Model)
         fn = definition()
-        resources = pipeline.GenerationResources(
+        resources = pipeline.GenerationAssets.model_construct(
             model=model, vocab={}, functions={'record': fn},
             trie=NameTrie(paths={'record': (1,)}),
         )

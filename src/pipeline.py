@@ -9,7 +9,6 @@ from typing import TypeGuard
 
 from pydantic import (
     BaseModel, ConfigDict, InstanceOf, ValidationError, field_validator,
-    model_validator,
 )
 
 from .decoder import infer_and_select_next_token
@@ -41,14 +40,13 @@ def _observing(
     return progress is not None and progress.available
 
 
-class GenerationResources(BaseModel):
+class GenerationAssets(BaseModel):
     """Combine validated resources for one application run.
 
-    model, vocab and trie are kept by reference. The trie guarantees its
-    own paths and immutability; this class only checks that its names are
-    exactly the function names. functions is held as a read-only copy, so
-    that match cannot be broken later. vocab contents and SDK state are not
-    checked, and the shared vocab dict must not be changed after startup.
+    The input loader indexes definitions by name. This constructor builds
+    the trie from those keys with the same model, and NameTrie validates
+    its paths. functions is a read-only copy; vocab and SDK state remain
+    shared and must not be changed after startup.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
@@ -58,6 +56,23 @@ class GenerationResources(BaseModel):
     functions: Mapping[str, InstanceOf[FunctionDef]]
     trie: InstanceOf[NameTrie]
 
+    def __init__(self, functions: Mapping[str, FunctionDef]) -> None:
+        """Load the model, then build its vocabulary and the name tree.
+
+        Shared by the application and the measurement tool, so both generate
+        with the same resources. Raises StartupError.
+
+        Effect: loads the model and reads its vocabulary file.
+        """
+        model = Model()
+        vocab = load_vocab(Path(model.vocab_path()))
+        trie = build_name_trie(list(functions), model.encode, EOS)
+        try:
+            super().__init__(model=model, vocab=vocab,
+                             functions=functions, trie=trie)
+        except ValidationError as e:
+            raise StartupError(f"invalid generation resources: {e}") from e
+
     @field_validator("functions")
     @classmethod
     def _read_only(
@@ -66,40 +81,10 @@ class GenerationResources(BaseModel):
         """Wrap the new dict Pydantic built, so no outside alias exists."""
         return MappingProxyType(functions)
 
-    @model_validator(mode="after")
-    def _names_match_trie(self) -> "GenerationResources":
-        """Require each key to be its definition's name and a trie name."""
-        for key, fn in self.functions.items():
-            if fn.name != key:
-                raise ValueError(f"functions[{key!r}] is named {fn.name!r}")
-        if self.functions.keys() != self.trie.names:
-            raise ValueError("trie names differ from the function names")
-        return self
-
-
-def build_generation_resources(
-    functions: Mapping[str, FunctionDef],
-) -> GenerationResources:
-    """Load the model, then build its vocabulary and the name tree.
-
-    Shared by the application and the measurement tool, so both generate
-    with the same resources. Raises StartupError.
-
-    Effect: loads the model and reads its vocabulary file.
-    """
-    model = Model()
-    vocab = load_vocab(Path(model.vocab_path()))
-    trie = build_name_trie(list(functions), model.encode, EOS)
-    try:
-        return GenerationResources(model=model, vocab=vocab,
-                                   functions=functions, trie=trie)
-    except ValidationError as e:
-        raise StartupError(f"invalid generation resources: {e}") from e
-
 
 def process_prompt(
     user_prompt: str,
-    resources: GenerationResources,
+    resources: GenerationAssets,
     *,
     progress: GenerationProgress | None = None,
 ) -> FunctionCall:

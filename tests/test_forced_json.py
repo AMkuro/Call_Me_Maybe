@@ -249,7 +249,7 @@ class ForcedJsonTests(unittest.TestCase):
     def test_llm_number_literal_survives_validation_and_save(self) -> None:
         """Save exactly the model's decimal, including huge integer digits."""
         fn = self.definition('f', n='number')
-        resources = pipeline.GenerationResources(
+        resources = pipeline.GenerationAssets.model_construct(
             model=self.model, vocab=self.vocab, functions={'f': fn},
             trie=NameTrie(paths={'f': (1,)}),
         )
@@ -272,7 +272,7 @@ class ForcedJsonTests(unittest.TestCase):
 
     def test_process_rejects_changed_prompt(self) -> None:
         fn = self.definition('f')
-        resources = pipeline.GenerationResources(
+        resources = pipeline.GenerationAssets.model_construct(
             model=self.model, vocab=self.vocab, functions={'f': fn},
             trie=NameTrie(paths={'f': (1,)}),
         )

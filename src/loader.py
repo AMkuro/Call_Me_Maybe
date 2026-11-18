@@ -13,7 +13,10 @@ from .schema import FunctionDef
 def index_functions(
     functions: Iterable[FunctionDef],
 ) -> dict[str, FunctionDef]:
-    """Index validated definitions by unique, nonblank names in input order."""
+    """Index validated definitions by unique names, making each key fn.name.
+
+    This input boundary guarantees key/name agreement for generation.
+    """
     indexed: dict[str, FunctionDef] = {}
     for fn in functions:
         if fn.name in indexed:

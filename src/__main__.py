@@ -10,7 +10,7 @@ from .display import Dashboard
 from .errors import PromptError, StartupError
 from .loader import load_functions, load_prompts
 from .pipeline import (
-    GenerationResources, build_generation_resources, process_prompt,
+    GenerationAssets, process_prompt,
 )
 from .schema import FunctionCall
 from .writer import prepare_output, save_results
@@ -43,7 +43,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _start(
     argv: Sequence[str] | None,
-) -> tuple[Args, list[str], GenerationResources]:
+) -> tuple[Args, list[str], GenerationAssets]:
     """Check the inputs and the output path, then load the model.
 
     The model is loaded last, so a bad file fails fast. Raises
@@ -55,12 +55,12 @@ def _start(
     functions = load_functions(args.functions_definition)
     prompts = load_prompts(args.input)
     prepare_output(args.output)
-    resources = build_generation_resources(functions)
+    resources = GenerationAssets(functions)
     return args, prompts, resources
 
 
 def _process_all(
-    prompts: list[str], resources: GenerationResources, output: Path,
+    prompts: list[str], resources: GenerationAssets, output: Path,
     dashboard: Dashboard,
 ) -> bool:
     """Process every prompt; True when none failed.

@@ -107,7 +107,7 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 読み込み時に作った辞書を使い、選択のたびに関数の配列を再走査しない（ADR-0016）。
 
 名前の末尾には Qwen の応答終了トークン `<|im_end|>` を含める。コード上の名前は `model_port.EOS` とし、
-`pipeline.build_generation_resources`が`build_name_trie(names, model.encode, EOS)`の引数として渡す。
+`pipeline.GenerationAssets`が`build_name_trie(names, model.encode, EOS)`の引数として渡す。
 各名前の完成経路は`encode(名前 + EOS)`で、その末端に到達したことが名前の確定である。
 例えば `fn_add` と `fn_add_numbers` が共存するとき、`fn_add` の後で EOS の経路と `_numbers` の経路が分かれる。
 SDK の decode は特殊トークンを表示しないため、終了は表示文字列ではなく ID の経路で判断する。
@@ -116,7 +116,7 @@ EOS のIDとの比較はしない。名前には生成上限を持たない。�
 #### 名前の木の不変条件と検証場所
 
 背景: 以前の`NameTrie`は`children`辞書を持つノードの木で、`frozen`でも子の追加・削除ができた。
-また`GenerationResources`は、対応を確かめるために組立時に`model.encode`で木を作り直しており、Trieの責務を重ねて持っていた。
+また旧`GenerationResources`は、対応を確かめるために組立時に`model.encode`で木を作り直しており、Trieの責務を重ねて持っていた。
 その後の版はEOSを1トークンに限り、そのIDを`NameTrie.eos`に持って経路の末尾にだけあることを検査していたが、
 名前の終端を表すという目的にEOSのトークン数やIDは関係ないため、この制約を撤廃した（2026-11-15）。
 
@@ -151,7 +151,7 @@ class NameTrie(BaseModel):          # frozen, extra="forbid", strict
 | 関数名とトークン経路の対応 | `paths`が名前と経路の組そのもので、`build_name_trie`が同じ`encode`の結果から作る |
 | 同じ名前の重複を黙ってまとめない | `build_name_trie`（`paths`の件数と`names`の件数を比べる） |
 | 経路の照会: 正しい未完成の経路はNone、葉は名前、存在しない経路は`PromptError` | `NameTrie`のメソッド`leaf_name`と`next_tokens`が、共通の`_known_prefix`で索引を引く |
-| `functions`の各キーが`FunctionDef.name`と一致し、キー集合がTrieの名前集合と一致する | `GenerationResources`の`model_validator`。値が`FunctionDef`であることは`InstanceOf`で検査する |
+| `functions`の各キーが`FunctionDef.name`と一致し、キー集合がTrieの名前集合と一致する | 入力境界の`index_functions`が`fn.name`をキーにする。`GenerationAssets`コンストラクタが同じキーからTrieを作る。値の型は`InstanceOf`で検査する |
 
 完成経路の接頭辞衝突は、EOSが不正だという意味ではない。完成経路への到達で名前を確定する方式では、
 その経路集合を曖昧さなく扱えないという構造上のエラーである。
@@ -182,7 +182,7 @@ Qwenでの実測（2026-11-15、SDKの公開API）: `encode("<|im_end|>")`は`[1
 依存として`more-itertools`も入るが、`OrderedSet`はそれを使わない（`IndexSet`の中でだけimportされる）。
 Subjectの「使ってよいパッケージ: numpy、json」（IV.3.1）との関係はオーナーが「禁止されていない」と判断した。
 提出時の説明ではこの判断を根拠にする。
-- `GenerationResources`はTrieの経路を作り直さない。組立は名前の比較だけになり、
+- 旧`GenerationResources`ではTrieの経路を作り直さず、当時の組立は名前の比較だけになり、
   既知の5関数で中央値0.002 ms（20回、GPU環境の実SDK）になった。前の作り直し方式は0.211 msだった。
 
 採らなかった案:
@@ -190,7 +190,7 @@ Subjectの「使ってよいパッケージ: numpy、json」（IV.3.1）との�
 - 子を`MappingProxyType`で包んだノードの木を残す案: ノードごとに包むことと、葉の位置を親から検査する処理が要る。
   また、手で組んだ部分木を通してノードを共有できるので、元の辞書の別名が残りやすい。
 - 検証済みフラグを`PrivateAttr`に持たせる案: フラグは正しさを示さない。索引そのものが検証の結果なので、フラグは不要である。
-- `GenerationResources`で、名前集合に加えて経路も確かめる案: `model.encode`が必要になり、Trieの責務と重なる。
+- `GenerationAssets`で、名前集合に加えて経路も確かめる案: `model.encode`が必要になり、Trieの責務と重なる。
 - EOSを1トークンに限り、そのIDを`NameTrie`に持って末尾を検査する案（前の版）: 終端の判定は完成経路への到達で足り、
   IDの検査は目的に不要な、トークナイザへの制約だった。
 
@@ -202,7 +202,7 @@ Subjectの「使ってよいパッケージ: numpy、json」（IV.3.1）との�
   `next_tokens`は毎回新しいlistを返す。入れ子の可変なノードはない。
 - シリアライズ: `field_serializer`で`paths`を普通の辞書として出力する。`model_dump`と`model_dump_json`からの
   `model_validate`/`model_validate_json`で、等しく使えるTrieに戻る。
-- 保証の外: Pydanticの検証を飛ばす`NameTrie.model_construct`は索引を作らないので、照会や`GenerationResources`の組立で
+- 保証の外: Pydanticの検証を飛ばす`NameTrie.model_construct`は索引を作らないので、照会で
   `AttributeError`になる（使えないが、分かりやすい`StartupError`にはならない。テスト済み）。
   `model_copy(update=...)`（Pydanticの文書上、更新値を検証しない。実測はしていない）、
   `object.__setattr__`、`_next`/`_names`への直接代入も検証を通らない。どれもアプリ・ツールでは使わない。
@@ -439,7 +439,7 @@ SDK 呼び出しの例外は `Model` が起動時または1件の失敗へ変換
 ユーザーがプロンプトや部品を調整するとき、どの入力のどの段階で何が選ばれたかを見られるようにする。
 `decoder.infer_and_select_next_token`は採用ID・選択方式・要求時だけraw_topを返す。
 `pipeline`の名前/値ループはID追加後にGenerationProgressへ同期通知し、表示から制御判断を受け取らない。
-共有資源はGenerationResourcesが保持し、mainが具体的なDashboardを別引数で接続する。
+共有資源はGenerationAssetsが保持し、mainが具体的なDashboardを別引数で接続する。
 通知先の後付け代入、Run.say、TokenChoice、生成制御コールバックは廃止した。
 
 1件の始まりと終わりは、`_process_all`がDashboardの`prompt_started(index, prompt)`・
@@ -486,7 +486,7 @@ stderr への書き込みで OSError が起きたら表示を止め、生成と�
 
 実装上の制約は、Python 3.10以上、型注釈・docstring、Subject の flake8/mypy の条件、
 許可された依存関係、SDK の公開 API の利用である（Subject 要約 §1・3）。
-検証するデータにはPydanticを使い、GenerationResourcesはInstanceOfで参照型を検証する。
+検証するデータにはPydanticを使い、GenerationAssetsはInstanceOfで参照型を検証する。
 Model・Dashboardは既存の通常クラス、GenerationProgressは静的なProtocolである。
 Subjectの全クラス要件の解釈上の留保と、検証境界は§9.9に記す。
 SDKの既存のfloat32変更と復元手順は開発文書を参照する。
@@ -740,11 +740,11 @@ stderrのOSError後はavailableを偽にして表示と追加診断を省くが�
 ### 9.6 案C：上位で共有資源をまとめ、下位へ必要な依存を渡す
 
 案Cはユーザーが採用した管理方針である。全依存を個別引数にする前案は上位処理について撤回する。
-具体的な構造体をGenerationResourcesとし、pipeline.pyの上位処理入口の近くに定義する。
-生成サービスやFactory階層は作らず、既存_startが組み立てる。
+具体的な構造体をGenerationAssetsとし、pipeline.pyの上位処理入口の近くに定義する。
+生成サービスやFactory階層は作らず、_startと測定ツールがコンストラクタを呼ぶ。
 
 ```python
-class GenerationResources(BaseModel):
+class GenerationAssets(BaseModel):
     """Validated references shared by one application run."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
@@ -762,10 +762,10 @@ Pythonオブジェクトから構築し、外部JSONから読み込んだり保�
 | --- | --- | --- |
 | model | Modelのインスタンスであること | SDKの初期化済み状態や推論の正しさ |
 | vocab | dictのインスタンスであること | ID/bytesの全走査。内容はload_vocabで検証・変換済み |
-| functions | 各値がFunctionDefのインスタンスで、キーがそのnameと一致すること | 各FunctionDefの内容や空/重複の再検証。load_functions/index_functionsが担当 |
-| trie | NameTrieのインスタンスで、その名前集合がfunctionsのキー集合と一致すること | 経路・EOS・構造。NameTrie自身が構築時に保証する。model.encodeは呼ばず、木を作り直さない |
+| functions | 各値がFunctionDefのインスタンスであること | 各FunctionDefの内容や空/重複・キーとnameの一致。load_functions/index_functionsが担当 |
+| trie | NameTrieのインスタンスであること | 経路・構造はNameTrie自身が保証する。コンストラクタが同じfunctionsとmodel.encodeで一度だけ作る |
 
-必須4フィールドの存在・取り違えた参照型・余分なreport等を拒否し、通常代入による参照の差し替えを拒否する。
+コンストラクタは検証済みfunctionsだけを受け取り、残る3資源を内部で作る。通常代入による参照の差し替えを拒否する。
 model・vocab・trieは参照のまま持つ。trieは構築後に変更できないので、共有しても対応は崩れない。
 functionsは、Pydanticが検証で作る新しい辞書（N件の参照のコピー）を`MappingProxyType`で包んで持つ。
 入力の辞書を後で変えても、資源のfunctionsを通して変えても（`TypeError`）、Trieとの対応は崩れない。
@@ -774,19 +774,22 @@ functionsは、Pydanticが検証で作る新しい辞書（N件の参照のコ�
 保証の範囲: FunctionDefはfrozenなので`name`は変わらず、Trieとの対応はこの範囲で保たれる。
 FunctionDef.parametersは普通の辞書なので、中身は変更できる。対応関係には関係しないが、骨組みや出力の検証に影響する。
 深い凍結はスキーマの変更になり今回の範囲を超えるため、構築後に変更しないという所有規約で扱う。vocabも同じ規約で扱う。
-`NameTrie.model_construct`で作った未検証のTrieは名前の索引を持たないので、組立は`AttributeError`で失敗する。
+未検証のTrieを外から渡す引数は設けない。
 
-- mainは1実行分のGenerationResourcesを所有し、_process_all/process_promptへ同じ参照を渡す。
+- mainは1実行分のGenerationAssetsを所有し、_process_all/process_promptへ同じ参照を渡す。
   測定ツールも同じ関数セットの評価バッチで一度作り、プロンプトごとには再構築しない。
-  組立は`pipeline.build_generation_resources(functions)`の1か所で、_startと測定ツールが同じ手順で資源を作る。
-- _startは入力検証と出力準備の後に`build_generation_resources`を呼ぶ。この関数がModel、vocab、同じfunctionsからのtrieを順に作って組み立て、検証エラーを`StartupError`にする。
-  異なる関数セットのtrieを渡すと、組立時のmodel_validatorが名前の不一致で拒否する。
-  同じ名前を別のトークナイザで符号化したtrieは検出しない。trieとmodelの組は`build_generation_resources`が同じmodel.encodeで作ることで保つ。
+  組立は`pipeline.GenerationAssets(functions)`の1か所で、_startと測定ツールが同じ手順で資源を作る。
+- _startは入力検証と出力準備の後に`GenerationAssets(functions)`を呼ぶ。
+  コンストラクタがModel、vocab、同じfunctionsからのtrieを順に作り、資源の検証エラーを`StartupError`にする。
+  キーとnameの一致は入力境界、経路の検証はNameTrieが担当する。
+  `_names_match_trie`による再比較は、同じキーから内部構築するため不要となり削除した。
+  外部から4資源を受け取って比較する方式と異なり、別のモデルや関数セットのTrieを渡す経路がない。
+  コンストラクタと入力経路のテストで名前の対応と変更耐性、経路衝突の起動エラーを検証する。
 - frozenは浅い不変性である。trieとfunctionsは上記のとおり読み取り専用だが、vocab・FunctionDef.parameters・Model内部は
   深く不変化しない。これらは構築完了後に書き換えず、モデルの内部処理は既存SDKの資源管理に任せる。
 - generated、入力の継続ids、JSON text、現在のslot、step、mode、raw_top、progressは含めない。
   report/sayや通知先の後付け代入も作らない。表示資源と生成途中の状態は別の所有者が持つ。
-- 組立のValidationErrorは_startでStartupErrorへ変換する。既存の起動エラー処理へ接続し、
+- 組立のValidationErrorはコンストラクタでStartupErrorへ変換する。既存の起動エラー処理へ接続し、
   失敗を隠すためmodel_constructや全フィールドのSkipValidationを使わない。
 
 | 構造体の選択肢 | 判断 |
@@ -805,19 +808,19 @@ FunctionDef.parametersは普通の辞書なので、中身は変更できる。�
 | generate_slot | model・vocabと処理対象slot/ids。functions・trieは渡さない |
 | infer_and_select_next_token | model・ids・allowedと診断要求だけ。共有構造体・表示先・上限は渡さない |
 
-DashboardもGenerationResourcesを丸ごと受け取らず、mainから必要なmodel/vocab参照と件数だけを受け取る。
+DashboardもGenerationAssetsを丸ごと受け取らず、mainから必要なmodel/vocab参照と件数だけを受け取る。
 vocabはmainでMappingProxyType(resources.vocab)という読み取り専用viewにして渡し、辞書内容はcopyしない。
 名前の公開decodeと警告表記だけに使い、表示側から共有語彙への書き込み経路を作らない。
 Modelの所有権をDashboardへ移すわけではなく、表示メソッドでは公開decodeのみを使う。
 
 ### 9.7 更新した型付きシグネチャ
 
-以下は実装したインターフェースである。GenerationResourcesの具体定義は§9.6、GenerationProgressは§9.5を使う。
+以下は実装したインターフェースである。GenerationAssetsの具体定義は§9.6、GenerationProgressは§9.5を使う。
 
 ```python
 def process_prompt(
     user_prompt: str,
-    resources: GenerationResources,
+    resources: GenerationAssets,
     *,
     progress: GenerationProgress | None = None,
 ) -> FunctionCall: ...
@@ -862,14 +865,14 @@ def constrained_argmax(
 ) -> int: ...
 ```
 
-_startは`tuple[Args, list[str], GenerationResources]`を返す。Dashboardの構築は
+_startは`tuple[Args, list[str], GenerationAssets]`を返す。Dashboardの構築は
 `Dashboard(total: int, model: Model, vocab: Mapping[int, bytes])`で、__init__はNoneを返す。
 具体的なDashboardはmainが持ち、生成へ渡すのは別引数のGenerationProgressだけである。
 
 ### 9.8 データフローと表示の責務
 
 ```text
-_start：入力/出力先検査 → Model → vocab → 同じfunctionsからtrie → GenerationResources
+_start：入力/出力先検査 → Model → vocab → 同じfunctionsからtrie → GenerationAssets
 main：resourcesから必要な参照を取り出してDashboardをwithで開始
   → _process_all(prompts, resources, ...) → process_prompt(prompt, resources, progress=...)
     → stage(select_function) → select_function(model, functions, trie, progress)
@@ -899,7 +902,7 @@ with終了：端末復帰 → 要約 → mainの終了コード
 中断は握りつぶさずwithで端末を戻す。順序・エラー・保存・公開SDKの条件は維持する。
 
 ```text
-main ──→ pipeline（GenerationResources・上位調停・各生成ループ） ──→ decoder ──→ model_port
+main ──→ pipeline（GenerationAssets・上位調停・各生成ループ） ──→ decoder ──→ model_port
   │          └──→ progress（表示の型契約。SelectionMode等は型参照だけ）
   └──→ display ──→ model_port（公開decodeのみ）
 ```
@@ -910,8 +913,8 @@ pipelineから具体的なdisplayをimportしない。displayはpipelineの資�
 
 ### 9.9 検証境界と性能費用
 
-GenerationResourcesはPydanticを実際に使う実行時クラスであり、4参照の型・必須フィールド・余分なフィールドを組立時に検証する。
-加えて、functionsのキーとFunctionDef.nameの一致と、trieの名前集合との一致を組立時に1回だけ検証する（§3.1、§9.6）。
+GenerationAssetsはPydanticを実際に使う実行時クラスであり、4参照の型・必須フィールド・余分なフィールドを組立時に検証する。
+functionsのキーとFunctionDef.nameの一致はindex_functionsが保証し、コンストラクタが同じキーからtrieを作る（§3.1、§9.6）。
 SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・ロード成功・正しい推論の保証ではない。
 ローカルのスキーマ確認では、未初期化のModelインスタンスでもこの型検査を通ることも確認した。
 動作確認は既存Modelの例外処理とモデル回帰試験が担当する。
@@ -920,7 +923,7 @@ SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・�
 | --- | --- |
 | 外部のprompts/functions/vocab | 既存のloaderのstrict検証、空/重複・変換の検査を維持。資源構造体で内容を重ねて走査しない |
 | 名前の木・ValueSlot | build_name_trieが各名前+EOSをencodeし、NameTrieの検証で全経路を検査して索引を作る（起動時1回）。生成・表示では再検証しない |
-| 資源の4参照 | InstanceOfの検査、functionsの読み取り専用の複製（N件）、キーと名前・名前集合の比較。既知5関数で中央値0.002 ms。encodeもTrieの再構築もしない。vocabの内容は走査しない |
+| 資源の4参照 | InstanceOfの検査とfunctionsの読み取り専用の複製（N件）。コンストラクタがModel・vocab・Trieを一度作る。名前の再比較やvocab内容の再走査はしない |
 | モデルのlogits | constrained_argmaxの次元・数値・非有限値・許可ID検査を維持。診断のargmax以外の配列処理を加えない |
 | 採用ID・mode・raw_top | 内部の選択分岐から得るプリミティブ。新たなPydanticモデルへ毎ステップ包み直さない |
 | 固定断片・完成値・JSON全文 | 語彙バイト列とSDK復号の一致、固定encodeの一致、全文と期待断片の一致。固定部分のforwardは増やさない |
@@ -1069,7 +1072,7 @@ Sequence借用では旧TokenChoiceによる履歴コピーとtupleスナップ�
 非変更・非保持は実装の契約であり、型注釈だけで安全性を保証したとは扱わない。
 描画間隔を保つ案についても、新しい欄が5分制約へ無影響と実装前に保証しない。
 
-新しい実行時データクラスのGenerationResourcesはBaseModelとして検証を行う。
+新しい実行時データクラスのGenerationAssetsはBaseModelとして検証を行う。
 GenerationProgressは静的な契約として使うが、Protocol宣言もPythonのクラスでありPydantic検証ではない。
 既存Model/Dashboard/例外を含むSubjectの「All classes」の解釈上の留保は残す。
 資源の型確認がSDKの動作を保証した、または新しい構造体により全クラス要件を解決したとは記録しない。
@@ -1079,7 +1082,7 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
 
 | 対象ファイル・関数 | 実装した変更 |
 | --- | --- |
-| pipeline.py | Run/report/sayと4クロージャを廃止。GenerationResources、上位だけの資源受け取り、下位の明示依存、各ループと同期借用の観測契約を設ける |
+| pipeline.py | Run/report/sayと4クロージャを廃止。GenerationAssets、上位だけの資源受け取り、下位の明示依存、各ループと同期借用の観測契約を設ける |
 | decoder.py | generate/TokenChoiceを廃止。SelectionMode型別名と、選択ID・方式・任意診断IDを返す1選択関数を設ける。constrained_argmaxを維持 |
 | progress.py | 上記の5メソッド・availableだけの型契約。コールバック・配送・実行状態は持たない |
 | display.py | name_token/value_tokenで採用IDと方式を整形し、途中内容と一緒に現在トークン欄を更新。元の描画・集計・復帰は維持 |
@@ -1121,7 +1124,7 @@ GenerationProgressは静的な契約として使うが、Protocol宣言もPython
   TokenChoiceのsnapshot検査は借用Sequenceの非変更・非保持と整形済み文字列の独立性へ置き換えた。
 - 観測なし・リダイレクト・利用不能・stderrのOSErrorで、固定入力の生成JSONとモデル入力・推論回数が一致。
   名前のforced→greedy、値のforced、同一bytesを持つ複数ID、UTF-8途中・特殊トークンを検査した。
-- GenerationResourcesの4資源と内部FunctionDefの参照同一性、不正な外側型・必須/extra拒否、
+- 当時のGenerationResourcesの4資源と内部FunctionDefの参照同一性、不正な外側型・必須/extra拒否、
   内部辞書の非再検証、frozenの代入/削除拒否と浅い可変性をテストした。
 - 実GPU（Radeon 8060S、ROCm環境）でmake gpu-runの既知11入力を前後各1回、直列実行。
   両方11件完了・失敗0。JSONはcmpでバイト単位一致。11件すべての生成結果を既存validate_callで各関数スキーマへ再照合し成功した。

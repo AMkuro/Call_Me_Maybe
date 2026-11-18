@@ -17,7 +17,7 @@ from src.errors import PromptError, StartupError
 from src.json_io import loads
 from src.loader import index_functions
 from src.pipeline import (
-    MAX_NUMBER_STEPS, MAX_VALUE_STEPS, build_generation_resources,
+    MAX_NUMBER_STEPS, MAX_VALUE_STEPS, GenerationAssets,
     process_prompt,
 )
 from src.schema import FunctionCall, FunctionDef, ParamType
@@ -106,7 +106,7 @@ def main() -> int:
         fixture = loads(args.cases.read_text(encoding="utf-8"))
         functions = index_functions(FunctionDef.model_validate(fn)
                                     for fn in fixture["functions"])
-        resources = build_generation_resources(functions)
+        resources = GenerationAssets(functions)
         results: list[dict[str, Any]] = []
         report: dict[str, Any] = {
             "measurement": "accuracy/stress; no timing measurements",
