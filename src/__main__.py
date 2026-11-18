@@ -41,7 +41,9 @@ def _start(
 
 
 def _end(
-    args: Args, prompts: Sequence[str], resources: GenerationAssets,
+    args: Args,
+    prompts: Sequence[str],
+    resources: GenerationAssets,
 ) -> int:
     """Run the batch, close the terminal, and report save failures.
 
@@ -49,8 +51,9 @@ def _end(
     OSError only after its context has closed; other exceptions propagate.
     """
     try:
-        with Dashboard(len(prompts), resources.model,
-                       resources.vocab) as dashboard:
+        with Dashboard(
+            len(prompts), resources.model, resources.vocab
+        ) as dashboard:
             all_done = process_all(prompts, resources, args.output, dashboard)
     # Outside the with, so the terminal is restored before the message.
     # Only save_results raises OSError here: Dashboard keeps its own
