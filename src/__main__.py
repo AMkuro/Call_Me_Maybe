@@ -32,6 +32,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         with Dashboard(len(prompts), resources.model,
                        MappingProxyType(resources.vocab)) as dashboard:
             all_done = _process_all(prompts, resources, args.output, dashboard)
+    # Outside the with, so the terminal is restored before the message.
+    # Only save_results raises OSError here: Dashboard keeps its own
+    # stream errors, and Model turns its errors into PromptError.
     except OSError as e:
         print(f"cannot save output to {args.output}: {e}", file=sys.stderr)
         return 1
