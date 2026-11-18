@@ -4,6 +4,7 @@ import json
 
 from collections.abc import Mapping
 from types import MappingProxyType
+from typing import TypeGuard
 
 from pydantic import (
     BaseModel, ConfigDict, InstanceOf, field_validator, model_validator,
@@ -21,6 +22,17 @@ from .skeleton import Forced, ValueSlot, build_call_suffix
 from .values import allowed_slot_tokens, is_slot_complete
 
 MAX_VALUE_STEPS = 256
+
+
+def _observing(
+    progress: GenerationProgress | None,
+) -> TypeGuard[GenerationProgress]:
+    """Whether to notify ``progress`` and build what only it uses.
+
+    Checked at every notification, because ``available`` turns False when
+    the diagnostic stream fails during a prompt.
+    """
+    return progress is not None and progress.available
 
 
 class GenerationResources(BaseModel):
@@ -66,16 +78,16 @@ def process_prompt(
     progress: GenerationProgress | None = None,
 ) -> FunctionCall:
     """Select a name, generate parameters, then validate one JSON record."""
-    if progress is not None and progress.available:
+    if _observing(progress):
         progress.stage("select_function")
     fn = select_function(user_prompt, model=resources.model,
                          functions=resources.functions, trie=resources.trie,
                          progress=progress)
-    if progress is not None and progress.available:
+    if _observing(progress):
         progress.stage("generate_call_json")
     text = generate_call_json(user_prompt, fn, model=resources.model,
                               vocab=resources.vocab, progress=progress)
-    if progress is not None and progress.available:
+    if _observing(progress):
         progress.stage("validate_call")
     call = validate_call(text, fn)
     if call.prompt != user_prompt:
@@ -100,7 +112,7 @@ def select_function(
     while True:
         name = leaf_name(trie, generated)
         if name is not None:
-            if progress is not None and progress.available:
+            if _observing(progress):
                 progress.function_selected(name)
             return functions[name]
         allowed = next_tokens(trie, generated)
@@ -110,10 +122,10 @@ def select_function(
             )
         token, mode, raw_top = infer_and_select_next_token(
             model, prompt_ids + generated, allowed,
-            include_raw_top=progress is not None and progress.available,
+            include_raw_top=_observing(progress),
         )
         generated.append(token)
-        if progress is not None and progress.available:
+        if _observing(progress):
             progress.name_token(generated, mode=mode, raw_top=raw_top)
 
 
@@ -174,7 +186,7 @@ def generate_call_json(
                                                      output_ids, model=model,
                                                      vocab=vocab))
         else:
-            if progress is not None and progress.available:
+            if _observing(progress):
                 progress.parameter_started(part.name, part.type)
             value_ids = generate_value_with_delimiter(
                 part, prompt_ids + output_ids, model=model, vocab=vocab,
@@ -213,7 +225,7 @@ def generate_value_with_delimiter(
             token, mode, _ = infer_and_select_next_token(
                 model, ids + generated, allowed)
             generated.append(token)
-            if progress is not None and progress.available:
+            if _observing(progress):
                 written = b"".join(vocab[item] for item in generated)
                 progress.value_token(written, len(generated),
                                      token=token, mode=mode)

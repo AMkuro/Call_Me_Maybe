@@ -833,6 +833,9 @@ with終了：端末復帰 → 要約 → mainの終了コード
 - 値: 同じ3値を受け、ID追加後に語彙からwrittenを連結し、written・len(generated)・token・modeをvalue_tokenへ渡す。
   raw_topは要求していないのでNoneであり、表示にも渡さない。
 - どちらもprogressがない、またはavailableが偽なら観測用bytesの構築・decodeを行わない。
+  この条件は`pipeline._observing(progress)`の1か所に書き、通知のたびに呼ぶ。`available`は1件の途中でも
+  stderrの失敗で偽になるので、process_promptの入口で1回だけ判定する形にはしない。
+  表示先の状態を生成側が読むのは、表示にしか使わない計算（raw_top、writtenの複製、decode）を省くためである。
   診断だけを省いてもmodeと採用ID、許可集合、終了条件、モデル入力は同じである。
 
 表示はこのデータから文字列とToken欄を作り、生成には何も返さない。
