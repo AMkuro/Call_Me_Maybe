@@ -18,7 +18,7 @@ from src.model_port import Model
 from src.name_trie import NameTrie
 from src.schema import FunctionCall, FunctionDef
 from src.skeleton import ValueSlot
-from src.values import allowed_value_tokens, is_value_complete
+from src.values import allowed_slot_tokens, is_slot_complete
 from src.writer import save_results
 
 VALID = ('0.0', '-0.0', '2.0', '2.75', '-42.125', '9007199254740993.0',
@@ -48,8 +48,8 @@ def generated(literal: str, prompt: str = '依頼') -> FunctionCall:
     text = ('{"prompt":' + json.dumps(prompt) + ',"name":"record",'
             '"parameters":{"x":' + literal + ',"s":'
             + json.dumps('日本語 " \\ \n 1e10 2.0 <|im_end|>') + ',"b":false}}')
-    with patch.object(pipeline, 'select_name', return_value=fn), \
-            patch.object(pipeline, 'generate_parameters', return_value=text):
+    with patch.object(pipeline, 'select_function', return_value=fn), \
+            patch.object(pipeline, 'generate_call_json', return_value=text):
         return pipeline.process_prompt(prompt, resources)
 
 
@@ -64,14 +64,14 @@ class DecimalGrammarTests(unittest.TestCase):
                 with self.subTest(literal=literal, delimiter=delimiter):
                     written = b''
                     for token in (literal + delimiter).encode():
-                        self.assertFalse(is_value_complete(
+                        self.assertFalse(is_slot_complete(
                             written, 'number', delimiter))
-                        self.assertIn(token, allowed_value_tokens(
+                        self.assertIn(token, allowed_slot_tokens(
                             vocab, 'number', written, delimiter))
                         written += bytes([token])
-                    self.assertTrue(is_value_complete(
+                    self.assertTrue(is_slot_complete(
                         written, 'number', delimiter))
-                    self.assertEqual(allowed_value_tokens(
+                    self.assertEqual(allowed_slot_tokens(
                         vocab, 'number', written, delimiter), [])
 
     def test_invalid_literals_cannot_be_committed_whole(self) -> None:
@@ -80,27 +80,27 @@ class DecimalGrammarTests(unittest.TestCase):
             for delimiter in (',', '}'):
                 with self.subTest(literal=literal, delimiter=delimiter):
                     payload = (literal + delimiter).encode()
-                    self.assertFalse(is_value_complete(
+                    self.assertFalse(is_slot_complete(
                         payload, 'number', delimiter))
-                    self.assertEqual(allowed_value_tokens(
+                    self.assertEqual(allowed_slot_tokens(
                         {9: payload}, 'number', b'', delimiter), [])
         for prefix in (b'2', b'-2', b'2.'):
             for delimiter in (',', '}'):
-                self.assertEqual(allowed_value_tokens(
+                self.assertEqual(allowed_slot_tokens(
                     {9: delimiter.encode()}, 'number', prefix, delimiter), [])
 
     def test_merged_token_candidates_obey_the_whole_token(self) -> None:
         """A token cannot hide an exponent or trailing material."""
         vocab = {1: b'2.0', 2: b'2.0,', 3: b'.0}', 4: b'1e10',
                  5: b'1.0e10', 6: b'0,', 7: b'2.0, extra'}
-        self.assertEqual(allowed_value_tokens(vocab, 'number', b'', ','),
+        self.assertEqual(allowed_slot_tokens(vocab, 'number', b'', ','),
                          [1, 2])
-        self.assertEqual(allowed_value_tokens(vocab, 'number', b'2', '}'),
+        self.assertEqual(allowed_slot_tokens(vocab, 'number', b'2', '}'),
                          [1, 3])
-        self.assertEqual(allowed_value_tokens(vocab, 'number', b'2.', ','),
+        self.assertEqual(allowed_slot_tokens(vocab, 'number', b'2.', ','),
                          [6])
-        self.assertTrue(is_value_complete(b'2.0}', 'number', '}'))
-        self.assertFalse(is_value_complete(b'2.0', 'number', '}'))
+        self.assertTrue(is_slot_complete(b'2.0}', 'number', '}'))
+        self.assertFalse(is_slot_complete(b'2.0', 'number', '}'))
 
     def test_fraction_selects_from_forced_context(self) -> None:
         """The model chooses 5, with the forced decimal prefix in context."""
@@ -110,8 +110,8 @@ class DecimalGrammarTests(unittest.TestCase):
         slot = ValueSlot(name='x', type='number', terminator='}')
         with patch.object(Model, 'logits', return_value=scores) as forward, \
                 patch.object(Model, 'encode') as encode:
-            ids = pipeline.generate_value(slot, [90, 91], model=model,
-                                          vocab=vocab)
+            ids = pipeline.generate_value_with_delimiter(
+                slot, [90, 91], model=model, vocab=vocab)
         self.assertEqual(ids, [1, 3])
         self.assertEqual(b''.join(vocab[t] for t in ids), b'2.5}')
         self.assertEqual([c.args for c in forward.call_args_list],
@@ -136,14 +136,14 @@ class DecimalGrammarTests(unittest.TestCase):
                     patch.object(Model, 'logits', side_effect=logits):
                 slot = ValueSlot(name='x', type='number', terminator='}')
                 if length == 256:
-                    ids = pipeline.generate_value(slot, [], model=model,
-                                                  vocab=vocab)
+                    ids = pipeline.generate_value_with_delimiter(
+                        slot, [], model=model, vocab=vocab)
                     self.assertEqual(b''.join(vocab[t] for t in ids), target)
                 else:
                     with self.assertRaisesRegex(
                             PromptError, 'token limit 256'):
-                        pipeline.generate_value(slot, [], model=model,
-                                                vocab=vocab)
+                        pipeline.generate_value_with_delimiter(
+                            slot, [], model=model, vocab=vocab)
 
 
 class DecimalSaveTests(unittest.TestCase):

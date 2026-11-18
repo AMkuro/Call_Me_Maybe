@@ -9,7 +9,7 @@ from pydantic import (
     BaseModel, ConfigDict, InstanceOf, field_validator, model_validator,
 )
 
-from .decoder import select_next_token
+from .decoder import infer_and_select_next_token
 from .errors import PromptError
 from .json_io import loads
 from .model_port import Model
@@ -17,8 +17,8 @@ from .name_trie import NameTrie, leaf_name, max_name_steps, next_tokens
 from .progress import GenerationProgress
 from .prompt import build_name_prompt, build_parameters_prompt
 from .schema import FunctionCall, FunctionDef, build_parameters_model
-from .skeleton import Forced, ValueSlot, build_skeleton
-from .values import allowed_value_tokens, is_value_complete
+from .skeleton import Forced, ValueSlot, build_call_suffix
+from .values import allowed_slot_tokens, is_slot_complete
 
 MAX_VALUE_STEPS = 256
 
@@ -68,13 +68,13 @@ def process_prompt(
     """Select a name, generate parameters, then validate one JSON record."""
     if progress is not None and progress.available:
         progress.stage("select_name")
-    fn = select_name(user_prompt, model=resources.model,
-                     functions=resources.functions, trie=resources.trie,
-                     progress=progress)
+    fn = select_function(user_prompt, model=resources.model,
+                         functions=resources.functions, trie=resources.trie,
+                         progress=progress)
     if progress is not None and progress.available:
         progress.stage("generate_parameters")
-    text = generate_parameters(user_prompt, fn, model=resources.model,
-                               vocab=resources.vocab, progress=progress)
+    text = generate_call_json(user_prompt, fn, model=resources.model,
+                              vocab=resources.vocab, progress=progress)
     if progress is not None and progress.available:
         progress.stage("validate_call")
     call = validate_call(text, fn)
@@ -85,7 +85,7 @@ def process_prompt(
     return call
 
 
-def select_name(
+def select_function(
     user_prompt: str,
     *,
     model: Model,
@@ -108,7 +108,7 @@ def select_name(
             raise PromptError(
                 f"token limit {limit} reached before a terminator"
             )
-        token, mode, raw_top = select_next_token(
+        token, mode, raw_top = infer_and_select_next_token(
             model, prompt_ids + generated, allowed,
             include_raw_top=progress is not None and progress.available,
         )
@@ -117,7 +117,7 @@ def select_name(
             progress.name_token(generated, mode=mode, raw_top=raw_top)
 
 
-def _decode_output(
+def _decode_and_verify_output(
     ids: list[int], *, model: Model, vocab: dict[int, bytes],
 ) -> str:
     """Require SDK decoding to preserve the grammar's exact UTF-8 bytes."""
@@ -131,7 +131,7 @@ def _decode_output(
     return text
 
 
-def _append_forced(
+def _append_forced_fragment(
     text: str, prompt_ids: list[int], output_ids: list[int], *,
     model: Model, vocab: dict[int, bytes],
 ) -> str:
@@ -142,16 +142,16 @@ def _append_forced(
     # '<' occurs only inside JSON strings here; escaping avoids control IDs.
     text = text.replace("<", r"\u003c")
     tokens = model.encode(text)
-    if _decode_output(tokens, model=model, vocab=vocab) != text:
+    if _decode_and_verify_output(tokens, model=model, vocab=vocab) != text:
         raise PromptError("fixed JSON text differs from its encoded tokens")
     for token in tokens:
-        chosen, _, _ = select_next_token(model, prompt_ids + output_ids,
-                                         [token])
+        chosen, _, _ = infer_and_select_next_token(
+            model, prompt_ids + output_ids, [token])
         output_ids.append(chosen)
     return text
 
 
-def generate_parameters(
+def generate_call_json(
     user_prompt: str,
     fn: FunctionDef,
     *,
@@ -166,29 +166,29 @@ def generate_parameters(
         f'{{"prompt":{json.dumps(user_prompt)},'
         f'"name":{json.dumps(fn.name)}'
     )
-    fragments = [_append_forced(head, prompt_ids, output_ids, model=model,
-                                vocab=vocab)]
-    for part in build_skeleton(fn):
+    fragments = [_append_forced_fragment(head, prompt_ids, output_ids,
+                                         model=model, vocab=vocab)]
+    for part in build_call_suffix(fn):
         if isinstance(part, Forced):
-            fragments.append(_append_forced(part.text, prompt_ids,
-                                            output_ids, model=model,
-                                            vocab=vocab))
+            fragments.append(_append_forced_fragment(part.text, prompt_ids,
+                                                     output_ids, model=model,
+                                                     vocab=vocab))
         else:
             if progress is not None and progress.available:
                 progress.parameter_started(part.name, part.type)
-            value_ids = generate_value(part, prompt_ids + output_ids,
-                                       model=model, vocab=vocab,
-                                       progress=progress)
-            fragments.append(_decode_output(value_ids, model=model,
-                                            vocab=vocab))
+            value_ids = generate_value_with_delimiter(
+                part, prompt_ids + output_ids, model=model, vocab=vocab,
+                progress=progress)
+            fragments.append(_decode_and_verify_output(value_ids, model=model,
+                                                       vocab=vocab))
             output_ids.extend(value_ids)
-    text = _decode_output(output_ids, model=model, vocab=vocab)
+    text = _decode_and_verify_output(output_ids, model=model, vocab=vocab)
     if text != "".join(fragments):
         raise PromptError("full JSON decoding differs from its fragments")
     return text
 
 
-def generate_value(
+def generate_value_with_delimiter(
     slot: ValueSlot,
     ids: list[int],
     *,
@@ -201,17 +201,17 @@ def generate_value(
     try:
         while True:
             written = b"".join(vocab[token] for token in generated)
-            if is_value_complete(written, slot.type, slot.terminator):
+            if is_slot_complete(written, slot.type, slot.terminator):
                 return generated
-            allowed = allowed_value_tokens(vocab, slot.type, written,
-                                           slot.terminator)
+            allowed = allowed_slot_tokens(vocab, slot.type, written,
+                                          slot.terminator)
             if len(generated) >= MAX_VALUE_STEPS:
                 raise PromptError(
                     f"token limit {MAX_VALUE_STEPS} "
                     "reached before a terminator"
                 )
-            token, mode, _ = select_next_token(model, ids + generated,
-                                               allowed)
+            token, mode, _ = infer_and_select_next_token(
+                model, ids + generated, allowed)
             generated.append(token)
             if progress is not None and progress.available:
                 written = b"".join(vocab[item] for item in generated)

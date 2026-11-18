@@ -85,7 +85,7 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 
 ## 3. 1件の依頼を呼び出し記録へ変える
 
-`process_prompt` は、関数を選ぶ `select_name`、引数を作る `generate_parameters`、
+`process_prompt` は、関数を選ぶ `select_function`、引数を作る `generate_call_json`、
 生成した記録を確認する `validate_call` の順に進む。それぞれが次の段階へ渡すものを決め、
 表示や保存のためにモデルの選択結果を作り直さない。
 
@@ -101,7 +101,7 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 意味の選択にはモデルの点数を使い、名前として許す経路は入力された関数定義から制約する。
 
 `build_name_prompt`は辞書の`values()`から全関数の名前・説明・引数名と型を入力順に列挙する。
-利用者の依頼を添え、関数名だけを応答するよう指示する。`select_name`はこれをencodeし、自分の明示ループで木を照会して`select_next_token`を呼ぶ。
+利用者の依頼を添え、関数名だけを応答するよう指示する。`select_function`はこれをencodeし、自分の明示ループで木を照会して`infer_and_select_next_token`を呼ぶ。
 生成中は `next_tokens` で現在の経路の子を取得し、その ID だけを次の候補にする。
 名前とEOSを合わせた完成経路の末端（葉）に到達したら`leaf_name`で元の名前を取得し、`functions[name]`で定義を返す。
 読み込み時に作った辞書を使い、選択のたびに関数の配列を再走査しない（ADR-0016）。
@@ -154,7 +154,7 @@ class NameTrie(BaseModel):          # frozen, extra="forbid", strict
 
 完成経路の接頭辞衝突は、EOSが不正だという意味ではない。完成経路への到達で名前を確定する方式では、
 その経路集合を曖昧さなく扱えないという構造上のエラーである。
-EOSが複数トークンなら、終端までの数ステップが経路に加わるだけで、`select_name`は同じく1トークンずつ進む。
+EOSが複数トークンなら、終端までの数ステップが経路に加わるだけで、`select_function`は同じく1トークンずつ進む。
 `encode(名前 + EOS) == encode(名前) + encode(EOS)`は一般には保証されないが、
 完成経路に矛盾がなければ不要である。指定したEOSがモデルにとって本当に終了記号として働くかは、`NameTrie`の検証の責務に含めない。
 
@@ -214,16 +214,16 @@ EOS はユーザーが承認した暫定方式で、障害となった場合に�
 
 ### 3.2 決まったJSON構造と引数値を順に組み立てる（現行実装）
 
-ADR-0026の追加条件に従い、`generate_parameters`は引数用プロンプトID列Pと、
+ADR-0026の追加条件に従い、`generate_call_json`は引数用プロンプトID列Pと、
 JSON本体の確定ID列Oを分離する。`prompt`と選択した`name`を`json.dumps`で表した先頭、
-および`build_skeleton(fn)`の各`Forced.text`を`_append_forced`で処理する。
+および`build_call_suffix(fn)`の各`Forced.text`を`_append_forced_fragment`で処理する。
 固定断片は一括encodeし、語彙バイト列・SDKのdecode・期待文字列の一致を確認してから、
 各IDの直前にP + Oで1回forwardし（1候補なので点数は使わない）、そのIDをOへappendする。
 
 #### 方式B: 出力の全トークンで1回forward（2026-11-18、所有者の決定）
 
 背景: 所有者は、固定JSONと1候補の位置を含めて、出力の各トークンの直前にLLMのforwardを1回行う方式を求めた。
-採用: 名前・固定JSON・値のすべてで、`select_next_token`がまず`Model.logits(P + 確定済み全ID)`を1回呼ぶ。
+採用: 名前・固定JSON・値のすべてで、`infer_and_select_next_token`がまず`Model.logits(P + 確定済み全ID)`を1回呼ぶ。
 1候補ならそのIDを返し、配列変換・マスク・argmaxは行わない（高速化④）。複数候補の制約付きargmaxは従来どおり。
 文脈は常に全文脈とする。プロンプトの短縮は別の実験として扱い、ここでは採らない（所有者の回答）。
 空候補は推論前にPromptErrorとする。診断のための追加推論はしない。KVキャッシュは使わない。
@@ -232,7 +232,7 @@ JSON本体の確定ID列Oを分離する。`prompt`と選択した`name`を`json
 時間は[方式Bの性能評価](research/2026-11-18-method-b-performance.md)と
 [方式Bの高速化の検証](research/2026-11-18-method-b-speedups.md)に、精度と分けて記録する。
 
-- `ValueSlot`では既存どおり引数名・型を通知し、`generate_value`へP + Oのスナップショットを渡す。
+- `ValueSlot`では既存どおり引数名・型を通知し、`generate_value_with_delimiter`へP + Oのスナップショットを渡す。
 - 値ループはローカル生成列Vを1個ずつ確定する。値生成中の論理出力はO + V、分岐時のモデル入力はP + O + Vである。
 - 完成したVのSDK復号と語彙バイト列のUTF-8復号が一致したらOへ統合する。
   このextendは確定済みIDの移管であり、再生成や再トークン化ではない。
@@ -319,25 +319,25 @@ numberを文字列化せず、入力側の数値解析も変更しない。
 
 ## 4. 候補トークンの判定と終了条件
 
-`select_name`と`generate_value`が自分の生成列と上限を所有する。
-名前は木、値は型の文法を直接照会し、共通の`select_next_token(model, ids, allowed)`で1トークンを選ぶ。
+`select_function`と`generate_value_with_delimiter`が自分の生成列と上限を所有する。
+名前は木、値は型の文法を直接照会し、共通の`infer_and_select_next_token(model, ids, allowed)`で1トークンを選ぶ。
 制約判定・終了判定・採用後の処理をコールバックへ渡さない。
 
 1. 完了なら名前は元のFunctionDef、値は生成ID列を返す。上限ちょうどの完了も成功する。
 2. 未完了で生成上限に達していたら、終端未到達を示す PromptError にする。
 3. 続けられる候補がなければ PromptError にする。
 4. 全文脈で logits を一度取得する（方式B）。候補が1個ならその ID を強制する。
-5. `choose_token` が候補外を負の無限大にした点数列から最大の ID を選び、生成列へ追加する。
+5. `constrained_argmax` が候補外を負の無限大にした点数列から最大の ID を選び、生成列へ追加する。
 
 元の logits は変更しない。点数列の型・次元、NaN、正の無限大、許可候補がすべて非有限の場合を確認する。
 値の上限は暫定256トークンで、未完了の値を切り詰めて成功扱いにはしない。
-`generate_value` は失敗に引数名と型を付け、例えば「text の string 値が256トークンでも終端に達しない」と通知する。
+`generate_value_with_delimiter` は失敗に引数名と型を付け、例えば「text の string 値が256トークンでも終端に達しない」と通知する。
 
 ### 値の文法とバイト列の扱い（現行実装）
 
-`generate_value`のループ先頭で、語彙から生成済みのバイト列を連結する。
-`is_value_complete(written, slot.type, slot.terminator)`が真なら完了し、
-偽なら`allowed_value_tokens`で次のIDを求める。トークン全体を加えた接頭辞が正当か確認し、
+`generate_value_with_delimiter`のループ先頭で、語彙から生成済みのバイト列を連結する。
+`is_slot_complete(written, slot.type, slot.terminator)`が真なら完了し、
+偽なら`allowed_slot_tokens`で次のIDを求める。トークン全体を加えた接頭辞が正当か確認し、
 区切りを越えて次の値や余分な文章を含むトークンを拒否する。
 
 | 型 | 許す値の形 | 完了条件 |
@@ -382,7 +382,7 @@ SDK 呼び出しの例外は `Model` が起動時または1件の失敗へ変換
 過去の未承認案は採用根拠にせず、現行コードから比較した。
 
 ユーザーがプロンプトや部品を調整するとき、どの入力のどの段階で何が選ばれたかを見られるようにする。
-`decoder.select_next_token`は採用ID・選択方式・要求時だけraw_topを返す。
+`decoder.infer_and_select_next_token`は採用ID・選択方式・要求時だけraw_topを返す。
 `pipeline`の名前/値ループはID追加後にGenerationProgressへ同期通知し、表示から制御判断を受け取らない。
 共有資源はGenerationResourcesが保持し、mainが具体的なDashboardを別引数で接続する。
 通知先の後付け代入、Run.say、TokenChoice、生成制御コールバックは廃止した。
@@ -414,10 +414,10 @@ stderr への書き込みで OSError が起きたら表示を止め、生成と�
 | 調整・変更するもの | 主な担当 | 他の処理へ渡す条件 |
 | --- | --- | --- |
 | モデルへ与える説明・形式 | `prompt.py` の設定値と組み立て関数 | 名前段階・引数段階それぞれの文字列を返す。名前の応答形式は EOS の木と整合させる |
-| 関数を選ぶ処理 | `pipeline.select_name`、`name_trie.py` | 入力された定義の `FunctionDef` を返す |
+| 関数を選ぶ処理 | `pipeline.select_function`、`name_trie.py` | 入力された定義の `FunctionDef` を返す |
 | トークンを選ぶ方法 | `decoder.py` | 許可IDから1つ選び、ID・方式・任意診断を返す。列や上限は管理せず、観察で選択を変えない |
-| 引数値の許可文法・終了条件 | `values.py`、`generate_value` | 値とスロットのJSON区切りのID列を返す。文字列の中の区切り文字では終了しない |
-| JSON全文の組み立て | `generate_parameters`、`skeleton.py` | 固定IDを1個ずつ確定し、値の確定IDを統合。完成Oの復号・バイト列・期待断片を照合する |
+| 引数値の許可文法・終了条件 | `values.py`、`generate_value_with_delimiter` | 値とスロットのJSON区切りのID列を返す。文字列の中の区切り文字では終了しない |
+| JSON全文の組み立て | `generate_call_json`、`skeleton.py` | 固定IDを1個ずつ確定し、値の確定IDを統合。完成Oの復号・バイト列・期待断片を照合する |
 | 値の生成上限 | `pipeline.MAX_VALUE_STEPS` | 超過を値の短縮で隠さず、理由付きの PromptError にする |
 | 引数の型と数値の扱い | `schema.py`、値の文法、保存 | 定義のキーを保持し、検証後の値を出力する。変更時は生成と検証の双方を確認する |
 | SDK との接続 | `model_port.py` の具体的な `Model` | 公開 API だけを使い、encode と logits は普通のリスト、decode は文字列を返す |
@@ -519,7 +519,7 @@ TokenChoiceは変更前には観測時だけPydantic検証され、生成ID列�
 | --- | --- | --- | --- |
 | プロンプト・初期ID | 関数一覧から名前用入力 | 選択関数と固定JSONを含む入力 | 各pipeline関数 |
 | 終了判定 | leaf_nameで完成経路（名前+EOS）の葉を確認 | バイト列とslot.type・terminatorでis_value_complete | 各ループに直接記載 |
-| 許可ID | next_tokens | allowed_value_tokens | 各ループに直接記載 |
+| 許可ID | next_tokens | allowed_slot_tokens | 各ループに直接記載 |
 | 生成上限 | 木の最長経路 | MAX_VALUE_STEPS | 各ループ。終了確認後、選択前に確認 |
 | 空候補・forced・モデル呼び出し | 同じ順序 | 同じ順序 | 共通の1トークン選択関数 |
 | 負の無限大マスク・argmax・不正logits拒否 | 同じ | 同じ | 既存choose_tokenを維持 |
@@ -560,7 +560,7 @@ TokenChoiceは変更前には観測時だけPydantic検証され、生成ID列�
 # decoder.pyに置く、選択方式そのものの型別名
 SelectionMode = Literal["forced", "greedy"]
 
-def select_next_token(
+def infer_and_select_next_token(
     model: Model,
     ids: list[int],
     allowed: list[int],
@@ -580,7 +580,7 @@ forcedならinclude_raw_top=Trueでもraw_topはNone、greedyならFalseの場�
 警告はgreedy・raw_topあり・採用IDと異なる場合に現在と同じ意味で出す。
 
 生成途中のID列・step・上限は戻り値へ入れない。modeを別の可変状態として保存せず、
-各ループで`token, mode, raw_top = select_next_token(...)`と受け取り、そのステップの通知までに使う。
+各ループで`token, mode, raw_top = infer_and_select_next_token(...)`と受け取り、そのステップの通知までに使う。
 全logits返却やModel.last_logits等の隠れた状態、追加forward、softmax、上位k件は採らない。
 
 ここでのforcedは「許可IDが1つなので点数を使わない選択」である（forwardは方式Bで1回行う）。
@@ -738,10 +738,10 @@ FunctionDef.parametersは普通の辞書なので、中身は変更できる。�
 | 関数 | 受け取る資源と利用 |
 | --- | --- |
 | _process_all / process_prompt | resourcesを受け取り、必要なフィールドを下位へ展開。progressは別引数 |
-| select_name | model・functions・trie。vocabや資源構造体全体は渡さない |
-| generate_parameters | model・vocab。fnは選択済みの処理対象。progressも別に渡す |
-| generate_value | model・vocabと処理対象slot/ids。functions・trieは渡さない |
-| select_next_token | model・ids・allowedと診断要求だけ。共有構造体・表示先・上限は渡さない |
+| select_function | model・functions・trie。vocabや資源構造体全体は渡さない |
+| generate_call_json | model・vocab。fnは選択済みの処理対象。progressも別に渡す |
+| generate_value_with_delimiter | model・vocabと処理対象slot/ids。functions・trieは渡さない |
+| infer_and_select_next_token | model・ids・allowedと診断要求だけ。共有構造体・表示先・上限は渡さない |
 
 DashboardもGenerationResourcesを丸ごと受け取らず、mainから必要なmodel/vocab参照と件数だけを受け取る。
 vocabはmainでMappingProxyType(resources.vocab)という読み取り専用viewにして渡し、辞書内容はcopyしない。
@@ -760,7 +760,7 @@ def process_prompt(
     progress: GenerationProgress | None = None,
 ) -> FunctionCall: ...
 
-def select_name(
+def select_function(
     user_prompt: str,
     *,
     model: Model,
@@ -769,7 +769,7 @@ def select_name(
     progress: GenerationProgress | None = None,
 ) -> FunctionDef: ...
 
-def generate_parameters(
+def generate_call_json(
     user_prompt: str,
     fn: FunctionDef,
     *,
@@ -778,7 +778,7 @@ def generate_parameters(
     progress: GenerationProgress | None = None,
 ) -> str: ...
 
-def generate_value(
+def generate_value_with_delimiter(
     slot: ValueSlot,
     ids: list[int],
     *,
@@ -787,7 +787,7 @@ def generate_value(
     progress: GenerationProgress | None = None,
 ) -> list[int]: ...
 
-def select_next_token(
+def infer_and_select_next_token(
     model: Model,
     ids: list[int],
     allowed: list[int],
@@ -795,7 +795,7 @@ def select_next_token(
     include_raw_top: bool = False,
 ) -> tuple[int, SelectionMode, int | None]: ...
 
-def choose_token(
+def constrained_argmax(
     logits: Sequence[float], allowed: Collection[int],
 ) -> int: ...
 ```
@@ -810,9 +810,9 @@ _startは`tuple[Args, list[str], GenerationResources]`を返す。Dashboardの�
 _start：入力/出力先検査 → Model → vocab → 同じfunctionsからtrie → GenerationResources
 main：resourcesから必要な参照を取り出してDashboardをwithで開始
   → _process_all(prompts, resources, ...) → process_prompt(prompt, resources, progress=...)
-    → stage(select_name) → select_name(model, functions, trie, progress)
-    → stage(generate_parameters) → generate_parameters(model, vocab, fn, progress)
-      → 固定IDの逐次確定 / parameter_started(name, type) → generate_value(model, vocab, slot, P + O, progress)
+    → stage(select_name) → select_function(model, functions, trie, progress)
+    → stage(generate_parameters) → generate_call_json(model, vocab, fn, progress)
+      → 固定IDの逐次確定 / parameter_started(name, type) → generate_value_with_delimiter(model, vocab, slot, P + O, progress)
     → O全文の復号・整合性検査 → stage(validate_call) → validate_call → prompt一致検査 → FunctionCall
   → 成功ごとに保存 → 完了/失敗通知 → 次の入力
 with終了：端末復帰 → 要約 → mainの終了コード

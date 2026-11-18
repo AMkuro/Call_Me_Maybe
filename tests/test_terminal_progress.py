@@ -28,11 +28,12 @@ class ObservationTests(unittest.TestCase):
                 patch.object(Model, 'logits', return_value=[0.0]), \
                 patch.object(Model, 'decode',
                              side_effect=PromptError('diagnostic decode')):
-            plain = pipeline.select_name('request', model=model,
-                                         functions={fn.name: fn}, trie=trie)
+            plain = pipeline.select_function('request', model=model,
+                                             functions={fn.name: fn},
+                                             trie=trie)
             with contextlib.redirect_stderr(io.StringIO()):
                 dashboard = Dashboard(1, model, {})
-                observed = pipeline.select_name(
+                observed = pipeline.select_function(
                     'request', model=model, functions={fn.name: fn},
                     trie=trie, progress=dashboard,
                 )
@@ -56,7 +57,7 @@ class ObservationTests(unittest.TestCase):
                     patch.object(Model, 'decode', return_value='b'), \
                     patch.object(Model, 'logits', return_value=scores) as llm:
                 dashboard = Dashboard(1, model, {0: b'x', 1: b'a', 2: b'b'})
-                result = pipeline.select_name(
+                result = pipeline.select_function(
                     'request', model=model, functions=functions,
                     trie=trie, progress=dashboard,
                 )
@@ -223,7 +224,7 @@ class LoopObservationTests(unittest.TestCase):
                 patch.object(Model, 'logits',
                              return_value=[9.0, 0.0, 1.0, 2.0]) as llm, \
                 patch.object(dashboard, 'name_token', side_effect=observe):
-            selected = pipeline.select_name(
+            selected = pipeline.select_function(
                 'request', model=model, functions={'a': first, 'b': second},
                 trie=trie, progress=dashboard,
             )
@@ -252,7 +253,7 @@ class LoopObservationTests(unittest.TestCase):
                 dashboard = Dashboard(1, model, vocab)
                 with patch.object(Model, 'logits',
                                   return_value=[0.0, 1.0, 2.0]) as llm:
-                    result = pipeline.generate_value(
+                    result = pipeline.generate_value_with_delimiter(
                         slot, [9], model=model, vocab=vocab,
                         progress=dashboard,
                     )

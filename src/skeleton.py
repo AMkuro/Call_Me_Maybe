@@ -26,7 +26,7 @@ class ValueSlot(BaseModel):
     terminator: Literal[",", "}"]
 
 
-def build_skeleton(fn: FunctionDef) -> list[Forced | ValueSlot]:
+def build_call_suffix(fn: FunctionDef) -> list[Forced | ValueSlot]:
     """Lay out what follows the escaped name: ``,"parameters":{"k": ...}}``.
 
     Judgment: lays out only what follows the name; the name is chosen

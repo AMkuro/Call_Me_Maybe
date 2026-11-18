@@ -59,7 +59,9 @@ def _advance_string(phase: int, data: bytes, terminator: int) -> int:
     return phase
 
 
-def _value_state(data: bytes, kind: ParamType, terminator: bytes) -> int:
+def _slot_prefix_states(
+    data: bytes, kind: ParamType, terminator: bytes,
+) -> int:
     """Recognize an entire candidate, including bytes within merged tokens."""
     data = data.lstrip(_WHITESPACE)
     if kind == "string":
@@ -80,7 +82,7 @@ def _value_state(data: bytes, kind: ParamType, terminator: bytes) -> int:
                     for word in (b"true", b"false")) else -1
 
 
-def allowed_value_tokens(
+def allowed_slot_tokens(
     vocab: dict[int, bytes], param_type: ParamType, written: bytes,
     terminator: str,
 ) -> list[int]:
@@ -107,15 +109,16 @@ def allowed_value_tokens(
                 if value and _advance_string(phase, value, delimiter[0]) >= 0
                 and _utf8_prefix(pending + value)]
     return [token for token, value in vocab.items()
-            if value and _value_state(written + value, param_type,
-                                      delimiter) >= 0]
+            if value and _slot_prefix_states(written + value, param_type,
+                                             delimiter) >= 0]
 
 
-def is_value_complete(
+def is_slot_complete(
     written: bytes, param_type: ParamType, terminator: str,
 ) -> bool:
     """Return True only after a whole value and its JSON ``terminator``.
 
     A valid number without its terminator is not finished (ADR-0012).
     """
-    return _value_state(written, param_type, terminator.encode("ascii")) == 1
+    delimiter = terminator.encode("ascii")
+    return _slot_prefix_states(written, param_type, delimiter) == 1

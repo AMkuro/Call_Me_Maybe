@@ -11,7 +11,9 @@ from .model_port import Model
 SelectionMode = Literal["forced", "greedy"]
 
 
-def choose_token(logits: Sequence[float], allowed: Collection[int]) -> int:
+def constrained_argmax(
+    logits: Sequence[float], allowed: Collection[int],
+) -> int:
     """Set every token outside ``allowed`` to -inf and return the best one."""
     try:
         scores = np.asarray(logits, dtype=float)
@@ -32,7 +34,7 @@ def choose_token(logits: Sequence[float], allowed: Collection[int]) -> int:
     return int(np.argmax(masked))
 
 
-def select_next_token(
+def infer_and_select_next_token(
     model: Model,
     ids: list[int],
     allowed: list[int],
@@ -52,6 +54,6 @@ def select_next_token(
     logits = model.logits(ids)
     if len(allowed) == 1:
         return allowed[0], "forced", None
-    token = choose_token(logits, allowed)
+    token = constrained_argmax(logits, allowed)
     raw_top = int(np.argmax(logits)) if include_raw_top else None
     return token, "greedy", raw_top

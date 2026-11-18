@@ -29,7 +29,7 @@ class SelectionTests(unittest.TestCase):
                     with patch.object(
                         Model, 'logits', return_value=scores,
                     ) as llm:
-                        choice = decoder.select_next_token(
+                        choice = decoder.infer_and_select_next_token(
                             model, ids, allowed, include_raw_top=diagnose,
                         )
                     self.assertEqual(choice, (
@@ -47,7 +47,7 @@ class SelectionTests(unittest.TestCase):
                                  return_value=[0.0, 0.0, 0.0]) as llm, \
                     patch.object(np, 'asarray', side_effect=AssertionError), \
                     patch.object(np, 'argmax', side_effect=AssertionError):
-                self.assertEqual(decoder.select_next_token(
+                self.assertEqual(decoder.infer_and_select_next_token(
                     model, [9], [2], include_raw_top=diagnose,
                 ), (2, 'forced', None))
                 llm.assert_called_once_with([9])
@@ -67,7 +67,7 @@ class SelectionTests(unittest.TestCase):
         with patch.object(Model, 'encode', return_value=[50]), \
                 patch.object(Model, 'logits', side_effect=logits), \
                 patch.object(pipeline, 'build_name_prompt', return_value='N'):
-            chosen = pipeline.select_name(
+            chosen = pipeline.select_function(
                 'x', model=object.__new__(Model),
                 functions={'ab': fn('ab'), 'ac': fn('ac')}, trie=trie)
         self.assertEqual(chosen.name, 'ac')
@@ -77,7 +77,8 @@ class SelectionTests(unittest.TestCase):
         """Empty candidates preserve the existing continuation error."""
         with patch.object(Model, 'logits', side_effect=AssertionError):
             with self.assertRaisesRegex(PromptError, 'no allowed token'):
-                decoder.select_next_token(object.__new__(Model), [], [])
+                decoder.infer_and_select_next_token(
+                    object.__new__(Model), [], [])
 
     def test_no_ranking_or_probability_work(self) -> None:
         """Selection and warnings require neither top-k nor softmax."""
@@ -85,6 +86,6 @@ class SelectionTests(unittest.TestCase):
                 patch.object(np, 'argpartition', side_effect=AssertionError), \
                 patch.object(np, 'sort', side_effect=AssertionError), \
                 patch.object(np, 'exp', side_effect=AssertionError):
-            self.assertEqual(decoder.select_next_token(
+            self.assertEqual(decoder.infer_and_select_next_token(
                 object.__new__(Model), [], [1, 2], include_raw_top=True,
             ), (2, 'greedy', 0))

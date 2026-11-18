@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping
 
 from .schema import FunctionDef, Scalar
-from .skeleton import Forced, build_skeleton
+from .skeleton import Forced, build_call_suffix
 
 NAME_INSTRUCTIONS = (
     "Choose the function matching the request. Reply with its exact name only."
@@ -29,8 +29,8 @@ PARAMETER_INSTRUCTIONS = (
 PARAMETER_EXAMPLES: list[tuple[FunctionDef, str, dict[str, Scalar]]] = []
 
 
-def _chat(instructions: str, content: str,
-          examples: list[tuple[str, str]] | None = None) -> str:
+def _format_chatml(instructions: str, content: str,
+                   examples: list[tuple[str, str]] | None = None) -> str:
     """Use the installed tokenizer's non-thinking ChatML completion prefix.
 
     Earlier (user, assistant) turns have no think block, as in the template.
@@ -56,7 +56,7 @@ def build_name_prompt(
             f"{name} ({spec.type})" for name, spec in fn.parameters.items()
         ) for fn in functions.values()
     )
-    return _chat(
+    return _format_chatml(
         NAME_INSTRUCTIONS,
         f"Available functions:\n{definitions}\n\n"
         f"Request: {json.dumps(user_prompt)}",
@@ -71,12 +71,12 @@ def _parameters_request(user_prompt: str, fn: FunctionDef) -> str:
             f"Function to call: {definition}")
 
 
-def example_answer(user_prompt: str, fn: FunctionDef,
-                   parameters: dict[str, Scalar]) -> str:
+def build_example_call_json(user_prompt: str, fn: FunctionDef,
+                            parameters: dict[str, Scalar]) -> str:
     """The JSON text the pipeline would produce: same head and skeleton."""
     text = (f'{{"prompt":{json.dumps(user_prompt)},'
             f'"name":{json.dumps(fn.name)}')
-    for part in build_skeleton(fn):
+    for part in build_call_suffix(fn):
         text += (part.text if isinstance(part, Forced) else
                  json.dumps(parameters[part.name]) + part.terminator)
     return text
@@ -85,7 +85,7 @@ def example_answer(user_prompt: str, fn: FunctionDef,
 def build_parameters_prompt(user_prompt: str, fn: FunctionDef) -> str:
     """Prompt for generating the parameter values of ``fn``."""
     examples = [(_parameters_request(request, example_fn),
-                 example_answer(request, example_fn, values))
+                 build_example_call_json(request, example_fn, values))
                 for example_fn, request, values in PARAMETER_EXAMPLES]
-    return _chat(PARAMETER_INSTRUCTIONS, _parameters_request(user_prompt, fn),
-                 examples)
+    return _format_chatml(PARAMETER_INSTRUCTIONS,
+                          _parameters_request(user_prompt, fn), examples)

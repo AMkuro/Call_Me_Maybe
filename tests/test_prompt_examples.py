@@ -36,7 +36,7 @@ class PromptExampleTests(unittest.TestCase):
         with patch.object(prompt, 'PARAMETER_EXAMPLES',
                           [(FN, REQUEST, VALUES)]):
             text = prompt.build_parameters_prompt('Go', FN)
-        answer = prompt.example_answer(REQUEST, FN, VALUES)
+        answer = prompt.build_example_call_json(REQUEST, FN, VALUES)
         self.assertEqual(text.count('<think>'), 1)
         self.assertLess(text.index(answer + '<|im_end|>'),
                         text.index('User request: "Go"'))

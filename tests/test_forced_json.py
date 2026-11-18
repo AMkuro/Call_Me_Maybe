@@ -102,16 +102,16 @@ class ForcedJsonTests(unittest.TestCase):
         )
         expected = head.replace('<', r'\u003c') + members + '}}'
         self.target = expected.encode()
-        return pipeline.generate_parameters(prompt, fn, model=self.model,
-                                            vocab=self.vocab)
+        return pipeline.generate_call_json(prompt, fn, model=self.model,
+                                           vocab=self.vocab)
 
     def test_fixed_ids_commit_individually_after_one_forward(self) -> None:
         """Method B: each fixed ID follows one forward on the full prefix."""
-        self.assertTrue(hasattr(pipeline, '_append_forced'))
+        self.assertTrue(hasattr(pipeline, '_append_forced_fragment'))
         self.target = b'{"x": '
         output = AppendTrace()
-        pipeline._append_forced('{"x": ', [80], output, model=self.model,
-                                vocab=self.vocab)
+        pipeline._append_forced_fragment('{"x": ', [80], output,
+                                         model=self.model, vocab=self.vocab)
         self.assertEqual(output, [123, 34, 120, 34, 58, 32])
         expected = [list(b'{"x": '[:end]) for end in range(1, 7)]
         self.assertEqual(output.prefixes, expected)
@@ -181,8 +181,8 @@ class ForcedJsonTests(unittest.TestCase):
         with patch.object(Model, 'encode', side_effect=lambda text:
                           [80] if text == 'P' else [120]):
             with self.assertRaises(PromptError):
-                pipeline.generate_parameters('x', fn, model=self.model,
-                                             vocab=self.vocab)
+                pipeline.generate_call_json('x', fn, model=self.model,
+                                            vocab=self.vocab)
         self.assertEqual(self.contexts, [])
 
     def test_unknown_fixed_id_is_a_prompt_error(self) -> None:
@@ -190,15 +190,15 @@ class ForcedJsonTests(unittest.TestCase):
         with patch.object(Model, 'encode', side_effect=lambda text:
                           [80] if text == 'P' else [999]):
             with self.assertRaises(PromptError):
-                pipeline.generate_parameters('x', fn, model=self.model,
-                                             vocab=self.vocab)
+                pipeline.generate_call_json('x', fn, model=self.model,
+                                            vocab=self.vocab)
 
     def test_sdk_decode_loss_is_a_prompt_error(self) -> None:
         fn = self.definition('f')
         with patch.object(Model, 'decode', return_value=''):
             with self.assertRaises(PromptError):
-                pipeline.generate_parameters('x', fn, model=self.model,
-                                             vocab=self.vocab)
+                pipeline.generate_call_json('x', fn, model=self.model,
+                                            vocab=self.vocab)
 
     def test_completed_value_decode_must_match_grammar_bytes(self) -> None:
         fn = self.definition('f', n='number')
@@ -236,13 +236,13 @@ class ForcedJsonTests(unittest.TestCase):
         encodings = {'{"a":': [300], ' true}': [301],
                      '{"a": true}': [302]}
         with patch.object(Model, 'encode', side_effect=encodings.__getitem__):
-            pipeline._append_forced('{"a":', [80], output, model=self.model,
-                                    vocab=self.vocab)
-            pipeline._append_forced(' true}', [80], output, model=self.model,
-                                    vocab=self.vocab)
+            pipeline._append_forced_fragment(
+                '{"a":', [80], output, model=self.model, vocab=self.vocab)
+            pipeline._append_forced_fragment(
+                ' true}', [80], output, model=self.model, vocab=self.vocab)
             self.assertNotEqual(output, self.model.encode('{"a": true}'))
         self.assertEqual(output, [300, 301])
-        self.assertEqual(pipeline._decode_output(
+        self.assertEqual(pipeline._decode_and_verify_output(
             output, model=self.model, vocab=self.vocab), '{"a": true}')
         self.assertEqual(self.contexts, [[80], [80, 300]])
 
@@ -255,8 +255,8 @@ class ForcedJsonTests(unittest.TestCase):
         )
         text = ('{"prompt":"request","name":"f","parameters":'
                 '{"n":9007199254740993.0}}')
-        with patch.object(pipeline, 'select_name', return_value=fn), \
-                patch.object(pipeline, 'generate_parameters',
+        with patch.object(pipeline, 'select_function', return_value=fn), \
+                patch.object(pipeline, 'generate_call_json',
                              return_value=text):
             call = pipeline.process_prompt('request', resources)
         self.assertEqual(call.parameters['n'], 9007199254740993)
@@ -276,8 +276,8 @@ class ForcedJsonTests(unittest.TestCase):
             model=self.model, vocab=self.vocab, functions={'f': fn},
             trie=NameTrie(paths={'f': (1,)}),
         )
-        with patch.object(pipeline, 'select_name', return_value=fn), \
-                patch.object(pipeline, 'generate_parameters', return_value=(
+        with patch.object(pipeline, 'select_function', return_value=fn), \
+                patch.object(pipeline, 'generate_call_json', return_value=(
                     '{"prompt":"changed","name":"f","parameters":{}}')):
             with self.assertRaisesRegex(PromptError, 'prompt'):
                 pipeline.process_prompt('original', resources)

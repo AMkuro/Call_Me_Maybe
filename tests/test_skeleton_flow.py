@@ -94,15 +94,15 @@ class PipelineTests(unittest.TestCase):
 
                 with patch.object(Model, 'decode', side_effect=decode), \
                         patch.object(Model, 'logits', side_effect=logits), \
-                        patch.object(pipeline, 'is_value_complete',
+                        patch.object(pipeline, 'is_slot_complete',
                                      side_effect=complete), \
-                        patch.object(pipeline, 'allowed_value_tokens',
+                        patch.object(pipeline, 'allowed_slot_tokens',
                                      side_effect=allowed), \
-                        patch('src.decoder.choose_token', side_effect=(
+                        patch('src.decoder.constrained_argmax', side_effect=(
                             lambda scores, permitted:
                             max(permitted, key=scores.__getitem__)
                         )):
-                    result = pipeline.generate_value(
+                    result = pipeline.generate_value_with_delimiter(
                         slot, [127], model=model,
                         vocab={token: bytes([token]) for token in range(128)},
                     )
@@ -136,12 +136,13 @@ class PipelineTests(unittest.TestCase):
                         patch.object(Model, 'logits', return_value=[0.0]), \
                         patch.object(pipeline, 'build_parameters_prompt',
                                      return_value=''), \
-                        patch.object(pipeline, 'build_skeleton',
+                        patch.object(pipeline, 'build_call_suffix',
                                      return_value=parts), \
-                        patch.object(pipeline, 'generate_value', side_effect=[
-                            encode('12.0,'), encode('true}'),
-                        ]):
-                    text = pipeline.generate_parameters(
+                        patch.object(pipeline,
+                                     'generate_value_with_delimiter',
+                                     side_effect=[encode('12.0,'),
+                                                  encode('true}')]):
+                    text = pipeline.generate_call_json(
                         'a "quoted" prompt', fn,
                         model=model,
                         vocab={token: bytes([token]) for token in range(128)},
