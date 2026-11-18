@@ -10,20 +10,15 @@ NAME_INSTRUCTIONS = (
     "Choose the function matching the request. Reply with its exact name only."
     " Use the descriptions to match the requested action."
 )
+# Five more sentences changed no answer on 119 cases (2026-11-18, exp. 3).
 PARAMETER_INSTRUCTIONS = (
-    "The user request will be fulfilled by calling the given function. "
     "Extract the arguments of that call from the user request: copy each "
     "value as it appears in the request; do not answer the request or "
     "compute a result. "
-    "Keep the requested input values and strings exact. Return only a JSON "
-    "object with prompt, name, parameters. "
+    "Return only a JSON object with prompt, name, parameters. "
     "Use JSON numbers, strings, true/false."
     " Convert descriptions of patterns into actual regular expressions; "
-    "do not list the matched substrings. Express replacement symbols as "
-    "their literal characters."
-    " Do not add leading or trailing whitespace unless it belongs to the "
-    "requested value."
-    " Preserve numeric signs and decimal points."
+    "do not list the matched substrings."
 )
 # Worked examples shown before the request: (function, request, parameters).
 PARAMETER_EXAMPLES: list[tuple[FunctionDef, str, dict[str, Scalar]]] = []
@@ -65,8 +60,9 @@ def build_name_prompt(
 
 def _parameters_request(user_prompt: str, fn: FunctionDef) -> str:
     """User turn content: the user's request, then the call that fulfils it."""
-    definition = json.dumps(fn.model_dump(), ensure_ascii=False,
-                            separators=(",", ":"))
+    # "returns" is not needed to extract arguments (2026-11-18, experiment 3).
+    definition = json.dumps(fn.model_dump(exclude={"returns"}),
+                            ensure_ascii=False, separators=(",", ":"))
     return (f"User request: {json.dumps(user_prompt)}\n"
             f"Function to call: {definition}")
 
