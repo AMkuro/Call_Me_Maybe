@@ -27,7 +27,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _start(
     argv: Sequence[str] | None,
-) -> tuple[Args, list[str], GenerationAssets]:
+) -> tuple[Args, tuple[str, ...], GenerationAssets]:
     """Check the inputs and the output path, then load the model.
 
     The model is loaded last, so a bad file fails fast. Raises
@@ -41,7 +41,7 @@ def _start(
 
 
 def _end(
-    args: Args, prompts: list[str], resources: GenerationAssets,
+    args: Args, prompts: Sequence[str], resources: GenerationAssets,
 ) -> int:
     """Run the batch, close the terminal, and report save failures.
 

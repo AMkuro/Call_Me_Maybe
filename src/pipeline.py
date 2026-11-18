@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
 
 
 def process_all(
-    prompts: list[str], resources: GenerationAssets, output: Path,
+    prompts: Sequence[str], resources: GenerationAssets, output: Path,
     dashboard: Dashboard,
 ) -> bool:
     """Process every prompt; True when none failed.

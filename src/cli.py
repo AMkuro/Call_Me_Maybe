@@ -1,10 +1,12 @@
 """Command-line arguments."""
 
 import argparse
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from types import MappingProxyType
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from .loader import load_functions, load_prompts
 from .schema import FunctionDef
@@ -28,26 +30,20 @@ class Args(BaseModel):
     input: Path = Path("data/input/function_calling_tests.json")
     output: Path = Path("data/output/function_calls.json")
 
-    _functions: dict[str, FunctionDef] = PrivateAttr()
-    _prompts: list[str] = PrivateAttr()
+    functions: Mapping[str, FunctionDef] = Field(
+        default_factory=dict, exclude=True, repr=False,
+    )
+    prompts: tuple[str, ...] = Field(default=(), exclude=True, repr=False)
 
-    @model_validator(mode="after")
-    def _load_and_prepare(self) -> "Args":
-        """Validate both inputs before creating or probing output parents."""
-        self._functions = load_functions(self.functions_definition)
-        self._prompts = load_prompts(self.input)
+    def __init__(self, **data: Any) -> None:
+        """Validate inputs and output, then install immutable snapshots."""
+        super().__init__(**data)
+        functions = load_functions(self.functions_definition)
+        prompts = load_prompts(self.input)
         prepare_output(self.output)
-        return self
-
-    @property
-    def functions(self) -> dict[str, FunctionDef]:
-        """Return the definitions read and validated during initialization."""
-        return self._functions
-
-    @property
-    def prompts(self) -> list[str]:
-        """Return the prompts read and validated during initialization."""
-        return self._prompts
+        # Only initialization installs these already validated, frozen fields.
+        object.__setattr__(self, "functions", MappingProxyType(functions))
+        object.__setattr__(self, "prompts", tuple(prompts))
 
 
 def parse_args(argv: Sequence[str] | None = None) -> Args:

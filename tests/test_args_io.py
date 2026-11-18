@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from pydantic import ValidationError
+
 from src import __main__ as entry
 from src.cli import Args, parse_args
 from src.errors import StartupError
@@ -43,9 +45,41 @@ class ArgsIOTests(unittest.TestCase):
         self.assertTrue(self.output.parent.is_dir())
         self.assertEqual(list(self.output.parent.iterdir()), [])
         self.assertEqual(list(args.functions), ['ping'])
-        self.assertEqual(args.prompts, ['ping'])
+        self.assertEqual(args.prompts, ('ping',))
         self.assertEqual(set(args.model_dump()),
                          {'functions_definition', 'input', 'output'})
+
+    def test_validated_args_reject_mutation(self) -> None:
+        """Validation finishes with frozen fields and immutable snapshots."""
+        args = Args.model_validate({
+            'functions_definition': self.functions, 'input': self.prompts,
+            'output': self.output,
+        })
+        function = args.functions['ping']
+        with self.assertRaises(TypeError):
+            args.functions['other'] = function  # type: ignore[index]
+        with self.assertRaises(TypeError):
+            del args.functions['ping']  # type: ignore[attr-defined]
+        with self.assertRaises(TypeError):
+            args.prompts[0] = 'changed'  # type: ignore[index]
+        with self.assertRaises(ValidationError):
+            args.functions = {}
+        with self.assertRaises(ValidationError):
+            args.prompts = ('changed',)
+        with self.assertRaises(ValidationError):
+            args.output = self.root / 'other.json'
+        with self.assertRaises(ValidationError):
+            del args.prompts
+        self.assertEqual(list(args.functions), ['ping'])
+        self.assertEqual(args.prompts, ('ping',))
+
+    def test_revalidating_an_instance_does_not_replace_snapshots(self) -> None:
+        """An existing frozen instance keeps its data without another read."""
+        args = parse_args(self.arguments())
+        self.prompts.write_text('[{"prompt":"changed"}]')
+        with patch.object(Path, 'read_text', side_effect=AssertionError):
+            self.assertIs(Args.model_validate(args), args)
+        self.assertEqual(args.prompts, ('ping',))
 
     def test_bad_inputs_do_not_prepare_output(self) -> None:
         """Unreadable, malformed and insufficient inputs fail first."""
@@ -76,11 +110,11 @@ class ArgsIOTests(unittest.TestCase):
             args, prompts, _ = entry._start(self.arguments())
         self.assertEqual(reads, [self.functions, self.prompts])
         self.prompts.write_text('[{"prompt":"changed"}]')
-        self.assertEqual(prompts, ['ping'])
-        self.assertEqual(args.prompts, ['ping'])
+        self.assertEqual(prompts, ('ping',))
+        self.assertEqual(args.prompts, ('ping',))
         self.assertEqual(load_prompts(self.prompts), ['changed'])
         self.prompts.unlink()
-        self.assertEqual(args.prompts, ['ping'])
+        self.assertEqual(args.prompts, ('ping',))
         with self.assertRaises(StartupError):
             load_prompts(self.prompts)
 

@@ -44,7 +44,7 @@ Subject の最終目標には正答率90%以上、JSON・型適合率100%、全�
 
 入力不備が原因の失敗を推論の失敗と混同しないため、ファイルを先に読み、検証してからモデルを起動する。
 `parse_args`がCLIを解析し、その結果から`Args`を初期化する。
-`Args`のPydantic検証で`load_functions`と`load_prompts`を呼び、両方の入力を検証する。
+`Args`のコンストラクタがPydanticでパスを検証した後、`load_functions`と`load_prompts`で入力を検証する。
 全ての所有JSON読み込みは`json_io.loads`へ集める。標準`json.loads`の`object_pairs_hook`で
 各オブジェクトのキー重複を辞書への上書き前に拒否し、`parse_constant`でNaN・Infinityを拒否する。
 小数は`parse_float=Decimal`で正確に読み、整数はintで受け取る。Pydanticの`validate_json`には
@@ -63,8 +63,18 @@ Subject の最終目標には正答率90%以上、JSON・型適合率100%、全�
 既存の出力先は通常ファイルであることを確認し、内容を変更しない。出力ファイルがなければ確認時には作成しない。
 入力の検証に失敗した場合は、出力先の準備も行わない。失敗は従来どおり文脈付きのStartupErrorとし、モデルを読み込まない。
 
-読込結果は`Args`のprivate属性に保持し、`functions`と`prompts`プロパティから起動処理へ渡す。
-model_dumpの公開フィールドは既存の3パスのままで、`_start`は入力を読み直さずにモデルを構築する。
+読込結果は`Args`のfrozenフィールドに保持し、起動処理へ渡す。
+functionsは`MappingProxyType`、promptsは`tuple[str, ...]`とし、通常の属性代入・削除や項目変更を拒否する。
+FunctionDefとそのparametersも読み取り専用なので、関数定義の入れ子からも変更しない。
+両フィールドは`exclude=True`で、model_dumpの出力は既存の3パスのままに保つ。
+_startは入力を読み直さず、後続のバッチ処理は読み取り専用の`Sequence[str]`を受け取る。
+
+PrivateAttrは外部変更を拒否しないため、入力の保持には使わない。コンストラクタがloaderの検証を通った
+スナップショットを`object.__setattr__`で一度設定し、返却後はPydanticのfrozenを使う。
+after validatorに初期化を置くと、既存インスタンスへのmodel_validateでも再読込・差し替えが起こり得るため採らない。
+既存Argsへのmodel_validateは同じインスタンスを返し、ファイルを読み直さずスナップショットを維持する。
+この不変性は通常のAPI操作が対象であり、object.__setattr__・__dict__の直接操作や
+model_construct・未検証のmodel_copy(update=...)による検証迂回を防ぐセキュリティ境界ではない。
 Argsという名称はCLIに基づく起動設定という責務に適合するため維持する。
 入力を開けるかだけ先に確認して後で読み直す案は、I/Oが重複し、不正JSONでも先に出力準備へ進むため採らない。
 
@@ -859,7 +869,7 @@ Modelの所有権をDashboardへ移すわけではなく、表示メソッドで
 
 ```python
 def process_all(
-    prompts: list[str], resources: GenerationAssets, output: Path,
+    prompts: Sequence[str], resources: GenerationAssets, output: Path,
     dashboard: Dashboard,
 ) -> bool: ...
 
@@ -910,7 +920,7 @@ def constrained_argmax(
 ) -> int: ...
 ```
 
-_startは`tuple[Args, list[str], GenerationAssets]`を返す。Dashboardの構築は
+_startは`tuple[Args, tuple[str, ...], GenerationAssets]`を返す。Dashboardの構築は
 `Dashboard(total: int, model: Model, vocab: Mapping[int, bytes])`で、__init__はNoneを返す。
 具体的なDashboardは__main__._endがwithで管理し、生成へ渡すのは別引数のGenerationProgressだけである。
 
