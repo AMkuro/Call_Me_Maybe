@@ -201,7 +201,8 @@ removal. [Prompt shortening](research/2026-11-18-prompt-shortening.md) and
 [instruction shortening](research/2026-11-18-instruction-shortening.md) record
 the prompt experiments; the owner adopted configuration c1B (four instruction
 sentences, no "returns" in the definition) on 2026-11-18. [Regex instructions](research/2026-11-18-regex-instructions.md)
-records general regex rules that were not adopted.
+records general regex rules and example instructions that were not adopted,
+and the adopted integer termination and float-text saving experiment.
 
 - `make install` recreates `.venv` from `uv.lock` (CPU torch). `uv sync` alone
   also works, as the reviewers require. torch comes from the default `cpu`

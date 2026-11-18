@@ -1,0 +1,56 @@
+{
+  "measurement": "GPU accuracy and output validation only; no timing conclusions",
+  "base_revision": "68055a6bac1ae147ce2b7edd8997d8bd309cb9eb",
+  "port_from": [
+    "66676dc",
+    "ddc4d59",
+    "eccb5fa",
+    "0dfa46e"
+  ],
+  "environment": {
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "packages": {
+      "torch": "2.14.1+rocm7.2",
+      "transformers": "5.22.2",
+      "numpy": "2.5.4",
+      "pydantic": "2.14.3",
+      "llm-sdk": "0.1.0"
+    }
+  },
+  "gpu": "Radeon 8060S Graphics; torch.cuda.is_available() checked true on host",
+  "checks": {
+    "standard": {
+      "completed": 11,
+      "schema_valid": 11,
+      "correct": 10,
+      "finite_float_arguments": 6
+    },
+    "timer": {
+      "completed": 1,
+      "schema_valid": 1,
+      "correct": 1,
+      "finite_float_arguments": 1
+    }
+  },
+  "standard_matches_n1_by_value": true,
+  "development_checks": {
+    "make install": "passed (host execution required for uv cache)",
+    "make lint": "passed; Subject mypy flags, 50 files",
+    "make test": "247 tests passed"
+  },
+  "source_sha256": {
+    "llm_sdk/llm_sdk/__init__.py": "547950f3e58eca9b996d4fd12771713204b480de65a56bacb96b10362ab5d84c",
+    "src/pipeline.py": "76bd5c414519ab92b0c8192653e4bf0d4c4ee35d0c5b871e10a933ff578abcab",
+    "src/prompt.py": "19b1361654ce4b505a0fad09bf42c8b3e502fada17c9e045453afa932d585ba6",
+    "src/schema.py": "99ab1ac04a2dbff109340622022633f07dc658a69490e6a517d7ee16b37c90a6",
+    "src/values.py": "130c2d2f80624c0ff3b445bfebfc5d7d0232373ea2e7ef2a677df85295dc0598",
+    "tools/measure_application.py": "7aa13c87190a0bd6d5b4c3bc1a6f0f18a4a083f57175ab02c93d6059b46edc6a"
+  },
+  "limits": [
+    "Full 119-case evaluation not rerun after port",
+    "CPU and campus timings not measured",
+    "Known standard vowel replacement remains wrong",
+    "32-token budget includes terminator and can reject long legitimate numbers"
+  ],
+  "implementation_revision": "87abb653b0d77f21d89e380673a5a044a1a10f6e"
+}
