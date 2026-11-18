@@ -40,9 +40,10 @@ class PromptExampleTests(unittest.TestCase):
         self.assertEqual(text.count('<think>'), 1)
         self.assertLess(text.index(answer + '<|im_end|>'),
                         text.index('User request: "Go"'))
-        self.assertEqual(answer, '{"prompt": "Scale -0.25 in \\"m/s\\", '
-                         'rounded", "name": "fn_scale", "parameters": '
-                         '{"x": -0.25, "unit": "m/s", "round": true}}')
+        # The user's text keeps its own ", " inside the JSON string.
+        self.assertEqual(answer, '{"prompt":"Scale -0.25 in \\"m/s\\", '
+                         'rounded","name":"fn_scale","parameters":'
+                         '{"x": -0.25,"unit": "m/s","round": true}}')
 
 
 if __name__ == '__main__':

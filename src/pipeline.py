@@ -159,8 +159,8 @@ def generate_parameters(
     prompt_ids = model.encode(build_parameters_prompt(user_prompt, fn))
     output_ids: list[int] = []
     head = (
-        f'{{"prompt": {json.dumps(user_prompt)}, '
-        f'"name": {json.dumps(fn.name)}'
+        f'{{"prompt":{json.dumps(user_prompt)},'
+        f'"name":{json.dumps(fn.name)}'
     )
     fragments = [_append_forced(head, output_ids, model=model, vocab=vocab)]
     for part in build_skeleton(fn):

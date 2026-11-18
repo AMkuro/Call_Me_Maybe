@@ -145,14 +145,14 @@ class StructureTests(unittest.TestCase):
         fn = definition(**{'quote"': 'string', 'b': 'number'})
         parts = build_skeleton(fn)
         self.assertEqual(parts, [
-            Forced(text=', "parameters": {"quote\\\"": '),
+            Forced(text=',"parameters":{"quote\\\"": '),
             ValueSlot(name='quote"', type='string', terminator=','),
-            Forced(text=' "b": '),
+            Forced(text='"b": '),
             ValueSlot(name='b', type='number', terminator='}'),
             Forced(text='}'),
         ])
         self.assertEqual(build_skeleton(definition()),
-                         [Forced(text=', "parameters": {}}')])
+                         [Forced(text=',"parameters":{}}')])
 
     def test_arbitrary_parameter_names_survive_validation(self) -> None:
         """Pydantic attribute names never replace dynamic JSON keys."""

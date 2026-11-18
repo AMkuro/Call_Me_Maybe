@@ -92,9 +92,9 @@ class ForcedJsonTests(unittest.TestCase):
     def run_record(self, prompt: str, fn: FunctionDef,
                    values: dict[str, object]) -> str:
         """Supply an independently serialized target for the fixed logits."""
-        head = (f'{{"prompt": {json.dumps(prompt)}, '
-                f'"name": {json.dumps(fn.name)}, "parameters": {{')
-        members = ', '.join(
+        head = (f'{{"prompt":{json.dumps(prompt)},'
+                f'"name":{json.dumps(fn.name)},"parameters":{{')
+        members = ','.join(
             json.dumps(key).replace('<', r'\u003c') + ': '
             + (f'{value}.0' if type(value) is int else
                json.dumps(value, ensure_ascii=False))
@@ -142,7 +142,7 @@ class ForcedJsonTests(unittest.TestCase):
                          'name': fn.name, 'parameters': values})
         self.assertEqual(pipeline.validate_call(text, fn).parameters, values)
         self.assertEqual(self.decode(self.decodings[-1]), text)
-        self.assertTrue(any(b'"number": -12.5, "text": ' in bytes(ids[1:])
+        self.assertTrue(any(b'"number": -12.5,"text": ' in bytes(ids[1:])
                             for ids in self.contexts))
         self.assertTrue(any(b'"flag": ' in bytes(ids[1:])
                             for ids in self.contexts))

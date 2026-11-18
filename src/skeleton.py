@@ -27,23 +27,24 @@ class ValueSlot(BaseModel):
 
 
 def build_skeleton(fn: FunctionDef) -> list[Forced | ValueSlot]:
-    """Lay out what follows the JSON-escaped name: ``, "parameters": {...}}``.
+    """Lay out what follows the escaped name: ``,"parameters":{"k": ...}}``.
 
     Judgment: lays out only what follows the name; the name is chosen
     through the tree, so it is not part of the skeleton. The head
-    ``{"prompt": ..., "name": "..."`` is built by pipeline (the prompt is
+    ``{"prompt":...,"name":"..."`` is built by pipeline (the prompt is
     copied from the input, never generated). Open: should the skeleton
     include the head?
 
     Each slot owns its following comma, or the parameters' closing brace
     for the last slot. Forced text must not repeat that delimiter
-    (ADR-0012). With no parameters, force ``, "parameters": {}}``.
+    (ADR-0012). With no parameters, force ``,"parameters":{}}``.
     """
     if not fn.parameters:
-        return [Forced(text=', "parameters": {}}')]
+        return [Forced(text=',"parameters":{}}')]
     parts: list[Forced | ValueSlot] = []
     for index, (name, spec) in enumerate(fn.parameters.items()):
-        prefix = ', "parameters": {' if index == 0 else ' '
+        prefix = ',"parameters":{' if index == 0 else ''
+        # Keep ": ": without it Qwen3 never ended "2.0" (2026-11-18 GPU run).
         parts.append(Forced(text=prefix + json.dumps(name) + ': '))
         parts.append(ValueSlot(
             name=name, type=spec.type,

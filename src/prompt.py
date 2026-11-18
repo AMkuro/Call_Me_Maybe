@@ -74,8 +74,8 @@ def _parameters_request(user_prompt: str, fn: FunctionDef) -> str:
 def example_answer(user_prompt: str, fn: FunctionDef,
                    parameters: dict[str, Scalar]) -> str:
     """The JSON text the pipeline would produce: same head and skeleton."""
-    text = (f'{{"prompt": {json.dumps(user_prompt)}, '
-            f'"name": {json.dumps(fn.name)}')
+    text = (f'{{"prompt":{json.dumps(user_prompt)},'
+            f'"name":{json.dumps(fn.name)}')
     for part in build_skeleton(fn):
         text += (part.text if isinstance(part, Forced) else
                  json.dumps(parameters[part.name]) + part.terminator)
