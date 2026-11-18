@@ -217,10 +217,14 @@ EOS はユーザーが承認した暫定方式で、障害となった場合に�
 ADR-0026の追加条件に従い、`generate_call_json`は引数用プロンプトID列Pと、
 JSON本体の確定ID列Oを分離する。出力の形は`skeleton.build_call_skeleton(user_prompt, fn)`だけが決める。
 これは`prompt`と選択済みの`name`を含む先頭、引数キー、括弧を`FixedText`、値を`ValueSlot`として、出力順に並べる。
-`generate_call_json`は各`FixedText.text`を`_append_fixed_text`で処理し、few-shotの例を作る
+`generate_call_json`は各`FixedText.text`を`_commit_fixed_text`で処理し、few-shotの例を作る
 `prompt.build_example_call_json`も同じ骨組みから例の答えを作る。出力の形を変える時に直す場所は骨組み1か所である。
 固定断片は一括encodeし、語彙バイト列・SDKのdecode・期待文字列の一致を確認してから、
-各IDの直前にP + Oで1回forwardし（1候補なので点数は使わない）、そのIDをOへappendする。
+各IDの直前に「P + O + この断片で確定済みのID」で1回forwardし（1候補なので点数は使わない）、断片のID列を返す。
+
+Oを伸ばすのは`generate_call_json`だけである。`_commit_fixed_text`と`generate_slot`は、どちらも
+そのときのP + Oを文脈として受け取り、自分が確定したID列を返す。呼び出し側がそれをOへextendする。
+以前は固定断片の関数だけがOを直接appendしていた。両者の受け渡しを同じ形にし、Oの更新を1か所で読めるようにした。
 
 #### 方式B: 出力の全トークンで1回forward（2026-11-18、所有者の決定）
 
@@ -236,6 +240,7 @@ JSON本体の確定ID列Oを分離する。出力の形は`skeleton.build_call_s
 
 - `ValueSlot`では既存どおり引数名・型を通知し、`generate_slot`へP + Oのスナップショットを渡す。
 - 値ループはローカル生成列Vを1個ずつ確定する。値生成中の論理出力はO + V、分岐時のモデル入力はP + O + Vである。
+  Vのバイト列`written`は、IDを1つ確定するたびにそのIDの語彙バイト列を足して保つ（毎ステップの全連結はしない）。
 - 完成したVのSDK復号と語彙バイト列のUTF-8復号が一致したらOへ統合する。
   このextendは確定済みIDの移管であり、再生成や再トークン化ではない。
 - 最後にO全体をSDKで復号し、語彙バイト列および検査済み各断片の連結と完全一致することを確認する。

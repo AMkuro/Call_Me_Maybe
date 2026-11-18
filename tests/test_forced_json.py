@@ -15,20 +15,6 @@ from src.schema import FunctionDef
 from src.writer import save_results
 
 
-class AppendTrace(list[int]):
-    """Record each committed prefix without adding production observers."""
-
-    def __init__(self) -> None:
-        """Start with no committed IDs."""
-        super().__init__()
-        self.prefixes: list[list[int]] = []
-
-    def append(self, token: int) -> None:
-        """Snapshot after every individual commit."""
-        super().append(token)
-        self.prefixes.append(self.copy())
-
-
 class ForcedJsonTests(unittest.TestCase):
     """Use byte tokens and fixed scores, with real grammar and validation."""
 
@@ -107,14 +93,12 @@ class ForcedJsonTests(unittest.TestCase):
 
     def test_fixed_ids_commit_individually_after_one_forward(self) -> None:
         """Method B: each fixed ID follows one forward on the full prefix."""
-        self.assertTrue(hasattr(pipeline, '_append_fixed_text'))
         self.target = b'{"x": '
-        output = AppendTrace()
-        pipeline._append_fixed_text('{"x": ', [80], output,
-                                    model=self.model, vocab=self.vocab)
-        self.assertEqual(output, [123, 34, 120, 34, 58, 32])
-        expected = [list(b'{"x": '[:end]) for end in range(1, 7)]
-        self.assertEqual(output.prefixes, expected)
+        context = [80]
+        ids = pipeline._commit_fixed_text('{"x": ', context,
+                                          model=self.model, vocab=self.vocab)
+        self.assertEqual(ids, [123, 34, 120, 34, 58, 32])
+        self.assertEqual(context, [80], 'the caller owns the output IDs')
         self.assertEqual(self.contexts,
                          [[80] + list(b'{"x": '[:end]) for end in range(6)])
 
@@ -236,10 +220,10 @@ class ForcedJsonTests(unittest.TestCase):
         encodings = {'{"a":': [300], ' true}': [301],
                      '{"a": true}': [302]}
         with patch.object(Model, 'encode', side_effect=encodings.__getitem__):
-            pipeline._append_fixed_text(
-                '{"a":', [80], output, model=self.model, vocab=self.vocab)
-            pipeline._append_fixed_text(
-                ' true}', [80], output, model=self.model, vocab=self.vocab)
+            output += pipeline._commit_fixed_text(
+                '{"a":', [80] + output, model=self.model, vocab=self.vocab)
+            output += pipeline._commit_fixed_text(
+                ' true}', [80] + output, model=self.model, vocab=self.vocab)
             self.assertNotEqual(output, self.model.encode('{"a": true}'))
         self.assertEqual(output, [300, 301])
         self.assertEqual(pipeline._decode_and_verify_output(

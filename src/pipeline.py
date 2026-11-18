@@ -144,22 +144,25 @@ def _decode_and_verify_output(
     return text
 
 
-def _append_fixed_text(
-    text: str, prompt_ids: list[int], output_ids: list[int], *,
-    model: Model, vocab: dict[int, bytes],
-) -> str:
-    """Check a fixed JSON fragment, then commit each ID after one forward.
+def _commit_fixed_text(
+    text: str, context: list[int], *, model: Model, vocab: dict[int, bytes],
+) -> list[int]:
+    """Return the IDs of a fixed JSON fragment, each after one forward.
 
-    Method B: each fixed ID is a unique candidate on P + O, like any token.
+    The fragment is encoded once and must decode back to ``text``. Method B
+    (owner decision): although each ID is already fixed and its scores are
+    unused, the model runs once before it, on ``context`` plus the IDs of
+    this fragment committed so far, as before every output token.
     """
     tokens = model.encode(text)
     if _decode_and_verify_output(tokens, model=model, vocab=vocab) != text:
         raise PromptError("fixed JSON text differs from its encoded tokens")
+    committed: list[int] = []
     for token in tokens:
         chosen, _, _ = infer_and_select_next_token(
-            model, prompt_ids + output_ids, [token])
-        output_ids.append(chosen)
-    return text
+            model, context + committed, [token])
+        committed.append(chosen)
+    return committed
 
 
 def generate_call_json(
@@ -170,24 +173,29 @@ def generate_call_json(
     vocab: dict[int, bytes],
     progress: GenerationProgress | None = None,
 ) -> str:
-    """Commit JSON IDs in order and verify their complete decoded record."""
+    """Commit JSON IDs in skeleton order and verify the decoded record.
+
+    Only this function extends ``output_ids``. Each part receives the
+    prompt and the output so far as its context, and returns its own IDs.
+    ``fragments`` holds each part's expected text to check the whole.
+    """
     prompt_ids = model.encode(build_parameters_prompt(user_prompt, fn))
     output_ids: list[int] = []
     fragments: list[str] = []
     for part in build_call_skeleton(user_prompt, fn):
+        context = prompt_ids + output_ids
         if isinstance(part, FixedText):
-            fragments.append(_append_fixed_text(part.text, prompt_ids,
-                                                output_ids, model=model,
-                                                vocab=vocab))
+            part_ids = _commit_fixed_text(part.text, context, model=model,
+                                          vocab=vocab)
+            fragments.append(part.text)
         else:
             if _observing(progress):
                 progress.parameter_started(part.name, part.type)
-            value_ids = generate_slot(
-                part, prompt_ids + output_ids, model=model, vocab=vocab,
-                progress=progress)
-            fragments.append(_decode_and_verify_output(value_ids, model=model,
+            part_ids = generate_slot(part, context, model=model, vocab=vocab,
+                                     progress=progress)
+            fragments.append(_decode_and_verify_output(part_ids, model=model,
                                                        vocab=vocab))
-            output_ids.extend(value_ids)
+        output_ids.extend(part_ids)
     text = _decode_and_verify_output(output_ids, model=model, vocab=vocab)
     if text != "".join(fragments):
         raise PromptError("full JSON decoding differs from its fragments")
@@ -204,9 +212,9 @@ def generate_slot(
 ) -> list[int]:
     """Generate one ValueSlot: a value and its terminator, within the cap."""
     generated: list[int] = []
+    written = b""  # the bytes of generated, extended with each token
     try:
         while True:
-            written = b"".join(vocab[token] for token in generated)
             if is_slot_complete(written, slot.type, slot.terminator):
                 return generated
             allowed = allowed_slot_tokens(vocab, slot.type, written,
@@ -219,8 +227,8 @@ def generate_slot(
             token, mode, _ = infer_and_select_next_token(
                 model, ids + generated, allowed)
             generated.append(token)
+            written += vocab[token]
             if _observing(progress):
-                written = b"".join(vocab[item] for item in generated)
                 progress.value_token(written, len(generated),
                                      token=token, mode=mode)
     except PromptError as e:
