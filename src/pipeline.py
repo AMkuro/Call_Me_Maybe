@@ -12,7 +12,7 @@ from .decoder import infer_and_select_next_token
 from .errors import PromptError
 from .json_io import loads
 from .model_port import Model
-from .name_trie import NameTrie, leaf_name, max_name_steps, next_tokens
+from .name_trie import NameTrie
 from .progress import GenerationProgress
 from .prompt import build_name_prompt, build_parameters_prompt
 from .schema import FunctionCall, FunctionDef, build_parameters_model
@@ -101,15 +101,15 @@ def select_function(
     """Follow the name tree until a leaf, selecting one token at a time."""
     prompt_ids = model.encode(build_name_prompt(user_prompt, functions))
     generated: list[int] = []
-    limit = max_name_steps(trie)
+    limit = trie.max_name_steps()
     try:
         while True:
-            name = leaf_name(trie, generated)
+            name = trie.leaf_name(generated)
             if name is not None:
                 if _observing(progress):
                     progress.function_selected(name)
                 return functions[name]
-            allowed = next_tokens(trie, generated)
+            allowed = trie.next_tokens(generated)
             if len(generated) >= limit:
                 raise PromptError(
                     f"token limit {limit} reached before a terminator"

@@ -102,8 +102,8 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 
 `build_name_prompt`は辞書の`values()`から全関数の名前・説明・引数名と型を入力順に列挙する。
 利用者の依頼を添え、関数名だけを応答するよう指示する。`select_function`はこれをencodeし、自分の明示ループで木を照会して`infer_and_select_next_token`を呼ぶ。
-生成中は `next_tokens` で現在の経路の子を取得し、その ID だけを次の候補にする。
-名前とEOSを合わせた完成経路の末端（葉）に到達したら`leaf_name`で元の名前を取得し、`functions[name]`で定義を返す。
+生成中は `trie.next_tokens` で現在の経路の子を取得し、その ID だけを次の候補にする。
+名前とEOSを合わせた完成経路の末端（葉）に到達したら`trie.leaf_name`で元の名前を取得し、`functions[name]`で定義を返す。
 読み込み時に作った辞書を使い、選択のたびに関数の配列を再走査しない（ADR-0016）。
 
 名前の末尾には Qwen の応答終了トークン `<|im_end|>` を含める。コード上の名前は `model_port.EOS` とし、
@@ -128,6 +128,7 @@ class NameTrie(BaseModel):          # frozen, extra="forbid", strict
     paths: Mapping[str, tuple[int, ...]]   # 名前 → encode(名前 + EOS)
     _next: Mapping[tuple[int, ...], tuple[int, ...]]  # 正しい接頭辞 → 次に許すID
     _names: Mapping[tuple[int, ...], str]             # 完成経路 → 名前
+    # 索引の照会はメソッドだけ: next_tokens(prefix)、leaf_name(prefix)、max_name_steps()
 ```
 
 構築から確定までの流れ:
@@ -149,7 +150,7 @@ class NameTrie(BaseModel):          # frozen, extra="forbid", strict
 | 完成経路の末端だけが名前を持つ。終端ノードに子がない。名前のない行き止まりがない | 上の3つから導かれる。索引はこの検査済みの経路からだけ作り、名前は完成経路にだけ付ける。接頭辞はどれも、ある完成経路の途中なので次のIDを持つ |
 | 関数名とトークン経路の対応 | `paths`が名前と経路の組そのもので、`build_name_trie`が同じ`encode`の結果から作る |
 | 同じ名前の重複を黙ってまとめない | `build_name_trie`（`paths`の件数と`names`の件数を比べる） |
-| 経路の照会: 正しい未完成の経路はNone、葉は名前、存在しない経路は`PromptError` | `leaf_name`と`next_tokens`が共通の`_known_prefix`で索引を引く |
+| 経路の照会: 正しい未完成の経路はNone、葉は名前、存在しない経路は`PromptError` | `NameTrie`のメソッド`leaf_name`と`next_tokens`が、共通の`_known_prefix`で索引を引く |
 | `functions`の各キーが`FunctionDef.name`と一致し、キー集合がTrieの名前集合と一致する | `GenerationResources`の`model_validator`。値が`FunctionDef`であることは`InstanceOf`で検査する |
 
 完成経路の接頭辞衝突は、EOSが不正だという意味ではない。完成経路への到達で名前を確定する方式では、

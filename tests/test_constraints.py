@@ -9,9 +9,7 @@ from pydantic import ValidationError
 
 from src.errors import PromptError, StartupError
 from src.model_port import EOS
-from src.name_trie import (
-    NameTrie, build_name_trie, leaf_name, max_name_steps, next_tokens,
-)
+from src.name_trie import NameTrie, build_name_trie
 from src.prompt import build_name_prompt, build_parameters_prompt
 from src.values import allowed_slot_tokens, is_slot_complete
 from src.vocab import load_vocab
@@ -33,37 +31,36 @@ class TrieTests(unittest.TestCase):
         """A shorter name becomes a leaf only after its EOS."""
         trie = build_name_trie(['fn_add', 'fn_add_numbers'], encode_name, EOS)
         prefix = encode_name('fn_add')
-        self.assertEqual(set(next_tokens(trie, prefix)), {0, ord('_')})
-        self.assertIsNone(leaf_name(trie, prefix))
-        self.assertEqual(leaf_name(trie, prefix + [0]), 'fn_add')
+        self.assertEqual(set(trie.next_tokens(prefix)), {0, ord('_')})
+        self.assertIsNone(trie.leaf_name(prefix))
+        self.assertEqual(trie.leaf_name(prefix + [0]), 'fn_add')
         longer = encode_name('fn_add_numbers<|im_end|>')
-        self.assertEqual(leaf_name(trie, longer), 'fn_add_numbers')
-        self.assertEqual(next_tokens(trie, longer), [])
-        self.assertNotIn(0, next_tokens(trie, encode_name('fn_ad')))
+        self.assertEqual(trie.leaf_name(longer), 'fn_add_numbers')
+        self.assertEqual(trie.next_tokens(longer), [])
+        self.assertNotIn(0, trie.next_tokens(encode_name('fn_ad')))
 
     def test_arbitrary_names_and_invalid_paths(self) -> None:
         """Names are leaf data, including quotes, Unicode and long names."""
         names = ['say"hello', 'path\\name', '日本語', 'a' * 100]
         trie = build_name_trie(names, encode_name, EOS)
         for name in names:
-            self.assertEqual(leaf_name(
-                trie, encode_name(name + '<|im_end|>'),
-            ), name)
-        for lookup in (leaf_name, next_tokens):
+            self.assertEqual(
+                trie.leaf_name(encode_name(name + '<|im_end|>')), name)
+        for lookup in (trie.leaf_name, trie.next_tokens):
             with self.subTest(lookup=lookup.__name__):
                 with self.assertRaises(PromptError):
-                    lookup(trie, [999999])
+                    lookup([999999])
 
     def test_leaf_name_separates_unfinished_end_and_invalid(self) -> None:
         """An unfinished valid path is None; an unknown path is an error."""
         trie = build_name_trie(['ab', 'abc'], encode_name, EOS)
-        self.assertIsNone(leaf_name(trie, []))
-        self.assertIsNone(leaf_name(trie, encode_name('ab')))
-        self.assertEqual(leaf_name(trie, encode_name('ab') + [0]), 'ab')
+        self.assertIsNone(trie.leaf_name([]))
+        self.assertIsNone(trie.leaf_name(encode_name('ab')))
+        self.assertEqual(trie.leaf_name(encode_name('ab') + [0]), 'ab')
         for path in (encode_name('ax'), encode_name('ab') + [0, 0],
                      encode_name('abc') + [0, 1]):
             with self.subTest(path=path), self.assertRaises(PromptError):
-                leaf_name(trie, path)
+                trie.leaf_name(path)
 
     def test_encoding_failures_are_startup_errors(self) -> None:
         """Tokenizer failures cannot escape the startup boundary."""
@@ -81,20 +78,20 @@ class TrieTests(unittest.TestCase):
             [ord(c) for c in text.removesuffix('<END>')]
             + ([7] if text.endswith('<END>') else [])), '<END>')
         self.assertEqual(dict(trie.paths), {'ab': (97, 98, 7), 'a': (97, 7)})
-        self.assertEqual(next_tokens(trie, [97]), [98, 7])  # input order
-        self.assertEqual(leaf_name(trie, [97, 7]), 'a')
-        self.assertEqual(max_name_steps(trie), 3)
+        self.assertEqual(trie.next_tokens([97]), [98, 7])  # input order
+        self.assertEqual(trie.leaf_name([97, 7]), 'a')
+        self.assertEqual(trie.max_name_steps(), 3)
 
     def test_next_tokens_are_unique_in_first_seen_order(self) -> None:
         """Shared prefixes list each next token once, in input order."""
         trie = NameTrie(paths={'c': (1, 3, 0), 'a': (1, 2, 0),
                                'b': (1, 3, 9, 0), 'd': (4, 0)})
-        self.assertEqual(next_tokens(trie, []), [1, 4])  # 1 seen three times
-        self.assertEqual(next_tokens(trie, [1]), [3, 2])  # not sorted
-        self.assertEqual(next_tokens(trie, [1, 3]), [0, 9])
-        self.assertEqual(next_tokens(trie, [1, 3, 0]), [])  # full path
-        self.assertEqual(leaf_name(trie, [1, 3, 9, 0]), 'b')
-        self.assertEqual(max_name_steps(trie), 4)
+        self.assertEqual(trie.next_tokens([]), [1, 4])  # 1 seen three times
+        self.assertEqual(trie.next_tokens([1]), [3, 2])  # not sorted
+        self.assertEqual(trie.next_tokens([1, 3]), [0, 9])
+        self.assertEqual(trie.next_tokens([1, 3, 0]), [])  # full path
+        self.assertEqual(trie.leaf_name([1, 3, 9, 0]), 'b')
+        self.assertEqual(trie.max_name_steps(), 4)
 
     def test_multi_token_eos_is_followed_to_the_full_path(self) -> None:
         """A terminator of several tokens is just more steps on the path."""
@@ -107,13 +104,13 @@ class TrieTests(unittest.TestCase):
 
         trie = build_name_trie(['fn_add', 'fn_add_numbers'], encode, '$$')
         short = encode('fn_add')
-        self.assertEqual(set(next_tokens(trie, short)), {1, ord('_')})
+        self.assertEqual(set(trie.next_tokens(short)), {1, ord('_')})
         for step in (short + [1], short + [1, 2]):
-            self.assertIsNone(leaf_name(trie, step))  # unfinished terminator
-            self.assertEqual(len(next_tokens(trie, step)), 1)
-        self.assertEqual(leaf_name(trie, short + [1, 2, 3]), 'fn_add')
-        self.assertEqual(next_tokens(trie, short + [1, 2, 3]), [])
-        self.assertEqual(leaf_name(trie, encode('fn_add_numbers$$')),
+            self.assertIsNone(trie.leaf_name(step))  # unfinished terminator
+            self.assertEqual(len(trie.next_tokens(step)), 1)
+        self.assertEqual(trie.leaf_name(short + [1, 2, 3]), 'fn_add')
+        self.assertEqual(trie.next_tokens(short + [1, 2, 3]), [])
+        self.assertEqual(trie.leaf_name(encode('fn_add_numbers$$')),
                          'fn_add_numbers')
 
     def test_terminator_may_merge_with_the_name(self) -> None:
@@ -127,8 +124,8 @@ class TrieTests(unittest.TestCase):
         self.assertNotEqual(encode('ab!'), encode('ab') + encode('!'))
         trie = build_name_trie(['ab', 'a'], encode, '!')
         self.assertEqual(dict(trie.paths), {'ab': (97, 50), 'a': (97, 33)})
-        self.assertEqual(leaf_name(trie, [97, 50]), 'ab')
-        self.assertEqual(leaf_name(trie, [97, 33]), 'a')
+        self.assertEqual(trie.leaf_name([97, 50]), 'ab')
+        self.assertEqual(trie.leaf_name([97, 33]), 'a')
 
     def test_bad_full_paths_are_rejected_at_build(self) -> None:
         """Empty, shared and prefix-colliding full paths are ambiguous."""
@@ -145,7 +142,7 @@ class TrieTests(unittest.TestCase):
                 build_name_trie(names, encode, EOS)
         # An EOS token inside one name is only text; no structure is broken.
         trie = build_name_trie(['a' + EOS + 'b'], encode_name, EOS)
-        self.assertEqual(leaf_name(trie, [97, 0, 98, 0]), 'a' + EOS + 'b')
+        self.assertEqual(trie.leaf_name([97, 0, 98, 0]), 'a' + EOS + 'b')
 
     def test_direct_construction_validates_the_whole_trie(self) -> None:
         """No constructor path yields an unchecked or partial trie."""
@@ -165,17 +162,17 @@ class TrieTests(unittest.TestCase):
             with self.subTest(case), self.assertRaises(ValidationError):
                 NameTrie.model_validate(data)
         trie = NameTrie(paths={'a': (97, 0), 'ab': (97, 98, 0)})
-        self.assertEqual(next_tokens(trie, [97]), [0, 98])
-        self.assertEqual(next_tokens(trie, [97, 0]), [])  # leaf: no children
-        self.assertIsNone(leaf_name(trie, [97]))  # inner node: no name
+        self.assertEqual(trie.next_tokens([97]), [0, 98])
+        self.assertEqual(trie.next_tokens([97, 0]), [])  # leaf: no children
+        self.assertIsNone(trie.leaf_name([97]))  # inner node: no name
 
     def test_unvalidated_trie_cannot_be_used(self) -> None:
         """model_construct skips validation, so no index is ever built."""
         trie = NameTrie.model_construct(paths={'a': (97, 0)})
-        for lookup in (leaf_name, next_tokens):
+        for lookup in (trie.leaf_name, trie.next_tokens):
             with self.subTest(lookup.__name__):
                 with self.assertRaises(AttributeError):
-                    lookup(trie, [97])
+                    lookup([97])
 
     def test_finished_trie_is_immutable(self) -> None:
         """Neither the trie nor its source dictionary can change its paths."""
@@ -184,16 +181,16 @@ class TrieTests(unittest.TestCase):
         source['c'] = (99, 0)
         del source['a']
         self.assertEqual(dict(trie.paths), {'a': (97, 0), 'b': (98, 0)})
-        self.assertEqual(next_tokens(trie, []), [97, 98])
+        self.assertEqual(trie.next_tokens([]), [97, 98])
         with self.assertRaises(TypeError):
             trie.paths['c'] = (99, 0)  # type: ignore[index]
         with self.assertRaises(ValidationError):
             trie.paths = {}
-        allowed = next_tokens(trie, [])
+        allowed = trie.next_tokens([])
         allowed.append(99)
-        self.assertEqual(next_tokens(trie, []), [97, 98])
+        self.assertEqual(trie.next_tokens([]), [97, 98])
         with self.assertRaises(PromptError):
-            next_tokens(trie, [99])
+            trie.next_tokens([99])
 
     def test_serialization_round_trip(self) -> None:
         """Dumped data validates back to an equal, usable trie."""
@@ -201,7 +198,7 @@ class TrieTests(unittest.TestCase):
         for again in (NameTrie.model_validate(trie.model_dump()),
                       NameTrie.model_validate_json(trie.model_dump_json())):
             self.assertEqual(again, trie)
-            self.assertEqual(leaf_name(again, [97, 0]), 'a')
+            self.assertEqual(again.leaf_name([97, 0]), 'a')
 
 
 class VocabularyTests(unittest.TestCase):

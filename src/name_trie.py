@@ -85,6 +85,25 @@ class NameTrie(BaseModel):
         """Return the names reachable through the checked index."""
         return frozenset(self._names.values())
 
+    def next_tokens(self, prefix: Sequence[int]) -> list[int]:
+        """Return the token IDs that may follow ``prefix``; none at a leaf."""
+        return list(self._next[self._known_prefix(prefix)])
+
+    def leaf_name(self, prefix: Sequence[int]) -> str | None:
+        """Return the name at a leaf, or None on a valid unfinished path."""
+        return self._names.get(self._known_prefix(prefix))
+
+    def max_name_steps(self) -> int:
+        """Return the longest full path, without a fixed name-length cap."""
+        return max(map(len, self._names))
+
+    def _known_prefix(self, prefix: Sequence[int]) -> TokenPath:
+        """Return ``prefix`` as an index key; an unknown path is an error."""
+        key = tuple(prefix)
+        if key not in self._next:
+            raise PromptError("invalid token path in name tree")
+        return key
+
 
 def build_name_trie(
     names: Sequence[str], encode: Callable[[str], list[int]], eos: str,
@@ -103,26 +122,3 @@ def build_name_trie(
         return NameTrie(paths=paths)
     except (PromptError, ValueError) as e:  # ValidationError is a ValueError
         raise StartupError(f"cannot build name tree: {e}") from e
-
-
-def _known_prefix(trie: NameTrie, prefix: Sequence[int]) -> TokenPath:
-    """Return ``prefix`` as an index key; an unknown path is an error."""
-    key = tuple(prefix)
-    if key not in trie._next:
-        raise PromptError("invalid token path in name tree")
-    return key
-
-
-def next_tokens(trie: NameTrie, prefix: Sequence[int]) -> list[int]:
-    """Return the token ids that may follow ``prefix`` (empty at a leaf)."""
-    return list(trie._next[_known_prefix(trie, prefix)])
-
-
-def leaf_name(trie: NameTrie, prefix: Sequence[int]) -> str | None:
-    """Return the name at a leaf, or None on a valid unfinished path."""
-    return trie._names.get(_known_prefix(trie, prefix))
-
-
-def max_name_steps(trie: NameTrie) -> int:
-    """Return the longest terminated path, without a fixed name-length cap."""
-    return max(map(len, trie._names))
