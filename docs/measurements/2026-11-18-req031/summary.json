@@ -1,0 +1,131 @@
+{
+  "current": {
+    "standard11": {
+      "n": 11,
+      "completed": 11,
+      "name_correct": 11,
+      "arguments_correct": 10,
+      "json_valid": 11,
+      "schema_valid": 11,
+      "number_fields": 6,
+      "decimal_fields": 6,
+      "exponent_fields": 0,
+      "forward_calls": 112,
+      "timing": {
+        "elapsed_seconds": 27.43,
+        "exit_status": 0
+      }
+    },
+    "calibrated11": {
+      "n": 11,
+      "completed": 11,
+      "name_correct": 11,
+      "arguments_correct": 9,
+      "json_valid": 11,
+      "schema_valid": 11,
+      "number_fields": 10,
+      "decimal_fields": 10,
+      "exponent_fields": 0,
+      "forward_calls": 123,
+      "timing": {
+        "elapsed_seconds": 29.55,
+        "exit_status": 0
+      }
+    },
+    "changed5": {
+      "n": 5,
+      "completed": 5,
+      "name_correct": 4,
+      "arguments_correct": 2,
+      "json_valid": 5,
+      "schema_valid": 5,
+      "number_fields": 1,
+      "decimal_fields": 1,
+      "exponent_fields": 0,
+      "forward_calls": 39,
+      "timing": {
+        "elapsed_seconds": 12.31,
+        "exit_status": 0
+      }
+    },
+    "boundary3": {
+      "n": 3,
+      "completed": 3,
+      "name_correct": 3,
+      "arguments_correct": 2,
+      "json_valid": 3,
+      "schema_valid": 3,
+      "number_fields": 1,
+      "decimal_fields": 1,
+      "exponent_fields": 0,
+      "forward_calls": 14,
+      "timing": {
+        "elapsed_seconds": 8.66,
+        "exit_status": 0
+      }
+    }
+  },
+  "previous": {
+    "calibrated11": {
+      "n": 11,
+      "completed": 11,
+      "name_correct": 11,
+      "arguments_correct": 9,
+      "json_valid": 11,
+      "schema_valid": 11,
+      "number_fields": 10,
+      "decimal_fields": 1,
+      "exponent_fields": 0,
+      "forward_calls": 105,
+      "timing": null,
+      "notation_source": "archived generated_text, not a saved file"
+    },
+    "changed5": {
+      "n": 5,
+      "completed": 5,
+      "name_correct": 4,
+      "arguments_correct": 2,
+      "json_valid": 5,
+      "schema_valid": 5,
+      "number_fields": 1,
+      "decimal_fields": 1,
+      "exponent_fields": 0,
+      "forward_calls": 39,
+      "timing": null,
+      "notation_source": "archived generated_text, not a saved file"
+    },
+    "boundary3": {
+      "n": 3,
+      "completed": 3,
+      "name_correct": 3,
+      "arguments_correct": 2,
+      "json_valid": 3,
+      "schema_valid": 3,
+      "number_fields": 1,
+      "decimal_fields": 1,
+      "exponent_fields": 0,
+      "forward_calls": 14,
+      "timing": null,
+      "notation_source": "archived generated_text, not a saved file"
+    },
+    "standard11": {
+      "n": 11,
+      "completed": 11,
+      "name_correct": 11,
+      "arguments_correct": 10,
+      "number_fields": 6,
+      "decimal_fields": 0,
+      "exponent_fields": 0,
+      "forward_calls": null,
+      "timing": {
+        "elapsed_seconds": 25.16,
+        "exit_status": 0
+      },
+      "notation_source": "archived CLI saved file"
+    }
+  },
+  "notes": [
+    "Previous values are derived from archived 2026-11-17 records, not newly measured baseline runs.",
+    "Accuracy and timing are separate runs. 19-case timing includes 3 process startups; no comparable archived 19-case runtime."
+  ]
+}

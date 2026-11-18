@@ -1,0 +1,48 @@
+{
+  "commands": {
+    "baseline test": {
+      "exit": 0,
+      "output": "\n----------------------------------------------------------------------\nRan 223 tests in 10.335s\n\nOK"
+    },
+    "final test": {
+      "exit": 0,
+      "output": "\n----------------------------------------------------------------------\nRan 235 tests in 10.379s\n\nOK"
+    },
+    "baseline lint": {
+      "exit": 0,
+      "output": "Success: no issues found in 49 source files\n"
+    },
+    "final lint": {
+      "exit": 0,
+      "output": "Success: no issues found in 50 source files\n"
+    },
+    "baseline lint-strict": {
+      "exit": 2,
+      "output": "tests/test_thermal_survey.py:85: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:87: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:142: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:144: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:149: error: Call to untyped function (unknown) in typed context  [no-untyped-call]\ntests/test_thermal_survey.py:160: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:179: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:250: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:267: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:328: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:400: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_hardware_probe.py:54: error: Module \"tools.hardware_probe\" does not explicitly export attribute \"time\"  [attr-defined]\ntests/test_hardware_probe.py:131: error: Module \"tools.hardware_probe\" does not explicitly export attribute \"os\"  [attr-defined]\ntests/test_hardware_probe.py:180: error: Module \"tools.hardware_probe\" does not explicitly export attribute \"subprocess\"  [attr-defined]\ntests/test_json_integrity.py:146: error: Call to untyped function (unknown) in typed context  [no-untyped-call]\nFound 15 errors in 3 files (checked 49 source files)\nmake: *** [Makefile:59: lint-strict] Error 1\n"
+    },
+    "final lint-strict": {
+      "exit": 2,
+      "output": "tests/test_thermal_survey.py:85: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:87: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:142: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:144: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:149: error: Call to untyped function (unknown) in typed context  [no-untyped-call]\ntests/test_thermal_survey.py:160: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:179: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:250: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:267: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:328: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_thermal_survey.py:400: error: Missing type arguments for generic type \"dict\"  [type-arg]\ntests/test_hardware_probe.py:54: error: Module \"tools.hardware_probe\" does not explicitly export attribute \"time\"  [attr-defined]\ntests/test_hardware_probe.py:131: error: Module \"tools.hardware_probe\" does not explicitly export attribute \"os\"  [attr-defined]\ntests/test_hardware_probe.py:180: error: Module \"tools.hardware_probe\" does not explicitly export attribute \"subprocess\"  [attr-defined]\ntests/test_json_integrity.py:146: error: Call to untyped function (unknown) in typed context  [no-untyped-call]\nFound 15 errors in 3 files (checked 50 source files)\nmake: *** [Makefile:59: lint-strict] Error 1\n"
+    },
+    "baseline subject": {
+      "exit": 0,
+      "output": "uv run --no-sync python -m tools.check_subject\nScope: layout, declared runtime dependencies, sample inputs, static imports. No model or full Subject certification.\nusage: __main__.py [-h] [--functions_definition FUNCTIONS_DEFINITION]\n                   [--input INPUT] [--output OUTPUT]\n\nGenerate JSON function calls with constrained decoding.\n\noptions:\n  -h, --help            show this help message and exit\n  --functions_definition FUNCTIONS_DEFINITION\n  --input INPUT\n  --output OUTPUT\n"
+    },
+    "final subject": {
+      "exit": 0,
+      "output": "uv run --no-sync python -m tools.check_subject\nScope: layout, declared runtime dependencies, sample inputs, static imports. No model or full Subject certification.\nusage: __main__.py [-h] [--functions_definition FUNCTIONS_DEFINITION]\n                   [--input INPUT] [--output OUTPUT]\n\nGenerate JSON function calls with constrained decoding.\n\noptions:\n  -h, --help            show this help message and exit\n  --functions_definition FUNCTIONS_DEFINITION\n  --input INPUT\n  --output OUTPUT\n"
+    },
+    "baseline subject-audit": {
+      "exit": 0,
+      "output": "uv run --no-sync python -m tools.check_subject --submission\nScope: layout, declared runtime dependencies, sample inputs, static imports. No model or full Subject certification.\nmake lint\nmake[1]: Entering directory '/home/miwasaki/42Tokyo/Call_Me_Maybe'\nSuccess: no issues found in 49 source files\nmake[1]: Leaving directory '/home/miwasaki/42Tokyo/Call_Me_Maybe'\n"
+    },
+    "final subject-audit": {
+      "exit": 0,
+      "output": "uv run --no-sync python -m tools.check_subject --submission\nScope: layout, declared runtime dependencies, sample inputs, static imports. No model or full Subject certification.\nmake lint\nmake[1]: Entering directory '/home/miwasaki/42Tokyo/Call_Me_Maybe'\nSuccess: no issues found in 50 source files\nmake[1]: Leaving directory '/home/miwasaki/42Tokyo/Call_Me_Maybe'\n"
+    }
+  },
+  "new_tests": 12,
+  "independent_review": "No code defect in current call path; architecture stale descriptions corrected. PrivateAttr trust is internal, with no mutation in current callers.",
+  "independent_artifact_checks": "Every generated raw record appears verbatim in accuracy and separate timing saved files; the saved file parses; pre/post strict errors identical (15).",
+  "gpu": "Host verified Radeon 8060S Graphics, torch2.14.1+rocm7.2; offline cache; no SDK changes."
+}

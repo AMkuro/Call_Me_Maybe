@@ -1,0 +1,163 @@
+"""Public-SDK REQ-031 probes and independent saved-JSON regression metrics."""
+import argparse
+import hashlib
+import importlib.metadata
+import json
+import platform
+import re
+from decimal import Decimal
+from pathlib import Path
+from unittest.mock import patch
+
+from src import pipeline
+from src.errors import PromptError
+from src.loader import index_functions
+from src.model_port import EOS, Model
+from src.name_trie import build_name_trie
+from src.schema import FunctionDef
+from src.values import allowed_value_tokens, is_value_complete
+from src.vocab import load_vocab
+from src.writer import save_results
+from tools.measure_application import assess_call
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--output', type=Path, required=True)
+a = parser.parse_args()
+model = Model()
+vocab = load_vocab(Path(model.vocab_path()))
+report = {'measurement': 'accuracy and SDK; runtime measured separately',
+          'head': '8b3d2ed3a630071089891115fc32ee7d751b3405',
+          'model': 'Qwen/Qwen3-0.6B',
+          'revision': 'c1899de289a04d12100db370d81485cdf75e47ca',
+          'dtype': 'existing SDK float32', 'python': platform.python_version(),
+          'packages': {p: importlib.metadata.version(p) for p in
+                       ['torch', 'transformers', 'numpy', 'pydantic', 'llm-sdk']},
+          'source_sha256': {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
+                           for p in Path('src').glob('*.py')},
+          'sdk_sha256': hashlib.sha256(Path('llm_sdk/llm_sdk/__init__.py').read_bytes()).hexdigest(),
+          'sdk_probes': [], 'suites': {}}
+
+def save():
+    a.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
+
+valid = ['0.0', '-0.0', '2.0', '2.75', '-42.125', '9007199254740993.0',
+         '0.00000001', '123456789012345678901234567890.0', '2.00']
+for literal in valid:
+    for delimiter in [',', '}']:
+        text = literal + delimiter
+        ids = model.encode(text)
+        written = b''
+        for token in ids:
+            assert token in vocab
+            assert token in allowed_value_tokens({token: vocab[token]}, 'number', written, delimiter)
+            written += vocab[token]
+        assert is_value_complete(written, 'number', delimiter)
+        assert model.decode(ids) == text == written.decode()
+        report['sdk_probes'].append({'text': text, 'ids': ids, 'byte_match': True,
+                                     'decoded': model.decode(ids), 'complete': True})
+for text in ['2.0', '2.0,', '.0}', '1e10', '1.0e10', '0,']:
+    ids = model.encode(text)
+    raw = b''.join(vocab[t] for t in ids)
+    report['sdk_probes'].append({'token_text': text, 'ids': ids,
+        'token_bytes': [vocab[t].decode(errors='backslashreplace') for t in ids],
+        'whole_accepted_initial_comma': bool(allowed_value_tokens({0: raw}, 'number', b'', ',')),
+        'whole_accepted_after_2_brace': bool(allowed_value_tokens({0: raw}, 'number', b'2', '}'))})
+for text in ['"前<|im_end|>後"', '"前\\u003c|im_end|>後"']:
+    ids = model.encode(text)
+    report['sdk_probes'].append({'special_text': text, 'ids': ids,
+        'decoded': model.decode(ids), 'all_in_byte_vocab': all(t in vocab for t in ids)})
+from src.decoder import select_next_token
+real_logits = model.logits
+prefix = model.encode('{"x": ')
+forced = model.encode('2.')[0]
+# This tests public one-candidate behavior, not a grammar decision.
+seen = []
+def observe(ids):
+    seen.append(ids.copy())
+    return real_logits(ids)
+with patch.object(model, 'logits', side_effect=observe):
+    selected, mode, _ = select_next_token(model, prefix, [forced])
+    assert mode == 'forced' and not seen
+    choices = [model.encode('0')[0], model.encode('5')[0]]
+    next_token, mode, _ = select_next_token(model, prefix + [selected], choices)
+    assert mode == 'greedy' and seen == [prefix + [forced]]
+report['forced_resume'] = {'forwards': len(seen), 'context': seen[0],
+                           'forced': forced, 'next': next_token}
+save()
+
+for key, fixture in [
+    ('standard11', Path('/tmp/cmm-req031/standard.json')),
+    ('calibrated11', Path('tests/fixtures/calibrated/original/measurement_fixture.json')),
+    ('changed5', Path('tests/fixtures/changed_functions_cases.json')),
+    ('boundary3', Path('docs/measurements/2026-11-17-tokenwise-json/boundary.json')),
+]:
+    data = json.loads(fixture.read_text())
+    functions = index_functions(FunctionDef.model_validate(f) for f in data['functions'])
+    resources = pipeline.GenerationResources(model=model, vocab=vocab, functions=functions,
+                    trie=build_name_trie(list(functions), model.encode, EOS))
+    results = []
+    report['suites'][key] = results
+    calls = []
+    output = Path('/tmp/cmm-req031/' + key + '-saved.json')
+    for case in data['cases']:
+        counts = {'select_name': 0, 'generate_parameters': 0}
+        stage = ['select_name']
+        selected = []
+        name_function = pipeline.select_name
+        def select(*args, **kwargs):
+            stage[0] = 'select_name'
+            fn = name_function(*args, **kwargs)
+            selected.append(fn.name)
+            stage[0] = 'generate_parameters'
+            return fn
+        def count(ids):
+            counts[stage[0]] += 1
+            return real_logits(ids)
+        row = dict(case)
+        row['forward_calls'] = counts
+        try:
+            with patch.object(pipeline, 'select_name', side_effect=select), \
+                    patch.object(model, 'logits', side_effect=count):
+                call = pipeline.process_prompt(case['prompt'], resources)
+            calls.append(call)
+            save_results(output, calls)
+            raw = call._generated_json
+            assert raw is not None
+            floats = []
+            integers = []
+            def decimal(literal):
+                floats.append(literal)
+                return Decimal(literal)
+            def integer(literal):
+                integers.append(literal)
+                return int(literal)
+            parsed = json.loads(raw, parse_float=decimal, parse_int=integer)
+            saved = json.loads(output.read_text(), parse_float=Decimal)[-1]
+            assert saved == parsed
+            assert parsed['prompt'] == case['prompt']
+            assert set(parsed) == {'prompt', 'name', 'parameters'}
+            specs = functions[parsed['name']].parameters
+            assert set(parsed['parameters']) == set(specs)
+            for name, spec in specs.items():
+                value = parsed['parameters'][name]
+                assert {'number': type(value) in (int, Decimal),
+                        'string': type(value) is str, 'boolean': type(value) is bool}[spec.type]
+            expected_numbers = sum(s.type == 'number' for s in specs.values())
+            row.update(completed=True, json_valid=True, schema_valid=True,
+                name_correct=call.name == case['expected_name'],
+                arguments_correct=assess_call(dict(case, expected_name=call.name), call),
+                joint_correct=assess_call(case, call),
+                number_literals=floats, integer_literals=integers,
+                number_fields=expected_numbers,
+                decimal_fields=sum(bool(re.fullmatch(r'-?(?:0|[1-9][0-9]*)\.[0-9]+', x)) for x in floats),
+                exponent_fields=sum('e' in x.lower() for x in floats),
+                generated_text=raw, public_call=call.model_dump())
+            assert not integers and row['decimal_fields'] == expected_numbers
+        except PromptError as e:
+            row.update(completed=False, error=str(e), json_valid=False,
+                       schema_valid=False, name_correct=bool(selected and selected[0] == case['expected_name']),
+                       arguments_correct=False, joint_correct=False)
+        results.append(row)
+        save()
+        print(key, case['id'], row['completed'], row['joint_correct'], counts, flush=True)
+print('saved', a.output, flush=True)

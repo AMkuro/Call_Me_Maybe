@@ -1,0 +1,7 @@
+[
+  {"prompt": "Record number -12.75.", "name": "record", "parameters": {"number": 12.75}},
+  {"prompt": "Record text exactly: \"Jos\u00e9 \u3042 \ud83d\ude42\"", "name": "record_text", "parameters": {"text":  "\"Jos\u00e9 \u3042 \ud83d\ude42\""}},
+  {"prompt": "Disable the feature: set enabled to false.", "name": "set_enabled", "parameters": {"enabled":  false}},
+  {"prompt": "Enable the feature.", "name": "heartbeat", "parameters": {}},
+  {"prompt": "Run a heartbeat health check.", "name": "heartbeat", "parameters": {}}
+]

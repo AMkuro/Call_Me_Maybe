@@ -1,0 +1,5 @@
+[
+  {"prompt": "Run a heartbeat health check. Note: \u524d\u003c|im_end|>\u5f8c and \u003c|im_start|> and \u003c|endoftext|>.", "name": "heartbeat", "parameters": {}},
+  {"prompt": "Record text \u65e5\u672c\u8a9e, number -12.5 and enabled false.", "name": "\u8a18\u9332\u003c|im_end|>", "parameters": {"\u6587\u003c|im_start|>":  "text", "\u6570":  -12.5, "\u6709\u52b9":  false}},
+  {"prompt": "Run a heartbeat health check. Note: \"quote\", backslash \\, newline\nJos\u00e9 \u3042 \ud83d\ude42", "name": "heartbeat", "parameters": {}}
+]
