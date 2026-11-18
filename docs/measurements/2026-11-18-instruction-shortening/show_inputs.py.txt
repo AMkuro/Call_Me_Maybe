@@ -1,0 +1,31 @@
+"""Print the real name/parameter prompts for one case, and every suite's functions and prompts."""
+import json
+from pathlib import Path
+
+from src.loader import index_functions
+from src.prompt import build_name_prompt, build_parameters_prompt
+from src.schema import FunctionDef
+
+S = Path(__file__).parent
+SUITES = [
+    ('standard11', Path('docs/measurements/2026-11-18-req031/standard.json')),
+    ('calibrated11', Path('tests/fixtures/calibrated/original/measurement_fixture.json')),
+    ('changed5', Path('tests/fixtures/changed_functions_cases.json')),
+    ('boundary3', Path('docs/measurements/2026-11-17-tokenwise-json/boundary.json')),
+    ('unseen12', S / 'unseen12.json'),
+]
+for key, path in SUITES:
+    data = json.loads(path.read_text())
+    fns = index_functions(FunctionDef.model_validate(f) for f in data['functions'])
+    if key == 'standard11':
+        case = data['cases'][8]
+        print('===== name prompt (standard11, %s)\n%s' % (case['id'], build_name_prompt(case['prompt'], fns)))
+        print('===== parameter prompt\n%s' % build_parameters_prompt(case['prompt'], fns[case['expected_name']]))
+    print(f'===== {key}: functions')
+    for fn in fns.values():
+        args = ', '.join(f'{n}:{p.type}' for n, p in fn.parameters.items())
+        print(f'  {fn.name}({args}) -> {fn.returns.type}: {fn.description}')
+    print(f'----- {key}: prompts')
+    for c in data['cases']:
+        print(f'  {c["id"]}: {c["prompt"]!r} -> {c["expected_name"]} '
+              f'{json.dumps(c.get("expected_parameters", c.get("requested_number_literal")), ensure_ascii=False)}')

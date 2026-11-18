@@ -1,0 +1,192 @@
+"""Instruction-shortening experiment 3: accuracy and forward volume.
+
+Derived from prompt_exp.py. Product code is unchanged; a condition only
+replaces pipeline.build_parameters_prompt. The system instructions are the
+product sentences S1..S9 minus --drop, with optional --replace i=text; the
+same text is used for every function and input (no case-dependent rule).
+--definition A keeps the full function JSON, B drops "returns".
+Accuracy only, not timing.
+"""
+import argparse
+import json
+from pathlib import Path
+from unittest.mock import patch
+
+from src import pipeline, prompt as prompts
+from src.errors import PromptError
+from src.loader import index_functions
+from src.model_port import EOS, Model
+from src.name_trie import build_name_trie
+from src.prompt import build_name_prompt, build_parameters_prompt
+from src.schema import FunctionDef
+from src.vocab import load_vocab
+from tools.measure_application import assess_call
+
+KEEP = {'A': ('name', 'description', 'parameters', 'returns'),
+        'B': ('name', 'description', 'parameters'),
+        'C': ('name', 'parameters'), 'D': ('parameters',)}
+
+
+def definition(fn: FunctionDef, keep) -> str:
+    data = {k: v for k, v in fn.model_dump().items() if k in keep}
+    return json.dumps(data, ensure_ascii=False, separators=(',', ':'))
+
+
+SENTENCES = [
+    "The user request will be fulfilled by calling the given function.",
+    "Extract the arguments of that call from the user request: copy each "
+    "value as it appears in the request; do not answer the request or "
+    "compute a result.",
+    "Keep the requested input values and strings exact.",
+    "Return only a JSON object with prompt, name, parameters.",
+    "Use JSON numbers, strings, true/false.",
+    "Convert descriptions of patterns into actual regular expressions; "
+    "do not list the matched substrings.",
+    "Express replacement symbols as their literal characters.",
+    "Do not add leading or trailing whitespace unless it belongs to the "
+    "requested value.",
+    "Preserve numeric signs and decimal points.",
+]
+assert ' '.join(SENTENCES) == prompts.PARAMETER_INSTRUCTIONS
+
+
+def instructions(drop, replace):
+    out = []
+    for i, s in enumerate(SENTENCES, 1):
+        if i in drop:
+            continue
+        out.append(replace.get(i, s))
+    return ' '.join(out)
+
+
+def param_prompt(user_prompt, fn, instr, keep):
+    """Same _chat and user turn; only the system text and definition vary."""
+    return prompts._chat(instr, f'User request: {json.dumps(user_prompt)}\n'
+                                f'Function to call: {definition(fn, keep)}')
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--label', required=True)
+parser.add_argument('--drop', default='', help='comma-separated 1..9')
+parser.add_argument('--replace', action='append', default=[], help='i=text')
+parser.add_argument('--definition', choices=['A', 'B'], default='A')
+parser.add_argument('--suites', default='', help='comma-separated; default the first five')
+parser.add_argument('--output', type=Path, required=True)
+a = parser.parse_args()
+drop = {int(x) for x in a.drop.split(',') if x}
+replace = {int(k): v for k, v in (r.split('=', 1) for r in a.replace)}
+INSTR = instructions(drop, replace)
+KEEP_DEF = KEEP[a.definition]
+model = Model()
+vocab = load_vocab(Path(model.vocab_path()))
+real_logits = model.logits
+real_decode = model.decode
+report = {'measurement': 'accuracy and forward volume; not timing',
+          'label': a.label, 'drop': sorted(drop), 'replace': replace,
+          'definition': a.definition, 'instructions': INSTR, 'suites': {}}
+# The unchanged text must equal the product prompt, so A is the real baseline.
+fn0 = FunctionDef.model_validate({
+    'name': 'f', 'description': 'd', 'parameters': {'x': {'type': 'number'}},
+    'returns': {'type': 'string'}})
+assert param_prompt('q <x>', fn0, prompts.PARAMETER_INSTRUCTIONS, KEEP['A']) \
+    == build_parameters_prompt('q <x>', fn0)
+UNSEEN = Path(__file__).with_name('unseen12.json')  # fixed before any experiment-3 run
+
+SUITES = [
+    ('standard11', Path('docs/measurements/2026-11-18-req031/standard.json')),
+    ('calibrated11', Path('tests/fixtures/calibrated/original/measurement_fixture.json')),
+    ('changed5', Path('tests/fixtures/changed_functions_cases.json')),
+    ('boundary3', Path('docs/measurements/2026-11-17-tokenwise-json/boundary.json')),
+    ('unseen12', UNSEEN),
+] + [(name, Path(f'tests/fixtures/calibrated/{name}/measurement_fixture.json'))
+     for name in ('boolean', 'difference', 'feature_flags', 'magnitude',
+                  'timer_flags', 'transfer', 'word_pairs')]
+wanted = a.suites.split(',') if a.suites else [k for k, _ in SUITES[:5]]
+for key, fixture in [s for s in SUITES if s[0] in wanted]:
+    data = json.loads(fixture.read_text())
+    functions = index_functions(FunctionDef.model_validate(f)
+                                for f in data['functions'])
+    trie = build_name_trie(list(functions), model.encode, EOS)
+    resources = pipeline.GenerationResources(model=model, vocab=vocab,
+                                             functions=functions, trie=trie)
+    results = []
+    report['suites'][key] = results
+    for case in data['cases']:
+        stage = ['select_name']
+        contexts = {'select_name': [], 'generate_parameters': []}
+        decodes = []
+        selected = []
+        name_function = pipeline.select_name
+
+        def select(*args, **kwargs):
+            stage[0] = 'select_name'
+            fn = name_function(*args, **kwargs)
+            selected.append(fn.name)
+            stage[0] = 'generate_parameters'
+            return fn
+
+        def count(ids):
+            ids = list(ids)
+            contexts[stage[0]].append(ids)
+            return real_logits(ids)
+
+        def decode(ids):
+            decodes.append(list(ids))
+            return real_decode(ids)
+
+        row = dict(case)
+        try:
+            with patch.object(pipeline, 'select_name', side_effect=select), \
+                    patch.object(pipeline, 'build_parameters_prompt',
+                                 side_effect=lambda u, f: param_prompt(u, f, INSTR, KEEP_DEF)), \
+                    patch.object(model, 'logits', side_effect=count), \
+                    patch.object(model, 'decode', side_effect=decode):
+                call = pipeline.process_prompt(case['prompt'], resources)
+            raw = call._generated_json
+            parsed = json.loads(raw)
+            assert parsed['prompt'] == case['prompt']
+            assert set(parsed) == {'prompt', 'name', 'parameters'}
+            assert set(parsed['parameters']) == set(functions[parsed['name']].parameters)
+            fn = functions[call.name]
+            out = decodes[-1]
+            row.update(
+                completed=True, json_valid=True, schema_valid=True,
+                selected_name=call.name,
+                name_correct=call.name == case['expected_name'],
+                arguments_correct=assess_call(dict(case, expected_name=call.name), call),
+                joint_correct=assess_call(case, call),
+                generated_text=raw,
+                name_prompt_tokens=len(model.encode(build_name_prompt(case['prompt'], functions))),
+                param_prompt_tokens=len(model.encode(param_prompt(case['prompt'], fn, INSTR, KEEP_DEF))),
+                output_tokens={'select_name': len(trie.paths[call.name]),
+                               'generate_parameters': len(out)},
+                forwards={k: len(v) for k, v in contexts.items()},
+                forward_length_sum={k: sum(map(len, v)) for k, v in contexts.items()},
+                forward_lengths={k: [len(c) for c in v] for k, v in contexts.items()},
+                every_output_token_forwarded=len(contexts['generate_parameters']) == len(out),
+            )
+        except (PromptError, AssertionError, ValueError) as e:
+            row.update(completed=False, error=f'{type(e).__name__}: {e}',
+                       selected_name=selected[0] if selected else None,
+                       name_correct=bool(selected and selected[0] == case['expected_name']),
+                       arguments_correct=False, joint_correct=False,
+                       forwards={k: len(v) for k, v in contexts.items()},
+                       forward_length_sum={k: sum(map(len, v)) for k, v in contexts.items()})
+        results.append(row)
+        a.output.write_text(json.dumps(report, ensure_ascii=False, indent=1))
+        print(key, case['id'], row['completed'], row['joint_correct'],
+              row.get('forwards'), flush=True)
+
+summary = {}
+for key, rows in report['suites'].items():
+    s = {m: sum(bool(r.get(m)) for r in rows) for m in (
+        'completed', 'name_correct', 'arguments_correct', 'joint_correct')}
+    s['n'] = len(rows)
+    for m in ('forwards', 'forward_length_sum'):
+        for stage in ('select_name', 'generate_parameters'):
+            s[f'{m}_{stage}'] = sum(r.get(m, {}).get(stage, 0) for r in rows)
+    s['param_prompt_tokens'] = sum(r.get('param_prompt_tokens') or 0 for r in rows)
+    summary[key] = s
+report['summary'] = summary
+a.output.write_text(json.dumps(report, ensure_ascii=False, indent=1))
+print(json.dumps(summary), flush=True)

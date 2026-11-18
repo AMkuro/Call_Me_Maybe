@@ -197,8 +197,10 @@ replays the known 11 inputs with one forward before every output token
 needed for 300 s. It is a measurement and proposal, not an implementation.
 [Method B speedups](research/2026-11-18-method-b-speedups.md) records the
 adopted compact JSON and single-candidate shortcut, and the rejected think-block
-removal. [Prompt shortening](research/2026-11-18-prompt-shortening.md) is an
-experiment only: no prompt change is adopted in the product.
+removal. [Prompt shortening](research/2026-11-18-prompt-shortening.md) and
+[instruction shortening](research/2026-11-18-instruction-shortening.md) record
+the prompt experiments; the owner adopted configuration c1B (four instruction
+sentences, no "returns" in the definition) on 2026-11-18.
 
 - `make install` recreates `.venv` from `uv.lock` (CPU torch). `uv sync` alone
   also works, as the reviewers require. torch comes from the default `cpu`
