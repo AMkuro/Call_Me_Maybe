@@ -65,6 +65,20 @@ class GenerationProgress(Protocol):
         """
         ...
 
+    def output_token(
+        self, data: bytes, *, token: int, mode: SelectionMode,
+        fixed: bool = False,
+    ) -> None:
+        """Observe one committed JSON token's bytes, including fixed text.
+
+        Args:
+            data: Actual vocabulary bytes, before float-text normalization.
+            token: The committed token ID.
+            mode: How that token was selected.
+            fixed: Whether this token belongs to fixed JSON text.
+        """
+        ...
+
     def value_token(
         self, written: bytes, step: int, *, token: int, mode: SelectionMode,
     ) -> None:

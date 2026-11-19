@@ -50,6 +50,12 @@ class MeasurementProgress(BaseModel):
     ) -> None:
         """Name observations are not retained by this measurement."""
 
+    def output_token(
+        self, data: bytes, *, token: int, mode: SelectionMode,
+        fixed: bool = False,
+    ) -> None:
+        """JSON preview events do not affect per-parameter measurements."""
+
     def value_token(
         self, written: bytes, step: int, *, token: int, mode: SelectionMode,
     ) -> None:

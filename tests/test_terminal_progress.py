@@ -114,7 +114,7 @@ class ObservationTests(unittest.TestCase):
                     self.assertEqual([c.kwargs for c in values.call_args_list],
                                      [dict(token=1, mode='greedy'),
                                       dict(token=3, mode='greedy')])
-                    self.assertEqual(dashboard.fields['token'], '3 (greedy)')
+                    self.assertEqual(dashboard.fields['token'], '253 (forced)')
         self.assertEqual(results, [{
             'prompt': 'request', 'name': 'f', 'parameters': {'a': 1.0},
         }] * 4)

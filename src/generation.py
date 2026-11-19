@@ -98,7 +98,8 @@ def _decode_and_verify_output(
 
 
 def _commit_fixed_text(
-    text: str, context: list[int], *, model: Model, vocab: Mapping[int, bytes]
+    text: str, context: list[int], *, model: Model, vocab: Mapping[int, bytes],
+    progress: GenerationProgress | None = None,
 ) -> list[int]:
     """Return the token IDs of the fixed JSON ``text``.
 
@@ -112,6 +113,7 @@ def _commit_fixed_text(
         context: The prompt and the output before ``text``; not modified.
         model: The model.
         vocab: The bytes of each token.
+        progress: Receives committed JSON tokens, or None.
 
     Returns:
         The token IDs of ``text``.
@@ -129,6 +131,10 @@ def _commit_fixed_text(
             model, context + committed, [token]
         )
         committed.append(chosen)
+        if observing(progress):
+            progress.output_token(
+                vocab[chosen], token=chosen, mode="forced", fixed=True
+            )
     return committed
 
 
@@ -171,7 +177,7 @@ def generate_call_json(
         context = prompt_ids + output_ids
         if isinstance(part, FixedText):
             part_ids = _commit_fixed_text(
-                part.text, context, model=model, vocab=vocab
+                part.text, context, model=model, vocab=vocab, progress=progress
             )
             fragments.append(part.text)
             saved.append(part.text)
@@ -244,6 +250,7 @@ def generate_slot(
             generated.append(token)
             written += vocab[token]
             if observing(progress):
+                progress.output_token(vocab[token], token=token, mode=mode)
                 progress.value_token(
                     written, len(generated), token=token, mode=mode
                 )

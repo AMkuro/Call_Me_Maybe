@@ -1,0 +1,4 @@
+Loading weights:   0%|          | 0/311 [00:00<?, ?it/s]Loading weights:  22%|██▏       | 68/311 [00:00<00:00, 676.20it/s]Loading weights:  81%|████████▏ | 253/311 [00:00<00:00, 1360.69it/s]Loading weights: 100%|██████████| 311/311 [00:00<00:00, 1313.32it/s]
+[1/2] done    fn_add_numbers  25.7 s
+[2/2] done    fn_reverse_string  21.3 s
+2 prompts: 2 done, 0 failed, 47.0 s

@@ -4,6 +4,7 @@ Both modes end with one line per prompt (done or failed, with seconds)
 and a total line.
 """
 
+import codecs
 import json
 import os
 import sys
@@ -19,9 +20,11 @@ from .progress import Stage
 from .schema import ParamType
 
 Row = Literal["input", "stage", "prompt", "function", "parameter", "value",
-              "value_tokens", "token", "warning", "result", "error"]
+              "value_tokens", "token", "warning", "result", "error",
+              "json", "saved_json", "tokens", "elapsed"]
 _ROWS: tuple[tuple[Row, str], ...] = (
-    ("input", "Input"), ("stage", "Stage"), ("prompt", "Prompt"),
+    ("input", "Input"), ("stage", "Stage"), ("elapsed", "Elapsed"),
+    ("prompt", "Prompt"),
     ("function", "Function"), ("parameter", "Parameter"),
     ("value", "Value"), ("value_tokens", "Value tokens"),
     ("token", "Token"),
@@ -38,7 +41,7 @@ _FRAME_SECONDS = 0.05  # at most one redraw per interval ...
 _DRAW_NOW: tuple[Row, ...] = ("function", "result", "error")
 _FALLBACK_SIZE = (100, 24)
 _ENTER, _LEAVE = "\x1b[?1049h\x1b[?25l", "\x1b[?25h\x1b[?1049l"
-_CLEAR = "\x1b[H\x1b[2J"
+_CLEAR = "\x1b[H"
 
 
 def _decoded(model: Model, tokens: Sequence[int]) -> str:
@@ -107,42 +110,137 @@ def _clip(text: str, width: int) -> str:
         width: The number of cells available.
 
     Returns:
-        ``text`` when it fits in ``width - 1`` cells, otherwise its longest
-        start that fits there followed by "…"; "" when ``width`` is 0.
+        ``text`` when it fits, otherwise a prefix and ellipsis within width.
     """
     result = ""
+    sizes: list[int] = []
     used = 0
     for char in text:
         size = 0 if unicodedata.combining(char) else (
             2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
         )
-        if used + size > max(width - 1, 0):
-            return result + "…" if width else ""
+        if used + size > max(width, 0):
+            while sizes and used > width - 1:
+                used -= sizes.pop()
+                result = result[:-1]
+            return result + "…" if width > 0 else ""
         result += char
+        sizes.append(size)
         used += size
     return result
 
 
-def render_progress(fields: Mapping[Row, str], width: int, height: int) -> str:
-    """Return one screen of text: a title, then one line per present row.
-
-    Rows keep a fixed order and control characters are escaped.
+def _json_lines(text: str, width: int) -> list[str]:
+    """Indent and wrap an actual JSON prefix without completing its syntax.
 
     Args:
-        fields: The text of each row to show.
-        width: The terminal width; every line is clipped to it.
-        height: The terminal height; at most ``height - 1`` lines (at least
-            one) are kept.
+        text: A possibly incomplete JSON prefix.
+        width: Available terminal cells (at least one).
 
     Returns:
-        The lines, joined by line breaks.
+        Lines containing only committed characters and display whitespace.
     """
-    lines = ["Call Me Maybe — generation"]
-    for key, label in _ROWS:
-        if key not in fields:
-            continue
-        lines.append(f"{label}: {_visible(fields[key])}")
-    return "\n".join(_clip(line, width) for line in lines[:max(height - 1, 1)])
+    lines = [""]
+    depth = 0
+    quoted = escaped = False
+    for char in text:
+        if not quoted and char in "}]":
+            depth = max(0, depth - 1)
+            if lines[-1].strip():
+                lines.append("  " * depth)
+        lines[-1] += char
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+        elif char == '"':
+            quoted = True
+        elif char in "{[":
+            depth += 1
+            lines.append("  " * depth)
+        elif char == ",":
+            lines.append("  " * depth)
+    wrapped: list[str] = []
+    for line in lines:
+        current = ""
+        cells = 0
+        for char in _visible(line):
+            size = 0 if unicodedata.combining(char) else (
+                2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+            )
+            if cells + size > width and current:
+                wrapped.append(current)
+                current, cells = "", 0
+            current += char if size <= width else "…"
+            cells += min(size, width)
+        wrapped.append(current)
+    return wrapped
+
+
+def render_progress(fields: Mapping[Row, str], width: int, height: int) -> str:
+    """Render metadata above a bounded viewport of committed JSON.
+
+    Args:
+        fields: Observed state; JSON is never parsed or completed here.
+        width: Terminal width in cells.
+        height: Terminal height in rows.
+
+    Returns:
+        A frame leaving the terminal's final row unused.
+    """
+    width = max(1, width - 1)
+    budget = max(height - 1, 1)
+    if "json" not in fields:
+        lines = ["Call Me Maybe — generation"]
+        lines.extend(f"{label}: {_visible(fields[key])}"
+                     for key, label in _ROWS if key in fields)
+        lines.append("JSON OUTPUT: waiting for JSON tokens")
+        return "\n".join(_clip(line, width)
+                         for line in lines[:budget])
+    saved = fields.get("saved_json")
+    label = ("SAVED JSON — validated" if saved is not None else
+             "JSON OUTPUT — committed prefix")
+    # The cursor is display-only and never claims an ungenerated brace.
+    text = saved if saved is not None else fields["json"] + "▌"
+    preview = _json_lines(text, width)
+    header = [f"Call Me Maybe    {fields.get('input', '')}",
+              f"Stage: {fields.get('stage', '')}",
+              f"Function: {fields.get('function', 'selecting')}"]
+    if fields.get("parameter"):
+        header.append(f"Parameter: {fields['parameter']}")
+    header.append(f"Elapsed: {fields.get('elapsed', '0.0 s')}  "
+                  f"Tokens: {fields.get('tokens', '0')}")
+    if fields.get("token"):
+        header.append(f"Token: {fields['token']}")
+    for key in ("error", "warning", "result"):
+        if fields.get(key):
+            header.append(f"{key.title()}: {_visible(fields[key])}")
+    header += ["─" * width, label]
+    # Small screens keep errors and token activity before decoration.
+    if len(header) > budget - 3:
+        compact = []
+        if fields.get("error"):
+            compact.append(f"Error: {fields['error']}")
+        compact.append(f"Stage: {fields.get('stage', '')}")
+        if fields.get("token"):
+            compact.append(f"Token: {fields['token']}")
+        if fields.get("parameter"):
+            compact.append(f"Parameter: {fields['parameter']}")
+        compact.extend([header[0],
+                        f"Tokens: {fields.get('tokens', '0')}  "
+                        f"Elapsed: {fields.get('elapsed', '0.0 s')}"])
+        header_room = max(0, budget - min(2, budget))
+        header = (compact[:header_room - 1] + [label]
+                  if header_room else [])
+    room = budget - len(header)
+    if len(preview) > room:
+        preview = (["… earlier JSON omitted …"] + preview[-(room - 1):]
+                   if room > 1 else preview[-1:])
+    return "\n".join(_clip(_visible(line), width)
+                     for line in header + preview)
 
 
 class Dashboard:
@@ -195,6 +293,10 @@ class Dashboard:
         self.started = self.prompt_started_at = time.monotonic()
         self.last_frame = 0.0
         self.available = True
+        self.json_decoder = codecs.getincrementaldecoder("utf-8")()
+        self.output_tokens = 0
+        self.output_path: str | None = None
+        self.active = False
 
     def __enter__(self) -> "Dashboard":
         """Switch a terminal to the dashboard screen.
@@ -218,6 +320,20 @@ class Dashboard:
             self.write(_LEAVE)
             for line in self.summary:
                 self.write(line)
+            if self.active:
+                reason = str(exc_info[1]) if len(exc_info) > 1 else ""
+                self.write("Interrupted / not finished: "
+                           f"{_visible(reason)}\n")
+            if "stage" in self.fields or "json" in self.fields:
+                retained = self.fields.copy()
+                retained["stage"] = ("not finished" if self.active else
+                                     self.fields.get("stage", ""))
+                width, height = self.terminal_size()
+                self.write(render_progress(retained, width,
+                                           min(height, 18)) + "\n")
+            if self.output_path:
+                self.write("Output file: "
+                           f"{_visible(self.output_path)}\n")
         done, failed = self.counts["done"], self.counts["failed"]
         left = self.total - done - failed  # an interrupted run
         self.write(
@@ -235,17 +351,24 @@ class Dashboard:
             prompt: The prompt text.
         """
         self.fields.clear()
+        self.json_decoder.reset()
+        self.output_tokens = 0
+        self.active = True
         self.prompt_started_at = time.monotonic()
         self.fields.update({"input": f"{index}/{self.total}",
                             "prompt": prompt})
         self.draw("prompt")
 
-    def prompt_done(self, name: str) -> None:
+    def prompt_done(self, name: str, saved_json: str | None = None) -> None:
         """Count a saved result and add its summary line.
 
         Args:
             name: The selected function.
+            saved_json: Validated, successfully saved text, when available.
         """
+        if saved_json is not None:
+            self.fields["saved_json"] = saved_json
+        self.fields["stage"] = "done"
         self.fields["result"] = name
         self.draw("result")
         self._end_prompt("done", name)
@@ -257,6 +380,7 @@ class Dashboard:
             reason: Why the prompt failed.
         """
         self.fields["error"] = reason
+        self.fields["stage"] = "failed"
         self.draw("error")
         self._end_prompt("failed", reason)
 
@@ -271,6 +395,7 @@ class Dashboard:
             status: The outcome.
             what: The function name or the failure reason.
         """
+        self.active = False
         self.counts[status] += 1
         seconds = time.monotonic() - self.prompt_started_at
         line = (f"[{self.fields['input']}] {status:<7} {_visible(what)}  "
@@ -289,6 +414,10 @@ class Dashboard:
         if stage in _GENERATING_STAGES:
             for row in _TOKEN_ROWS:
                 self.fields.pop(row, None)
+        if stage == "generate_call_json":
+            self.fields.update({"json": "", "tokens": "0"})
+            self.json_decoder.reset()
+            self.output_tokens = 0
         self.fields["stage"] = stage
         self.draw("stage")
 
@@ -340,6 +469,27 @@ class Dashboard:
         else:
             self.draw("token")
 
+    def output_token(
+        self, data: bytes, *, token: int, mode: SelectionMode,
+        fixed: bool = False,
+    ) -> None:
+        """Accumulate actual committed bytes; decode split UTF-8 safely.
+
+        Args:
+            data: Vocabulary bytes of one committed JSON token.
+            token: Its actual ID.
+            mode: Its selection mode.
+            fixed: True for structural text outside argument slots.
+        """
+        if fixed:
+            self.fields.pop("parameter", None)
+        self.fields["json"] = (self.fields.get("json", "")
+                               + self.json_decoder.decode(data))
+        self.output_tokens += 1
+        self.fields.update({"tokens": str(self.output_tokens),
+                            "token": f"{token} ({mode})"})
+        self.draw("token")
+
     def value_token(
         self, written: bytes, step: int, *, token: int, mode: SelectionMode,
     ) -> None:
@@ -380,14 +530,23 @@ class Dashboard:
         now = time.monotonic()
         if now - self.last_frame < _FRAME_SECONDS and row not in _DRAW_NOW:
             return
+        width, height = self.terminal_size()
+        self.fields["elapsed"] = f"{now - self.prompt_started_at:.1f} s"
+        frame = render_progress(self.fields, width, height)
+        self.write(_CLEAR + frame.replace("\n", "\x1b[K\n") + "\x1b[K\x1b[J")
+        self.last_frame = now
+
+    def terminal_size(self) -> tuple[int, int]:
+        """Read current terminal dimensions, falling back when unavailable.
+
+        Returns:
+            The positive width and height, including after a resize.
+        """
         try:
             width, height = os.get_terminal_size(self.stream.fileno())
         except OSError:
-            width, height = _FALLBACK_SIZE
-        if not width or not height:
-            width, height = _FALLBACK_SIZE
-        self.write(_CLEAR + render_progress(self.fields, width, height))
-        self.last_frame = now
+            return _FALLBACK_SIZE
+        return (width, height) if width > 0 and height > 0 else _FALLBACK_SIZE
 
     def write(self, text: str) -> None:
         """Write and flush ``text``; after an OSError, stop writing.

@@ -1,0 +1,41 @@
+{
+  "notes": "Observer-only cost, 500-ASCII-token prefixes; per-trial token counts in each row. Three serial trials, none removed. Clock is mocked to freeze frames, advance 2ms/token (throttled), or advance 100ms/token (every token renders). StringIO excludes terminal emulator cost. No model/forwards/hardware probes and no +8s offset. Includes Python mock clock overhead.",
+  "results": {
+    "redirected": {
+      "tokens_per_trial": 50000,
+      "seconds": [
+        0.06574150605592877,
+        0.06415079400176182,
+        0.06420484703266993
+      ],
+      "median_us_per_token": 1.2840969406533986
+    },
+    "tty_throttled": {
+      "tokens_per_trial": 50000,
+      "seconds": [
+        0.3593081319704652,
+        0.3379228509729728,
+        0.4697195150074549
+      ],
+      "median_us_per_token": 7.186162639409304
+    },
+    "tty_500_tokens_per_second": {
+      "tokens_per_trial": 50000,
+      "seconds": [
+        0.7451465069898404,
+        0.8987757810391486,
+        0.8769026600057259
+      ],
+      "median_us_per_token": 17.53805320011452
+    },
+    "tty_every_token": {
+      "tokens_per_trial": 5000,
+      "seconds": [
+        1.3500621689599939,
+        1.4051600210368633,
+        1.3888781279674731
+      ],
+      "median_us_per_token": 277.7756255934946
+    }
+  }
+}

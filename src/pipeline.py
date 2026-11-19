@@ -42,6 +42,7 @@ def process_all(
     Raises:
         OSError: Saving fails.
     """
+    dashboard.output_path = str(output)
     calls: list[FunctionCall] = []
     for index, user_prompt in enumerate(prompts, 1):
         dashboard.prompt_started(index, user_prompt)
@@ -54,7 +55,7 @@ def process_all(
         save_results(output, calls)
         # Only after the save: if it fails, the summary shows this prompt
         # as not finished rather than done.
-        dashboard.prompt_done(call.name)
+        dashboard.prompt_done(call.name, call._generated_json)
     if not calls:
         save_results(output, calls)  # all failed: still write "[]"
     return len(calls) == len(prompts)
