@@ -324,13 +324,6 @@ class Dashboard:
                 reason = str(exc_info[1]) if len(exc_info) > 1 else ""
                 self.write("Interrupted / not finished: "
                            f"{_visible(reason)}\n")
-            if "stage" in self.fields or "json" in self.fields:
-                retained = self.fields.copy()
-                retained["stage"] = ("not finished" if self.active else
-                                     self.fields.get("stage", ""))
-                width, height = self.terminal_size()
-                self.write(render_progress(retained, width,
-                                           min(height, 18)) + "\n")
             if self.output_path:
                 self.write("Output file: "
                            f"{_visible(self.output_path)}\n")

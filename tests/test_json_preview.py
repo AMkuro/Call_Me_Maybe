@@ -70,8 +70,8 @@ class PreviewTests(unittest.TestCase):
             self.assertTrue(all(len(line) <= width
                                 for line in frame.splitlines()))
 
-    def test_saved_json_and_interrupted_prefix_survive_exit(self) -> None:
-        """Alternate-screen exit must leave a bounded, labelled preview."""
+    def test_interruption_leaves_summary_without_json(self) -> None:
+        """An interrupted prefix stays in the live screen only."""
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
             dashboard = Dashboard(1, object.__new__(Model), {})
@@ -81,7 +81,8 @@ class PreviewTests(unittest.TestCase):
             dashboard.output_token(b'{"a": 2', token=1, mode='greedy')
             raise KeyboardInterrupt
         retained = output.getvalue().split('\x1b[?1049l')[-1]
-        self.assertIn('2▌', retained)
+        self.assertNotIn('2▌', retained)
+        self.assertNotIn('JSON', retained)
         self.assertIn('not finished', retained)
 
     def test_wide_character_boundary_keeps_cursor(self) -> None:
@@ -103,6 +104,10 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(dashboard.fields['tokens'], '1')
         self.assertIn('SAVED JSON', output.getvalue())
         self.assertIn('2.0', output.getvalue())
+        retained = output.getvalue().split('\x1b[?1049l')[-1]
+        self.assertIn('[1/1] done', retained)
+        self.assertNotIn('JSON', retained)
+        self.assertNotIn('2.0', retained)
 
     def test_fixed_text_clears_active_parameter(self) -> None:
         """Structural tokens must clear the active argument."""
@@ -173,21 +178,6 @@ class PreviewTests(unittest.TestCase):
         self.assertIn('JSON OUTPUT', frame)
         self.assertIn('greedy', frame)
 
-    def test_retained_frame_uses_terminal_width(self) -> None:
-        """A narrow terminal must not wrap a fixed-width final frame."""
-        output = io.StringIO()
-        with contextlib.redirect_stderr(output):
-            dashboard = Dashboard(1, object.__new__(Model), {})
-        dashboard.interactive = True
-        with patch.object(output, 'fileno', return_value=2), \
-                patch('src.display.os.get_terminal_size',
-                      return_value=(25, 20)), dashboard:
-            dashboard.output_token(b'{"s":"' + b'x' * 200,
-                                   token=1, mode='greedy')
-        retained = output.getvalue().split('\x1b[?1049l')[-1]
-        preview = retained.split('Call Me Maybe')[-1].split('1 prompt:')[0]
-        self.assertTrue(all(len(line) < 25 for line in preview.splitlines()))
-
     def test_exact_cell_width_does_not_replace_cursor(self) -> None:
         """Content fitting exactly must survive final line clipping."""
         from src.display import _clip
@@ -196,8 +186,8 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(_clip('abc', 3), 'abc')
         self.assertEqual(_clip('abcd', 3), 'ab…')
 
-    def test_name_selection_failure_keeps_last_state_after_exit(self) -> None:
-        """Failure before the JSON stage still needs a retained context."""
+    def test_name_failure_leaves_reason_without_live_state(self) -> None:
+        """Keep the exception reason but omit live state after exit."""
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
             dashboard = Dashboard(1, object.__new__(Model), {})
@@ -208,5 +198,25 @@ class PreviewTests(unittest.TestCase):
             dashboard.fields['value'] = 'partial_name'
             raise RuntimeError('model failure')
         retained = output.getvalue().split('\x1b[?1049l')[-1]
-        self.assertIn('partial_name', retained)
+        self.assertNotIn('partial_name', retained)
         self.assertIn('model failure', retained)
+
+    def test_failure_leaves_outcome_time_and_path_without_json(self) -> None:
+        """A failed prompt leaves its reason and output path, not a frame."""
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            dashboard = Dashboard(1, object.__new__(Model), {})
+        dashboard.interactive = True
+        dashboard.output_path = '/tmp/calls.json'
+        with dashboard:
+            dashboard.prompt_started(1, 'p')
+            dashboard.output_token(b'{"a": 2', token=1, mode='forced')
+            dashboard.prompt_failed('token limit')
+        retained = output.getvalue().split('\x1b[?1049l')[-1]
+        self.assertIn('[1/1] failed', retained)
+        self.assertIn('token limit', retained)
+        self.assertIn('0 done, 1 failed', retained)
+        self.assertIn('Output file: /tmp/calls.json', retained)
+        self.assertRegex(retained, r'\d+\.\d s')
+        self.assertNotIn('JSON', retained)
+        self.assertNotIn('{"a"', retained)
