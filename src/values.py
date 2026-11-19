@@ -146,7 +146,9 @@ def _string_slot_state(
 
 
 def _slot_state(
-    data: bytes, kind: ParamType, terminator: bytes,
+    data: bytes,
+    kind: ParamType,
+    terminator: bytes,
 ) -> int:
     """Classify ``data``, all the bytes written for one slot so far.
 
@@ -187,7 +189,9 @@ def _slot_state(
 
 
 def allowed_slot_tokens(
-    vocab: Mapping[int, bytes], param_type: ParamType, written: bytes,
+    vocab: Mapping[int, bytes],
+    param_type: ParamType,
+    written: bytes,
     terminator: str,
 ) -> list[int]:
     """Return the IDs of the tokens that may follow ``written`` in a slot.
@@ -222,16 +226,25 @@ def allowed_slot_tokens(
         # Parse the shared prefix once. Each vocabulary candidate only
         # advances its own bytes, even for long values.
         end = terminator_bytes[0]
-        return [token for token, value in vocab.items()
-                if value
-                and _string_slot_state(state, value, end, pending) != _INVALID]
-    return [token for token, value in vocab.items()
-            if value and _slot_state(written + value, param_type,
-                                     terminator_bytes) != _INVALID]
+        return [
+            token
+            for token, value in vocab.items()
+            if value
+            and _string_slot_state(state, value, end, pending) != _INVALID
+        ]
+    return [
+        token
+        for token, value in vocab.items()
+        if value
+        and _slot_state(written + value, param_type, terminator_bytes)
+        != _INVALID
+    ]
 
 
 def is_slot_complete(
-    written: bytes, param_type: ParamType, terminator: str,
+    written: bytes,
+    param_type: ParamType,
+    terminator: str,
 ) -> bool:
     """Return True only after a whole value and its JSON ``terminator``.
 
