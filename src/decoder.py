@@ -1,4 +1,4 @@
-"""Constrained argmax and one-token selection without loop control."""
+"""Choose one token: run the model, mask disallowed tokens, take the best."""
 
 from collections.abc import Collection, Sequence
 from typing import Literal
@@ -14,7 +14,23 @@ SelectionMode = Literal["forced", "greedy"]
 def constrained_argmax(
     logits: Sequence[float], allowed: Collection[int],
 ) -> int:
-    """Set every token outside ``allowed`` to -inf and return the best one."""
+    """Return the best-scoring token among ``allowed``.
+
+    Every other token counts as -inf; ``logits`` is not modified. On a tie
+    the lowest token ID wins.
+
+    Args:
+        logits: One score per vocabulary ID.
+        allowed: The token IDs that may be chosen.
+
+    Returns:
+        The chosen token ID.
+
+    Raises:
+        PromptError: The logits are not a one-dimensional list of numbers
+            or contain NaN or +inf, ``allowed`` is empty or holds an ID
+            outside the logits, or every allowed score is -inf.
+    """
     try:
         scores = np.asarray(logits, dtype=float)
     except (TypeError, ValueError) as e:
@@ -41,13 +57,26 @@ def infer_and_select_next_token(
     *,
     include_raw_top: bool = False,
 ) -> tuple[int, SelectionMode, int | None]:
-    """Select one ID without updating the sequence or controlling its loop.
+    """Run one forward pass on ``ids`` and choose the next ID from ``allowed``.
 
-    Method B (owner decision, 2026-11-18): every token gets exactly one
-    forward on ``ids``, the full context. A unique candidate is then
-    returned as is, with no array, mask or argmax work on the scores.
-    Otherwise use the constrained argmax, and optionally report the raw
-    argmax from those same scores. Diagnostics never affect the selection.
+    The forward pass runs even when ``allowed`` holds a single ID; that ID
+    is then chosen without using the scores. ``ids`` is not modified.
+
+    Args:
+        model: The model to run.
+        ids: The context: the prompt and the output so far.
+        allowed: The token IDs that may come next.
+        include_raw_top: Also return the unconstrained best token, for
+            diagnostics. It never changes the choice.
+
+    Returns:
+        The chosen ID; its mode, "forced" for a single candidate and
+        "greedy" otherwise; and the unconstrained best ID when
+        ``include_raw_top`` is set and the mode is greedy, else None.
+
+    Raises:
+        PromptError: ``allowed`` is empty (raised before any forward pass),
+            or the model or its scores fail.
     """
     if not allowed:
         # The caller adds what was being generated (name or parameter).

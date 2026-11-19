@@ -1,4 +1,4 @@
-"""A token-level tree of the function names (docs/architecture.md §3.1)."""
+"""A token-level tree of the function names."""
 
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
@@ -19,12 +19,15 @@ TokenPath = tuple[int, ...]
 class NameTrie(BaseModel):
     """The full token paths of the function names and the index to follow.
 
-    ``paths`` maps each name to its full path, the tokens of name + EOS
-    text. Reaching a full path completes that name. Validation checks the
-    paths and only then builds the private index (each valid prefix -> the
+    Reaching a full path completes that name. Validation checks the paths
+    and only then builds the private index (each valid prefix -> the
     tokens that may follow it, and each full path -> its name), so a
     NameTrie exists only in its checked, finished form. Every stored
     container is a read-only copy owned by this object.
+
+    Attributes:
+        paths: Each name's full path, the tokens of name + EOS text,
+            read-only, in name order.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
@@ -34,11 +37,17 @@ class NameTrie(BaseModel):
     _names: Mapping[TokenPath, str] = PrivateAttr()
 
     def __init__(self, names: Collection[str], model: Model) -> None:
-        """Encode names plus EOS and validate their paths with Pydantic.
+        """Build the tree of ``names`` with ``model``'s tokenizer.
 
-        Use the already loaded model. Preserve name order and reject
-        duplicate names rather than silently merging them. Tokenizer and
-        path validation failures are startup errors.
+        Each name is encoded with EOS appended, in the given order.
+
+        Args:
+            names: The function names.
+            model: The loaded model, used only to encode.
+
+        Raises:
+            StartupError: A name is repeated, encoding fails, or the paths
+                are ambiguous (see _index_checked_paths).
         """
         try:
             paths = {name: tuple(model.encode(name + EOS)) for name in names}
@@ -53,12 +62,26 @@ class NameTrie(BaseModel):
     def _read_only(
         cls, paths: Mapping[str, TokenPath],
     ) -> Mapping[str, TokenPath]:
-        """Wrap the new dict Pydantic built, so no outside alias exists."""
+        """Wrap the new dict Pydantic built, so no outside alias exists.
+
+        Args:
+            paths: The validated paths.
+
+        Returns:
+            A read-only view of ``paths``.
+        """
         return MappingProxyType(paths)
 
     @field_serializer("paths")
     def _plain(self, paths: Mapping[str, TokenPath]) -> dict[str, TokenPath]:
-        """Serialize the read-only view as an ordinary dict."""
+        """Serialize the read-only view as an ordinary dict.
+
+        Args:
+            paths: The stored paths.
+
+        Returns:
+            A dict with the same items.
+        """
         return dict(paths)
 
     @model_validator(mode="after")
@@ -70,6 +93,14 @@ class NameTrie(BaseModel):
         a name is complete. Then every full path is a leaf with a name,
         every shorter prefix continues and has no name, and no prefix is a
         dead end.
+
+        Returns:
+            This tree, with its index built.
+
+        Raises:
+            ValueError: There is no name, or a path is empty, repeated or a
+                proper prefix of another. Pydantic reports it as a
+                ValidationError.
         """
         if not self.paths:
             raise ValueError("a name tree needs at least one name")
@@ -98,19 +129,49 @@ class NameTrie(BaseModel):
 
     @property
     def names(self) -> frozenset[str]:
-        """Return the names reachable through the checked index."""
+        """The names reachable through the checked index."""
         return frozenset(self._names.values())
 
     def next_tokens(self, prefix: Sequence[int]) -> list[int]:
-        """Return the token IDs that may follow ``prefix``; none at a leaf."""
+        """Return the token IDs that may follow ``prefix``; none at a leaf.
+
+        Args:
+            prefix: The name's token IDs so far.
+
+        Returns:
+            A new list of the allowed token IDs, in name order.
+
+        Raises:
+            PromptError: ``prefix`` is not a path of the tree.
+        """
         return list(self._next[self._known_prefix(prefix)])
 
     def leaf_name(self, prefix: Sequence[int]) -> str | None:
-        """Return the name at a leaf, or None on a valid unfinished path."""
+        """Return the name at a leaf, or None on a valid unfinished path.
+
+        Args:
+            prefix: The name's token IDs so far.
+
+        Returns:
+            The completed name, or None.
+
+        Raises:
+            PromptError: ``prefix`` is not a path of the tree.
+        """
         return self._names.get(self._known_prefix(prefix))
 
     def _known_prefix(self, prefix: Sequence[int]) -> TokenPath:
-        """Return ``prefix`` as an index key; an unknown path is an error."""
+        """Return ``prefix`` as an index key; an unknown path is an error.
+
+        Args:
+            prefix: Token IDs.
+
+        Returns:
+            ``prefix`` as a tuple.
+
+        Raises:
+            PromptError: ``prefix`` is not a path of the tree.
+        """
         key = tuple(prefix)
         if key not in self._next:
             raise PromptError("invalid token path in name tree")

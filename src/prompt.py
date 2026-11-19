@@ -10,7 +10,7 @@ NAME_INSTRUCTIONS = (
     "Choose the function matching the request. Reply with its exact name only."
     " Use the descriptions to match the requested action."
 )
-# Five more sentences changed no answer on 119 cases (2026-11-18, exp. 3).
+# Kept short: five more sentences changed no answer on 119 test requests.
 PARAMETER_INSTRUCTIONS = (
     "Extract the arguments of that call from the user request: copy each "
     "value as it appears in the request; do not answer the request or "
@@ -21,16 +21,27 @@ PARAMETER_INSTRUCTIONS = (
     "do not list the matched substrings."
 )
 # Worked examples shown before the request: (function, request, parameters).
-# Empty in the application. Prompt experiments fill it to try few-shot
-# examples without changing how the prompt is built.
+# Empty: the application shows none. Filling it adds few-shot examples
+# without changing how the prompt is built.
 PARAMETER_EXAMPLES: list[tuple[FunctionDef, str, dict[str, Scalar]]] = []
 
 
 def _format_chatml(instructions: str, content: str,
                    examples: list[tuple[str, str]] | None = None) -> str:
-    """Use the installed tokenizer's non-thinking ChatML completion prefix.
+    """Return a ChatML prompt that ends where the assistant's answer starts.
 
-    Earlier (user, assistant) turns have no think block, as in the template.
+    The text equals the Qwen3 tokenizer's chat template with thinking
+    turned off (apply_chat_template with enable_thinking=False): the
+    answer starts after an empty think block.
+
+    Args:
+        instructions: The system message.
+        content: The user message.
+        examples: Earlier (user, assistant) turns, shown without a think
+            block, or None.
+
+    Returns:
+        The prompt text.
     """
     turns = "".join(
         f"<|im_start|>user\n{user}<|im_end|>\n"
@@ -47,7 +58,18 @@ def _format_chatml(instructions: str, content: str,
 def build_name_prompt(
     user_prompt: str, functions: Mapping[str, FunctionDef]
 ) -> str:
-    """Prompt for choosing the function name."""
+    """Return the prompt for choosing a function name.
+
+    It lists every definition and ends with "Function name:" and a line
+    break, so the model writes a name next.
+
+    Args:
+        user_prompt: The user's request.
+        functions: The definitions, in the order to list them.
+
+    Returns:
+        The prompt text.
+    """
     definitions = "\n".join(
         f"{fn.name}: {fn.description} Arguments: " + ", ".join(
             f"{name} ({spec.type})" for name, spec in fn.parameters.items()
@@ -61,8 +83,16 @@ def build_name_prompt(
 
 
 def _parameters_request(user_prompt: str, fn: FunctionDef) -> str:
-    """User turn content: the user's request, then the call that fulfils it."""
-    # "returns" is not needed to extract arguments (2026-11-18, experiment 3).
+    """Return the user message: the request, then the function to call.
+
+    Args:
+        user_prompt: The user's request.
+        fn: The selected function, shown as JSON without "returns".
+
+    Returns:
+        The message text.
+    """
+    # "returns" is left out: it does not help extract the arguments.
     definition = json.dumps(fn.model_dump(exclude={"returns"}),
                             ensure_ascii=False, separators=(",", ":"))
     return (f"User request: {json.dumps(user_prompt)}\n"
@@ -71,9 +101,17 @@ def _parameters_request(user_prompt: str, fn: FunctionDef) -> str:
 
 def build_example_call_json(user_prompt: str, fn: FunctionDef,
                             parameters: dict[str, Scalar]) -> str:
-    """The JSON text generate_call_json writes, from the same skeleton.
+    """Return the JSON record of a worked example, laid out like the output.
 
-    Fixed text is identical; each value is json.dumps of the given one.
+    The fixed text comes from the same skeleton as generate_call_json.
+
+    Args:
+        user_prompt: The example request.
+        fn: The example function.
+        parameters: The example values, each written with json.dumps.
+
+    Returns:
+        The JSON text.
     """
     text = ""
     for part in build_call_skeleton(user_prompt, fn):
@@ -85,7 +123,17 @@ def build_example_call_json(user_prompt: str, fn: FunctionDef,
 
 
 def build_parameters_prompt(user_prompt: str, fn: FunctionDef) -> str:
-    """Prompt for generating the parameter values of ``fn``."""
+    """Return the prompt for generating the parameter values of ``fn``.
+
+    The worked examples in PARAMETER_EXAMPLES, if any, come first.
+
+    Args:
+        user_prompt: The user's request.
+        fn: The selected function.
+
+    Returns:
+        The prompt text.
+    """
     examples = [(_parameters_request(request, example_fn),
                  build_example_call_json(request, example_fn, values))
                 for example_fn, request, values in PARAMETER_EXAMPLES]

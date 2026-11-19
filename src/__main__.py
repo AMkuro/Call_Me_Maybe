@@ -11,11 +11,22 @@ from .runtime import GenerationAssets
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Start, process every prompt, and return the exit status.
+    """Run the program and return its exit status.
 
-    Non-zero when a startup step fails or any prompt was skipped.
+    Reads the two input files, loads the model, writes the output file and
+    reports progress and errors on stderr.
 
-    Effect: reads and writes files, loads the model, prints to stderr.
+    Args:
+        argv: The command-line arguments without the program name, or None
+            to read sys.argv.
+
+    Returns:
+        0 when every prompt was saved; 1 when startup fails, a prompt is
+        skipped or saving fails.
+
+    Raises:
+        SystemExit: From argparse, for ``--help`` (status 0) or an invalid
+            option (status 2).
     """
     try:
         args, prompts, resources = _start(argv)
@@ -28,12 +39,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _start(
     argv: Sequence[str] | None,
 ) -> tuple[Args, tuple[str, ...], GenerationAssets]:
-    """Check the inputs and the output path, then load the model.
+    """Read the arguments and inputs, prepare the output, load the model.
 
-    The model is loaded last, so a bad file fails fast. Raises
-    StartupError.
+    The model is loaded last, so an invalid file or output path is reported
+    without waiting for it.
 
-    Effect: reads files, checks the output path, loads the model.
+    Args:
+        argv: As for main.
+
+    Returns:
+        The arguments, their validated prompts and the generation
+        resources.
+
+    Raises:
+        StartupError: An input, the output path or the model cannot be
+            used.
     """
     args = parse_args(argv)
     resources = GenerationAssets(args.functions)
@@ -45,10 +65,19 @@ def _end(
     prompts: Sequence[str],
     resources: GenerationAssets,
 ) -> int:
-    """Run the batch, close the terminal, and report save failures.
+    """Process the prompts inside the dashboard and return the exit status.
 
-    Dashboard owns terminal cleanup, including on interruption. Report
-    OSError only after its context has closed; other exceptions propagate.
+    The dashboard restores the terminal on leaving, also after an exception
+    or Ctrl-C. A save failure is reported after that, so the message is not
+    hidden by the dashboard.
+
+    Args:
+        args: The arguments; ``args.output`` is the output file.
+        prompts: The prompts to process, in order.
+        resources: The model and the data shared by every prompt.
+
+    Returns:
+        0 when every prompt was saved, otherwise 1.
     """
     try:
         with Dashboard(

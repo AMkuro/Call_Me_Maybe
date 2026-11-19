@@ -9,7 +9,7 @@ from .schema import ParamType
 _WHITESPACE = b" \t\r\n"
 # A whole number as the LLM may write it: the fraction is optional, because
 # forbidding the terminator after an integer made the model write "1000..."
-# to the cap (owner decision, 2026-11-18).
+# to the cap.
 _NUMBER = re.compile(rb"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
 # Any prefix of _NUMBER, including the empty one.
 _NUMBER_PREFIX = re.compile(rb"-?(?:(?:0|[1-9][0-9]*)(?:\.[0-9]*)?)?\Z")
@@ -38,17 +38,29 @@ _INTEGER_SLOT = re.compile(r"\A(\s*-?[0-9]+)(\s*[,}])\Z")
 
 
 def float_text(fragment: str) -> str:
-    """Write a completed number slot as a float literal: 10, -> 10.0,.
+    """Add ".0" to a number slot written as an integer: "10," -> "10.0,".
 
-    The model may end at an integer (fewer tokens, steadier time); the saved
-    output is float (owner decision, 2026-11-18). A string edit, so no digit
-    is lost to float conversion.
+    The model may end a number at an integer, but the saved output holds
+    floats. The text is edited, so no digit is lost to a float conversion.
+
+    Args:
+        fragment: The decoded text of a completed number slot.
+
+    Returns:
+        ``fragment`` with ".0" after an integer, otherwise unchanged.
     """
     return _INTEGER_SLOT.sub(r"\1.0\2", fragment)
 
 
 def _utf8_prefix(data: bytes) -> bool:
-    """Accept UTF-8 or a sequence ending inside its final character."""
+    """Tell whether ``data`` is UTF-8, maybe cut in its last character.
+
+    Args:
+        data: Bytes written so far.
+
+    Returns:
+        True when ``data`` is UTF-8 or ends inside its final character.
+    """
     try:
         data.decode("utf-8")
         return True
@@ -60,6 +72,14 @@ def _advance_string(phase: int, data: bytes, terminator: int) -> int:
     """Consume new bytes from a JSON-string state; return the new state.
 
     Nothing may follow the slot terminator, not even whitespace.
+
+    Args:
+        phase: The state before ``data``.
+        data: The new bytes.
+        terminator: The terminator byte.
+
+    Returns:
+        The state after ``data``, or _INVALID.
     """
     for char in data:
         if phase == _BEFORE_STRING:
@@ -101,11 +121,18 @@ def _advance_string(phase: int, data: bytes, terminator: int) -> int:
 def _slot_state(
     data: bytes, kind: ParamType, terminator: bytes,
 ) -> int:
-    """Recognize an entire candidate, including bytes within merged tokens.
+    """Classify ``data``, all the bytes written for one slot so far.
 
-    Return _COMPLETE after a whole value and its terminator, _INCOMPLETE
-    while it can still become one, and _INVALID otherwise. Nothing may
-    follow the terminator, not even whitespace.
+    Nothing may follow the terminator, not even whitespace.
+
+    Args:
+        data: The slot's bytes.
+        kind: The value type.
+        terminator: The terminator, one byte.
+
+    Returns:
+        _COMPLETE after a whole value and its terminator, _INCOMPLETE while
+        it can still become one, and _INVALID otherwise.
     """
     data = data.lstrip(_WHITESPACE)
     if kind == "string":
@@ -140,14 +167,24 @@ def allowed_slot_tokens(
     vocab: Mapping[int, bytes], param_type: ParamType, written: bytes,
     terminator: str,
 ) -> list[int]:
-    """Allow prefixes of a value followed by its JSON ``terminator``.
+    """Return the IDs of the tokens that may follow ``written`` in a slot.
 
-    Judgment: takes the bytes written so far (``written``), because the
-    next token of a number depends on the digits already written. The
-    bytes of one character can span tokens. See docs/architecture.md §4.
+    A token is allowed when ``written`` plus its bytes is still a prefix of
+    a ``param_type`` value followed by ``terminator``, or exactly that. A
+    complete number may continue or take the terminator. No token may
+    write anything after the terminator, and an empty token is never
+    allowed.
 
-    A complete number may continue or take the terminator. No token may
-    write anything after the terminator.
+    Args:
+        vocab: The bytes of each token.
+        param_type: The value type.
+        written: All the bytes of the slot so far. They decide what may
+            come next: the digits of a number, an open escape, or a UTF-8
+            character split across tokens.
+        terminator: "," or "}".
+
+    Returns:
+        The allowed token IDs, in vocabulary order.
     """
     terminator_bytes = terminator.encode("ascii")
     if param_type == "string":
@@ -175,6 +212,14 @@ def is_slot_complete(
     """Return True only after a whole value and its JSON ``terminator``.
 
     A valid number without its terminator is not finished.
+
+    Args:
+        written: All the bytes of the slot so far.
+        param_type: The value type.
+        terminator: "," or "}".
+
+    Returns:
+        Whether the slot is complete.
     """
     terminator_bytes = terminator.encode("ascii")
     state = _slot_state(written, param_type, terminator_bytes)

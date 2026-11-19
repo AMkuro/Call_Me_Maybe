@@ -3,32 +3,27 @@
 from .errors import PromptError, StartupError
 
 # Qwen's response-ending special token; it ends every function-name path.
-# Judgment: provisional; revisit if it causes failures (docs/architecture.md
-# §3.1).
+# A provisional choice, to revisit if it causes failures.
 EOS = "<|im_end|>"
 
 
 class Model:
-    """The model: a thin wrapper around the llm_sdk model.
+    """A thin wrapper around the llm_sdk model that returns plain lists.
 
-    The SDK returns tensors; this class returns plain lists, so the rest of
-    the program never sees torch.
-
-    Effect: every method uses the model, so a caller of any method has an
-    effect. The model itself is not changed by the calls.
-
-    Judgment: a plain class with no abstract interface in front of it.
-    It holds the SDK handle and no data to validate, so it is outside the
-    pydantic rule. logits is a shorter name for the SDK's
-    get_logits_from_input_ids.
+    The SDK returns tensors; these methods return lists, so the rest of the
+    program never sees torch. The calls do not change the model. ``logits``
+    is the SDK's get_logits_from_input_ids. It is not a pydantic model: it
+    holds only the SDK object and no data to validate.
     """
 
     def __init__(self) -> None:
-        """Load the model from llm_sdk.
+        """Load the SDK default model (Qwen/Qwen3-0.6B).
 
-        Any load failure is raised as StartupError with a clear message.
+        Remote model code is not trusted. The SDK reads the model from the
+        Hugging Face cache and downloads it when it is missing.
 
-        Judgment: takes no arguments (the model name is the SDK default).
+        Raises:
+            StartupError: The model cannot be loaded.
         """
         try:
             from llm_sdk import Small_LLM_Model
@@ -40,7 +35,17 @@ class Model:
             ) from e
 
     def encode(self, text: str) -> list[int]:
-        """Return the token ids of ``text``."""
+        """Return the token IDs of ``text``.
+
+        Args:
+            text: The text to encode.
+
+        Returns:
+            Its token IDs.
+
+        Raises:
+            PromptError: The SDK fails.
+        """
         try:
             encoded: list[list[int]] = self._sdk.encode(text).tolist()
             return encoded[0]
@@ -48,14 +53,36 @@ class Model:
             raise PromptError(f"cannot encode: {type(e).__name__}: {e}") from e
 
     def decode(self, ids: list[int]) -> str:
-        """Return the text of ``ids``."""
+        """Return the text of ``ids``.
+
+        Args:
+            ids: Token IDs.
+
+        Returns:
+            Their text.
+
+        Raises:
+            PromptError: The SDK fails.
+        """
         try:
             return self._sdk.decode(ids)
         except Exception as e:
             raise PromptError(f"cannot decode: {type(e).__name__}: {e}") from e
 
     def logits(self, ids: list[int]) -> list[float]:
-        """Return the next-token logits after ``ids`` (one per token)."""
+        """Return the next-token logits after ``ids``.
+
+        Runs one forward pass on the whole of ``ids``.
+
+        Args:
+            ids: The context.
+
+        Returns:
+            One score per vocabulary ID.
+
+        Raises:
+            PromptError: The SDK fails.
+        """
         try:
             return self._sdk.get_logits_from_input_ids(ids)
         except Exception as e:
@@ -64,7 +91,14 @@ class Model:
             ) from e
 
     def vocab_path(self) -> str:
-        """Return the path of the vocabulary file."""
+        """Return the path of the vocabulary file.
+
+        Returns:
+            The path of the tokenizer's vocabulary JSON file.
+
+        Raises:
+            StartupError: The SDK fails.
+        """
         try:
             return self._sdk.get_path_to_vocab_file()
         except Exception as e:

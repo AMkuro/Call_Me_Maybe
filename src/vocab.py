@@ -11,13 +11,22 @@ from .json_io import loads
 
 
 def load_vocab(path: Path) -> Mapping[int, bytes]:
-    """Map each vocabulary ID to its original bytes in a read-only view.
+    """Read the vocabulary file; map each token ID to the bytes it stands for.
 
-    Effect: reads a file.
+    The file is the SDK tokenizer's byte-level BPE vocabulary. It writes
+    each byte as one character: printable bytes as themselves, the others
+    from U+0100 upwards. Reversing that gives the exact bytes, also for a
+    token that holds only part of a UTF-8 character.
 
-    Judgment: the SDK's Qwen tokenizer uses byte-level BPE. Its visible
-    alphabet keeps printable bytes and maps the others above U+00FF.
-    Reverse that alphabet, without decoding incomplete UTF-8.
+    Args:
+        path: The vocabulary JSON file, from token text to ID.
+
+    Returns:
+        A read-only mapping from each token ID to its bytes.
+
+    Raises:
+        StartupError: The file is unreadable, invalid or empty, has a
+            negative or repeated ID, or a character outside the alphabet.
     """
     visible = list(range(33, 127)) + list(range(161, 173))
     visible += list(range(174, 256))

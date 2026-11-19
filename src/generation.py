@@ -26,11 +26,25 @@ def select_function(
     trie: NameTrie,
     progress: GenerationProgress | None = None,
 ) -> FunctionDef:
-    """Follow the name tree until a leaf, selecting one token at a time.
+    """Let the model write a defined function name; return its definition.
 
-    No step limit is needed: each selected token is one of the allowed
-    ones, so the path grows by one known step, and every path of the
-    finite tree ends at a leaf.
+    Tokens are chosen one at a time among those the name tree allows,
+    until a complete name (a leaf) is reached. No step limit is needed:
+    every path of the finite tree ends at a leaf.
+
+    Args:
+        user_prompt: The user's request.
+        model: The model.
+        functions: The definitions keyed by name.
+        trie: The name tree of ``functions``.
+        progress: Receives each step, or None.
+
+    Returns:
+        The definition of the chosen name.
+
+    Raises:
+        PromptError: Generation fails; the message starts with
+            "function name: ".
     """
     prompt_ids = model.encode(build_name_prompt(user_prompt, functions))
     generated: list[int] = []
@@ -58,7 +72,21 @@ def select_function(
 def _decode_and_verify_output(
     ids: list[int], *, model: Model, vocab: Mapping[int, bytes]
 ) -> str:
-    """Require SDK decoding to preserve the grammar's exact UTF-8 bytes."""
+    """Return the text of ``ids``, checked against their vocabulary bytes.
+
+    Args:
+        ids: Output token IDs.
+        model: Decodes the IDs.
+        vocab: The bytes of each token.
+
+    Returns:
+        The decoded text.
+
+    Raises:
+        PromptError: An ID has no vocabulary bytes, the bytes are not
+            UTF-8, or the SDK's decoding differs from them (it drops
+            special tokens, for example).
+    """
     try:
         expected = b"".join(vocab[token] for token in ids).decode("utf-8")
     except (KeyError, UnicodeDecodeError) as e:
@@ -72,12 +100,25 @@ def _decode_and_verify_output(
 def _commit_fixed_text(
     text: str, context: list[int], *, model: Model, vocab: Mapping[int, bytes]
 ) -> list[int]:
-    """Return the IDs of a fixed JSON fragment, each after one forward.
+    """Return the token IDs of the fixed JSON ``text``.
 
-    The fragment is encoded once and must decode back to ``text``. Method B
-    (owner decision): although each ID is already fixed and its scores are
-    unused, the model runs once before it, on ``context`` plus the IDs of
-    this fragment committed so far, as before every output token.
+    ``text`` is encoded once and must decode back to itself. Like every
+    output token, each ID is preceded by one forward pass on ``context``
+    plus the IDs of ``text`` committed so far, although its scores are not
+    used.
+
+    Args:
+        text: Fixed JSON text from the skeleton.
+        context: The prompt and the output before ``text``; not modified.
+        model: The model.
+        vocab: The bytes of each token.
+
+    Returns:
+        The token IDs of ``text``.
+
+    Raises:
+        PromptError: ``text`` does not survive encoding and decoding, or
+            the model fails.
     """
     tokens = model.encode(text)
     if _decode_and_verify_output(tokens, model=model, vocab=vocab) != text:
@@ -99,18 +140,33 @@ def generate_call_json(
     vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
 ) -> str:
-    """Commit JSON IDs in skeleton order and verify the decoded record.
+    """Write the JSON record of one call to ``fn``; return its saved text.
 
-    Only this function extends ``output_ids``. Each part receives the
-    prompt and the output so far as its context, and returns its own IDs.
-    ``fragments`` holds each part's expected text to check the whole.
-    ``saved`` is the returned text: the same, except that an integer number
-    gains ".0" (float_text). The context keeps the model's own integer.
+    Fixed parts of the layout (build_call_skeleton) are committed as is,
+    and the model generates each parameter value.
+
+    Args:
+        user_prompt: The user's request, copied into the record.
+        fn: The selected function.
+        model: The model.
+        vocab: The bytes of each token.
+        progress: Receives each step, or None.
+
+    Returns:
+        The decoded output, except that a number written as an integer
+        gains ".0" (float_text); the model's context keeps the integer it
+        wrote.
+
+    Raises:
+        PromptError: A value cannot be generated, or the decoded output
+            differs from the parts it was built from.
     """
     prompt_ids = model.encode(build_parameters_prompt(user_prompt, fn))
+    # Only this loop extends output_ids; each part gets the prompt and the
+    # output so far as context and returns its own IDs.
     output_ids: list[int] = []
-    fragments: list[str] = []
-    saved: list[str] = []
+    fragments: list[str] = []  # each part's expected text, to check the whole
+    saved: list[str] = []  # the same, with ".0" added to integer numbers
     for part in build_call_skeleton(user_prompt, fn):
         context = prompt_ids + output_ids
         if isinstance(part, FixedText):
@@ -148,7 +204,26 @@ def generate_slot(
     vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
 ) -> list[int]:
-    """Generate one ValueSlot: a value and its terminator, within the cap."""
+    """Generate one value and its terminator; return their token IDs.
+
+    A number may take up to MAX_NUMBER_STEPS tokens and other types up to
+    MAX_VALUE_STEPS.
+
+    Args:
+        slot: The parameter and its terminator.
+        ids: The context; not modified.
+        model: The model.
+        vocab: The bytes of each token.
+        progress: Receives each step, or None.
+
+    Returns:
+        The token IDs of the value and its terminator.
+
+    Raises:
+        PromptError: No token can continue the value, the limit is reached
+            before the terminator, or the model fails. The message names
+            the parameter and its type.
+    """
     generated: list[int] = []
     written = b""  # the bytes of generated, extended with each token
     limit = MAX_NUMBER_STEPS if slot.type == "number" else MAX_VALUE_STEPS

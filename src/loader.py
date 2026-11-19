@@ -13,9 +13,16 @@ from .schema import FunctionDef
 def index_functions(
     functions: Iterable[FunctionDef],
 ) -> dict[str, FunctionDef]:
-    """Index validated definitions by unique names, making each key fn.name.
+    """Key validated definitions by their names, keeping their order.
 
-    This input boundary guarantees key/name agreement for generation.
+    Args:
+        functions: Validated definitions.
+
+    Returns:
+        A dict from each name to its definition, in input order.
+
+    Raises:
+        ValueError: A name is repeated, or there is no definition.
     """
     indexed: dict[str, FunctionDef] = {}
     for fn in functions:
@@ -28,12 +35,17 @@ def index_functions(
 
 
 def load_functions(path: Path) -> dict[str, FunctionDef]:
-    """Read function definitions into a name-keyed dictionary in input order.
+    """Read the function definitions file.
 
-    Raises StartupError on a missing or invalid file, an empty list,
-    duplicate names, or an unsupported parameter type.
+    Args:
+        path: The JSON file: an array of function definitions.
 
-    Effect: reads a file.
+    Returns:
+        The definitions keyed by name, in input order.
+
+    Raises:
+        StartupError: The file is missing or invalid, the array is empty,
+            a name is repeated, or a parameter type is unsupported.
     """
     try:
         return index_functions(
@@ -46,11 +58,18 @@ def load_functions(path: Path) -> dict[str, FunctionDef]:
 
 
 def load_prompts(path: Path) -> list[str]:
-    """Read the prompts (the ``prompt`` key of each input entry).
+    """Read the prompts file.
 
-    Raises StartupError for insufficient input when the array is empty.
+    Args:
+        path: The JSON file: an array of objects, each with only a
+            "prompt" string.
 
-    Effect: reads a file.
+    Returns:
+        The prompts in input order.
+
+    Raises:
+        StartupError: The file is missing or invalid, the array is empty,
+            or an entry has another key or a non-string prompt.
     """
     try:
         entries = TypeAdapter(list[dict[str, str]]).validate_python(

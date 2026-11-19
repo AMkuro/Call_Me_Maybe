@@ -1,8 +1,7 @@
 # Development and integration
 
-Subject v1.7 requirements are summarized in docs/subject-v1.7.md. Read it
-instead of fetching the Subject from GitHub; re-check the original only if the
-version changes or the summary cannot settle an important question.
+The Subject (v1.7) is Call_Me_Maybe/en.subject.pdf in the AMkuro/pdf
+repository (master). Read that original; do not write or rely on a summary.
 
 Read docs/development.md and docs/ci-auto-integration.md before changing CI,
 the build environment or merging. README.md is a submission artifact: keep

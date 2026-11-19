@@ -2,17 +2,19 @@
 
 
 class CallMeMaybeError(Exception):
-    """Base class of every error this program raises on purpose.
+    """Base class of the errors this program raises on purpose.
 
-    Judgment: only two kinds, startup and per prompt. Add more if these
-    are not enough.
+    Each carries only its message. StartupError stops the run;
+    PromptError skips one prompt.
     """
 
 
 class StartupError(CallMeMaybeError):
-    """Bad arguments, bad definitions or a model that fails to load.
+    """The run cannot start; raised before any prompt is processed.
 
-    Raised before any prompt is processed; the program exits non-zero.
+    Covers unreadable or invalid input files, an output path that cannot
+    be prepared, and a model, vocabulary or name tree that cannot be
+    loaded or built. The program prints the message and exits with 1.
     """
 
 

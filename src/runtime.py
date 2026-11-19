@@ -16,12 +16,15 @@ from .vocab import load_vocab
 
 
 class GenerationAssets(BaseModel):
-    """Combine validated resources for one application run.
+    """The model, its vocabulary, the definitions and their name tree.
 
-    The input loader indexes definitions by name. This constructor builds
-    the trie from those keys with the same model, and NameTrie validates
-    its paths. functions is a read-only copy and the validated vocabulary
-    is shared as a read-only mapping. SDK state remains owned by Model.
+    Built once per run and shared by every prompt.
+
+    Attributes:
+        model: The model.
+        vocab: The bytes of each token ID, read-only.
+        functions: A read-only copy of the definitions, keyed by name.
+        trie: The name tree of ``functions``.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
@@ -32,12 +35,15 @@ class GenerationAssets(BaseModel):
     trie: InstanceOf[NameTrie]
 
     def __init__(self, functions: Mapping[str, FunctionDef]) -> None:
-        """Load the model, then build its vocabulary and the name tree.
+        """Load the model, read its vocabulary and build the name tree.
 
-        Shared by the application and the measurement tool, so both generate
-        with the same resources. Raises StartupError.
+        Args:
+            functions: The definitions, each keyed by its own name, as
+                load_functions returns them.
 
-        Effect: loads the model and reads its vocabulary file.
+        Raises:
+            StartupError: The model, the vocabulary or the name tree cannot
+                be loaded or built.
         """
         model = Model()
         vocab = load_vocab(Path(model.vocab_path()))
@@ -54,5 +60,12 @@ class GenerationAssets(BaseModel):
     def _read_only(
         cls, functions: Mapping[str, FunctionDef]
     ) -> Mapping[str, FunctionDef]:
-        """Wrap the new dict Pydantic built, so no outside alias exists."""
+        """Wrap the new dict Pydantic built, so no outside alias exists.
+
+        Args:
+            functions: The validated definitions.
+
+        Returns:
+            A read-only view of ``functions``.
+        """
         return MappingProxyType(functions)

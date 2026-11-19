@@ -2,7 +2,7 @@
 
 この文書は、自然言語の依頼を関数呼び出しの JSON に変換する要求を、
 どのデータと処理で実現するか説明する。現行設計の正本は本書であり、要件は
-[Subject v1.7 の要約](subject-v1.7.md)とユーザーの指示に従う。
+Subject v1.7 の原文（AMkuro/pdf の`Call_Me_Maybe/en.subject.pdf`）とユーザーの指示に従う。
 現行実装は§1〜9、今回対象外の未実装の旧提案は§10に分ける。
 実行結果は[検証記録](implementation-verification.md)を参照する。
 
@@ -540,7 +540,7 @@ stderr への書き込みで OSError が起きたら表示を止め、生成と�
 | 表示とログの形式 | `display.py`の同期受信・整形 | 選択結果と保存データを変えない |
 
 実装上の制約は、Python 3.10以上、型注釈・docstring、Subject の flake8/mypy の条件、
-許可された依存関係、SDK の公開 API の利用である（Subject 要約 §1・3）。
+許可された依存関係、SDK の公開 API の利用である（Subject IV.1〜IV.3.1）。
 検証するデータにはPydanticを使い、GenerationAssetsはInstanceOfで参照型を検証する。
 Model・Dashboardは既存の通常クラス、GenerationProgressは静的なProtocolである。
 Subjectの全クラス要件の解釈上の留保と、検証境界は§9.9に記す。

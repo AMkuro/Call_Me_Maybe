@@ -9,7 +9,11 @@ from .schema import FunctionDef, ParamType
 
 
 class FixedText(BaseModel):
-    """JSON text written as is: braces, keys, the prompt and the name."""
+    """JSON text written as is: braces, keys, the prompt and the name.
+
+    Attributes:
+        text: The JSON text.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -17,7 +21,13 @@ class FixedText(BaseModel):
 
 
 class ValueSlot(BaseModel):
-    """A parameter value, including its following terminator ("," or "}")."""
+    """A parameter value, including its following terminator ("," or "}").
+
+    Attributes:
+        name: The parameter name.
+        type: The parameter type.
+        terminator: "," before the next parameter, "}" after the last.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -32,6 +42,12 @@ def json_string(text: str) -> str:
     The SDK encodes text such as ``<|im_end|>`` as one special token, and
     its decode drops that token. Written as ``\\u003c`` the same JSON value
     stays in ordinary tokens. ``<`` occurs only inside strings here.
+
+    Args:
+        text: Any text.
+
+    Returns:
+        The JSON string literal, quotes included.
     """
     return json.dumps(text).replace("<", r"\u003c")
 
@@ -46,6 +62,13 @@ def build_call_skeleton(
     parameter values are generated. Each slot owns its terminator (a comma,
     or the parameters' closing brace for the last slot), so no fixed text
     repeats it. With no parameters, everything is fixed text.
+
+    Args:
+        user_prompt: The user's request.
+        fn: The selected function.
+
+    Returns:
+        The parts in output order.
     """
     head = FixedText(text=f'{{"prompt":{json_string(user_prompt)},'
                           f'"name":{json_string(fn.name)}')
@@ -54,7 +77,7 @@ def build_call_skeleton(
     parts: list[FixedText | ValueSlot] = [head]
     for index, (name, spec) in enumerate(fn.parameters.items()):
         prefix = ',"parameters":{' if index == 0 else ''
-        # Keep ": ": without it Qwen3 never ended "2.0" (2026-11-18 GPU run).
+        # Keep ": ": without the space, Qwen3 never ended "2.0" in our runs.
         parts.append(FixedText(text=prefix + json_string(name) + ': '))
         parts.append(ValueSlot(
             name=name, type=spec.type,

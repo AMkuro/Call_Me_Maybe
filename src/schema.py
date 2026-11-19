@@ -18,7 +18,22 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def validate_number(value: object) -> int | float:
-    """Keep a JSON number's decimal value, or reject unsafe conversion."""
+    """Return a JSON number as an int or float with the same value.
+
+    A Decimal becomes the float whose JSON text has the same value, or an
+    int when it is integral.
+
+    Args:
+        value: An int, a float, or the Decimal that json_io.loads produces.
+
+    Returns:
+        The number.
+
+    Raises:
+        ValueError: ``value`` is a bool or another type, is not finite, is
+            an int too long to write, or is a Decimal that overflows,
+            underflows to zero, or that no float or int represents exactly.
+    """
     if isinstance(value, bool):
         raise ValueError("boolean is not a JSON number argument")
     if isinstance(value, int):
@@ -56,7 +71,11 @@ Scalar = str | bool | Number
 
 
 class ParamSpec(BaseModel):
-    """The type of one parameter (or of a return value)."""
+    """The type of one parameter (or of a return value).
+
+    Attributes:
+        type: "number", "string" or "boolean".
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -64,7 +83,17 @@ class ParamSpec(BaseModel):
 
 
 class FunctionDef(BaseModel):
-    """One entry of functions_definition.json."""
+    """One entry of functions_definition.json, validated strictly.
+
+    Unknown keys and values of another type are rejected. A blank
+    description or parameter name is allowed but logged as a warning.
+
+    Attributes:
+        name: The function name; not blank.
+        description: What the function does.
+        parameters: The type of each parameter, read-only, in input order.
+        returns: The type of the return value.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -76,7 +105,17 @@ class FunctionDef(BaseModel):
     @field_validator("name")
     @classmethod
     def require_name(cls, value: str) -> str:
-        """Reject blank names without stripping valid identifiers."""
+        """Reject an empty or whitespace-only name; keep others unchanged.
+
+        Args:
+            value: The name.
+
+        Returns:
+            ``value``.
+
+        Raises:
+            ValueError: ``value`` is blank.
+        """
         if not value.strip():
             raise ValueError("function names must not be empty")
         return value
@@ -86,19 +125,39 @@ class FunctionDef(BaseModel):
     def _read_only(
         cls, parameters: Mapping[str, ParamSpec],
     ) -> Mapping[str, ParamSpec]:
-        """Protect the validated copy without retaining the input mapping."""
+        """Wrap the new dict Pydantic built, so no outside alias exists.
+
+        Args:
+            parameters: The validated parameters.
+
+        Returns:
+            A read-only view of ``parameters``.
+        """
         return MappingProxyType(parameters)
 
     @field_serializer("parameters")
     def _plain_parameters(
         self, parameters: Mapping[str, ParamSpec],
     ) -> dict[str, ParamSpec]:
-        """Keep the original dictionary representation when serializing."""
+        """Serialize the read-only view as an ordinary dict.
+
+        Args:
+            parameters: The stored parameters.
+
+        Returns:
+            A dict with the same items.
+        """
         return dict(parameters)
 
     @model_validator(mode="after")
     def warn_blank_metadata(self) -> "FunctionDef":
-        """Warn about incomplete metadata while preserving its exact value."""
+        """Log a warning for a blank description or parameter name.
+
+        The values are kept unchanged.
+
+        Returns:
+            This definition.
+        """
         if not self.description.strip():
             _LOGGER.warning("function %r: description is blank", self.name)
         for position, name in enumerate(self.parameters, 1):
@@ -109,7 +168,13 @@ class FunctionDef(BaseModel):
 
 
 class FunctionCall(BaseModel):
-    """One output record: exactly the keys prompt, name and parameters."""
+    """One output record: exactly the keys prompt, name and parameters.
+
+    Attributes:
+        prompt: The user's request.
+        name: The function called.
+        parameters: The argument values by parameter name.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -124,7 +189,19 @@ class FunctionCall(BaseModel):
 
 
 def build_parameters_model(fn: FunctionDef) -> type[BaseModel]:
-    """Build a model that checks the generated parameters of ``fn``."""
+    """Return a strict model of ``fn``'s parameters, in their order.
+
+    It requires exactly those names, each of its declared type (numbers
+    through Number). Fields are named parameter_0, parameter_1, ... with
+    the parameter names as aliases, so any name works, even one that is not
+    an identifier or is a BaseModel attribute such as ``model_dump``.
+
+    Args:
+        fn: The function.
+
+    Returns:
+        The model class.
+    """
     types: dict[ParamType, Any] = {
         "number": Number, "string": str, "boolean": bool,
     }

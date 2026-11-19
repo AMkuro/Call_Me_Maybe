@@ -14,29 +14,46 @@ from .writer import prepare_output
 
 
 class Args(BaseModel):
-    """Validated command-line arguments.
+    """The three paths and the inputs read from them, validated together.
 
-    Judgment: the defaults follow the Subject (default input and output
-    live under data/). The Subject gives the output file as both
-    data/output/function_calls.json and output/function_calls.json; the
-    first matches the data/ default.
-    Initialization loads validated input snapshots and probes the output
-    destination before a model can be loaded. Existing output is untouched.
+    Creating an Args reads and validates both input files and prepares the
+    output: missing parent directories are created and a temporary file is
+    written and removed next to it. An existing output file is left
+    unchanged. The defaults are the Subject's paths under data/.
+
+    Attributes:
+        functions_definition: The function definitions file.
+        input: The prompts file.
+        output: The output file.
+        functions: The definitions, read-only, keyed by name in input
+            order. Left out of model_dump.
+        prompts: The prompts in input order. Left out of model_dump.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     functions_definition: Path = Path("data/input/functions_definition.json")
     input: Path = Path("data/input/function_calling_tests.json")
     output: Path = Path("data/output/function_calls.json")
 
     functions: Mapping[str, FunctionDef] = Field(
-        default_factory=dict, exclude=True, repr=False,
+        default_factory=dict,
+        exclude=True,
+        repr=False,
     )
     prompts: tuple[str, ...] = Field(default=(), exclude=True, repr=False)
 
     def __init__(self, **data: Any) -> None:
-        """Validate inputs and output, then install immutable snapshots."""
+        """Validate the paths, read the inputs, then prepare the output.
+
+        Args:
+            **data: The path fields functions_definition, input and output.
+
+        Raises:
+            StartupError: An input file is unreadable or invalid, or the
+                output cannot be prepared.
+            ValidationError: A value is not a path, or a field is unknown.
+        """
         super().__init__(**data)
         functions = load_functions(self.functions_definition)
         prompts = load_prompts(self.input)
@@ -49,19 +66,33 @@ class Args(BaseModel):
 def parse_args(argv: Sequence[str] | None = None) -> Args:
     """Parse ``--functions_definition``, ``--input`` and ``--output``.
 
-    Effect: reads inputs and prepares output after successful parsing.
-    Reads sys.argv when ``argv`` is None. Help and parse errors skip
-    input loading and output preparation.
+    Args:
+        argv: The arguments without the program name, or None to read
+            sys.argv.
+
+    Returns:
+        The resulting Args: the inputs have been read and the output
+        prepared.
+
+    Raises:
+        StartupError: As for Args.
+        SystemExit: From argparse, for ``--help`` or an invalid option,
+            before any file is touched.
     """
     parser = argparse.ArgumentParser(
         description="Generate JSON function calls with constrained decoding.",
         allow_abbrev=False,
     )
     defaults = Args.model_fields
-    parser.add_argument("--functions_definition", type=Path,
-                        default=defaults["functions_definition"].default)
-    parser.add_argument("--input", type=Path,
-                        default=defaults["input"].default)
-    parser.add_argument("--output", type=Path,
-                        default=defaults["output"].default)
+    parser.add_argument(
+        "--functions_definition",
+        type=Path,
+        default=defaults["functions_definition"].default,
+    )
+    parser.add_argument(
+        "--input", type=Path, default=defaults["input"].default
+    )
+    parser.add_argument(
+        "--output", type=Path, default=defaults["output"].default
+    )
     return Args.model_validate(vars(parser.parse_args(argv)))

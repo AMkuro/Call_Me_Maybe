@@ -1,4 +1,4 @@
-"""Static contract for synchronous, non-controlling generation observations."""
+"""What generation reports while it runs, for a display to show."""
 
 from __future__ import annotations
 
@@ -15,49 +15,82 @@ Stage = Literal["select_function", "generate_call_json", "validate_call"]
 
 
 class GenerationProgress(Protocol):
-    """Observe generation without changing its data or deciding its next step.
+    """Receives generation events to display; it cannot steer generation.
 
-    Name IDs are borrowed for this call only: do not mutate or retain them.
-    Availability describes the diagnostic stream, independently of isatty.
+    Calls are synchronous. The ``tokens`` given to name_token belong to the
+    generator: read them during the call, and do not change or keep them.
     """
 
     @property
     def available(self) -> bool:
-        """Whether the diagnostic stream is usable."""
+        """False once the output stream has failed; reporting then stops."""
         ...
 
     def stage(self, stage: Stage) -> None:
-        """Enter one generation or validation stage."""
+        """Report that a stage of the prompt starts.
+
+        Args:
+            stage: The stage.
+        """
         ...
 
     def function_selected(self, name: str) -> None:
-        """Record the completed name selection."""
+        """Report the chosen function name.
+
+        Args:
+            name: The name.
+        """
         ...
 
     def parameter_started(self, name: str, param_type: ParamType) -> None:
-        """Begin one value, clearing its previous progress."""
+        """Report that the value of one parameter starts.
+
+        Args:
+            name: The parameter name.
+            param_type: Its type.
+        """
         ...
 
     def name_token(
         self, tokens: Sequence[int], *, mode: SelectionMode,
         raw_top: int | None,
     ) -> None:
-        """Synchronously consume the borrowed name prefix and its decision."""
+        """Report one more name token.
+
+        Args:
+            tokens: The name's token IDs so far, borrowed for this call.
+            mode: How the last token was chosen.
+            raw_top: The unconstrained best token in greedy mode when it
+                was computed, else None.
+        """
         ...
 
     def value_token(
         self, written: bytes, step: int, *, token: int, mode: SelectionMode,
     ) -> None:
-        """Observe a value prefix and the ID/mode that produced this step."""
+        """Report one more value token.
+
+        Args:
+            written: The value's bytes so far.
+            step: The number of its tokens.
+            token: The last token ID.
+            mode: How the last token was chosen.
+        """
         ...
 
 
 def observing(
     progress: GenerationProgress | None,
 ) -> TypeGuard[GenerationProgress]:
-    """Whether to notify ``progress`` and build what only it uses.
+    """Tell whether to notify ``progress`` and build what only it uses.
 
     Checked at every notification, because ``available`` turns False when
-    the diagnostic stream fails during a prompt.
+    the stream fails during a prompt.
+
+    Args:
+        progress: The receiver, or None.
+
+    Returns:
+        True when ``progress`` is given and available.
     """
     return progress is not None and progress.available

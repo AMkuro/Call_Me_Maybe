@@ -7,7 +7,17 @@ from typing import Any, NoReturn
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    """Reject a duplicate before inserting it into the decoded object."""
+    """Build one JSON object, rejecting a repeated key.
+
+    Args:
+        pairs: The object's keys and values, in order.
+
+    Returns:
+        The object.
+
+    Raises:
+        ValueError: A key occurs twice.
+    """
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
@@ -17,15 +27,32 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _reject_constant(value: str) -> NoReturn:
-    """NaN and Infinity are extensions, not standard JSON numbers."""
+    """Reject NaN, Infinity and -Infinity, which are not standard JSON.
+
+    Args:
+        value: The constant as written.
+
+    Raises:
+        ValueError: Always.
+    """
     raise ValueError(f"non-standard JSON number {value!r}")
 
 
 def loads(text: str) -> Any:
-    """Parse once, preserving exact numeric values for later validation.
+    """Parse JSON ``text`` strictly, keeping exact number values.
 
-    Shape and type checks belong to Pydantic at the consuming boundary.
-    This module uses only the standard library, including for dev tools.
+    Numbers with a fraction or an exponent become Decimal, others int.
+    Shape and types are checked later, by Pydantic.
+
+    Args:
+        text: JSON text.
+
+    Returns:
+        The parsed value.
+
+    Raises:
+        ValueError: The text is not JSON, repeats an object key, contains
+            NaN or Infinity, or exceeds the parser's limits.
     """
     try:
         return json.loads(text, object_pairs_hook=_unique_object,
@@ -39,9 +66,18 @@ def loads(text: str) -> Any:
 
 
 def load(path: Path) -> Any:
-    """Read a UTF-8 JSON file once, using the same strict parser as loads.
+    """Read the UTF-8 JSON file at ``path`` and parse it with loads.
 
-    Effect: reads a file. I/O and JSON errors retain their original types;
-    the caller supplies the function-definition or prompt error context.
+    The errors are not wrapped; callers add which file it was.
+
+    Args:
+        path: The file.
+
+    Returns:
+        The parsed value.
+
+    Raises:
+        OSError: The file cannot be read.
+        ValueError: The file is not UTF-8 or not valid JSON (see loads).
     """
     return loads(path.read_text(encoding="utf-8"))

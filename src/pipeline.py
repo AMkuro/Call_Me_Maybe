@@ -24,13 +24,23 @@ def process_all(
     prompts: Sequence[str], resources: GenerationAssets, output: Path,
     dashboard: Dashboard,
 ) -> bool:
-    """Process every prompt; True when none failed.
+    """Process the prompts in order; return True when none failed.
 
-    A failed prompt is reported and skipped. The results so far are saved
-    after each success, so an interruption keeps them. Raises OSError when
-    saving fails.
+    A failed prompt is reported to ``dashboard`` and skipped. After each
+    success, all results so far are saved to ``output``, so an interruption
+    keeps them; when none succeeds, an empty array is saved.
 
-    Effect: uses the model and writes ``output``.
+    Args:
+        prompts: The prompts.
+        resources: The model and the data shared by every prompt.
+        output: The output file.
+        dashboard: Shows the progress and counts the outcomes.
+
+    Returns:
+        True when every prompt succeeded.
+
+    Raises:
+        OSError: Saving fails.
     """
     calls: list[FunctionCall] = []
     for index, user_prompt in enumerate(prompts, 1):
@@ -56,7 +66,19 @@ def process_prompt(
     *,
     progress: GenerationProgress | None = None,
 ) -> FunctionCall:
-    """Select a name, generate parameters, then validate one JSON record."""
+    """Select a function, generate its call and validate it.
+
+    Args:
+        user_prompt: The user's request.
+        resources: The model and the data shared by every prompt.
+        progress: Receives each stage and step, or None.
+
+    Returns:
+        The validated record.
+
+    Raises:
+        PromptError: Selection, generation or validation fails.
+    """
     if observing(progress):
         progress.stage("select_function")
     fn = select_function(
@@ -88,8 +110,19 @@ def validate_call(
     The record must parse, copy ``user_prompt`` exactly, name ``fn`` and
     match its parameters, and Python's json must read every number
     argument as a finite float. Only then is ``text`` kept as the record's
-    _generated_json, which save_results writes unchanged so the number
-    spelling survives (REQ-031; an integer only gained ".0").
+    ``_generated_json``; save_results writes it unchanged, so each number
+    is saved with the digits the model wrote.
+
+    Args:
+        text: The generated JSON record.
+        fn: The selected function.
+        user_prompt: The user's request.
+
+    Returns:
+        The record, with ``text`` attached.
+
+    Raises:
+        PromptError: A check fails.
     """
     try:
         call = FunctionCall.model_validate(loads(text))

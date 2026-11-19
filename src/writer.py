@@ -11,7 +11,15 @@ from .schema import FunctionCall
 
 
 def _prepare_destination(path: Path) -> None:
-    """Create parents and reject an existing non-regular destination."""
+    """Create the parent directories; reject a non-regular existing file.
+
+    Args:
+        path: The output file.
+
+    Raises:
+        OSError: A directory cannot be created, or ``path`` exists and is
+            not a regular file.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         mode = path.stat().st_mode
@@ -23,11 +31,19 @@ def _prepare_destination(path: Path) -> None:
 
 
 def prepare_output(path: Path) -> None:
-    """Prepare and probe an atomic-save destination before model startup.
+    """Check that results can be saved to ``path``, without changing it.
 
-    Effect: creates parent directories and writes/removes a sibling probe.
-    Existing output bytes are untouched; no final output file is created.
-    Raises StartupError with the destination and underlying failure reason.
+    Creates missing parent directories, then writes and removes a
+    temporary file next to ``path``. An existing file at ``path`` is left
+    unchanged, and none is created.
+
+    Args:
+        path: The output file.
+
+    Raises:
+        StartupError: The output cannot be prepared, also when ``path``
+            exists but is not a regular file. The message names ``path``
+            and the cause.
     """
     try:
         _prepare_destination(path)
@@ -44,15 +60,18 @@ def prepare_output(path: Path) -> None:
 def save_results(path: Path, calls: list[FunctionCall]) -> None:
     """Write ``calls`` as a JSON array, replacing the file atomically.
 
-    Called after every successful prompt with all results so far, or with
-    an empty list when the run produces no results. Raises OSError on a
-    failed write; main reports it and stops (docs/architecture.md §5).
+    The array is written to a temporary file next to ``path``, which then
+    replaces ``path``, so a failure or interruption leaves the previous
+    file whole. Each record is written as its ``_generated_json`` text, or
+    with json.dump when that is None. Creates missing parent directories.
 
-    Effect: writes a file.
+    Args:
+        path: The output file.
+        calls: All the records so far, in input order.
 
-    Judgment: rewrite the whole file after every prompt (temporary file,
-    then replace), so a crash keeps the results so far. Slow when there
-    are many prompts (not measured).
+    Raises:
+        OSError: Writing fails, or ``path`` exists and is not a regular
+            file. The temporary file is removed and ``path`` is unchanged.
     """
     _prepare_destination(path)
     temporary: Path | None = None
