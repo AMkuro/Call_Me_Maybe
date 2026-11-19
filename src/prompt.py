@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping
 
 from .schema import FunctionDef, Scalar
-from .skeleton import FixedText, build_call_skeleton
+from .skeleton import FixedText, build_call_skeleton, escape_lt, json_string
 
 NAME_INSTRUCTIONS = (
     "Choose the function matching the request. Reply with its exact name only."
@@ -61,7 +61,8 @@ def build_name_prompt(
     """Return the prompt for choosing a function name.
 
     It lists every definition and ends with "Function name:" and a line
-    break, so the model writes a name next.
+    break, so the model writes a name next. Input text is passed through
+    escape_lt, so it cannot add special tokens.
 
     Args:
         user_prompt: The user's request.
@@ -70,20 +71,23 @@ def build_name_prompt(
     Returns:
         The prompt text.
     """
-    definitions = "\n".join(
+    definitions = escape_lt("\n".join(
         f"{fn.name}: {fn.description} Arguments: " + ", ".join(
             f"{name} ({spec.type})" for name, spec in fn.parameters.items()
         ) for fn in functions.values()
-    )
+    ))
     return _format_chatml(
         NAME_INSTRUCTIONS,
         f"Available functions:\n{definitions}\n\n"
-        f"Request: {json.dumps(user_prompt)}",
+        f"Request: {json_string(user_prompt)}",
     ) + "Function name:\n"
 
 
 def _parameters_request(user_prompt: str, fn: FunctionDef) -> str:
     """Return the user message: the request, then the function to call.
+
+    Both are JSON with ``<`` escaped (escape_lt), so input text cannot add
+    special tokens.
 
     Args:
         user_prompt: The user's request.
@@ -93,9 +97,10 @@ def _parameters_request(user_prompt: str, fn: FunctionDef) -> str:
         The message text.
     """
     # "returns" is left out: it does not help extract the arguments.
-    definition = json.dumps(fn.model_dump(exclude={"returns"}),
-                            ensure_ascii=False, separators=(",", ":"))
-    return (f"User request: {json.dumps(user_prompt)}\n"
+    definition = escape_lt(json.dumps(fn.model_dump(exclude={"returns"}),
+                                      ensure_ascii=False,
+                                      separators=(",", ":")))
+    return (f"User request: {json_string(user_prompt)}\n"
             f"Function to call: {definition}")
 
 

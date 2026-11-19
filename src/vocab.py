@@ -40,7 +40,9 @@ def load_vocab(path: Path) -> Mapping[int, bytes]:
         raw = TypeAdapter(dict[str, int]).validate_python(
             loads(path.read_text(encoding="utf-8")), strict=True,
         )
-        if not raw or any(token < 0 for token in raw.values()):
+        if not raw:
+            raise ValueError("vocabulary is empty")
+        if any(token < 0 for token in raw.values()):
             raise ValueError("vocabulary must have nonnegative token IDs")
         if len(set(raw.values())) != len(raw):
             raise ValueError("duplicate vocabulary token IDs")

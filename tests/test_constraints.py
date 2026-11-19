@@ -256,6 +256,17 @@ class VocabularyTests(unittest.TestCase):
                     with self.assertRaises(StartupError):
                         load_vocab(path)
 
+    def test_bad_vocab_messages_name_the_problem(self) -> None:
+        """An empty file is not reported as a negative ID."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'vocab.json'
+            for text, reason in [('{}', 'empty'), ('{"a": -1}', 'negative'),
+                                 ('{"a": 1, "b": 1}', 'duplicate')]:
+                path.write_text(text, encoding='utf-8')
+                with self.subTest(text=text):
+                    with self.assertRaisesRegex(StartupError, reason):
+                        load_vocab(path)
+
 
 class GrammarTests(unittest.TestCase):
     """Allow every valid prefix and reject bytes past slot terminators."""

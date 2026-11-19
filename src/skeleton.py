@@ -36,20 +36,33 @@ class ValueSlot(BaseModel):
     terminator: Literal[",", "}"]
 
 
-def json_string(text: str) -> str:
-    """Return ``text`` as a JSON string literal with ``<`` escaped.
+def escape_lt(text: str) -> str:
+    """Write every ``<`` in ``text`` as ``\\u003c``.
 
     The SDK encodes text such as ``<|im_end|>`` as one special token, and
-    its decode drops that token. Written as ``\\u003c`` the same JSON value
-    stays in ordinary tokens. ``<`` occurs only inside strings here.
+    its decode drops that token. Every special token starts with ``<``, so
+    escaped text stays in ordinary tokens. In JSON text, where ``<`` occurs
+    only inside strings, the escape keeps the same JSON value.
+
+    Args:
+        text: Any text, usually JSON.
+
+    Returns:
+        ``text`` without ``<``.
+    """
+    return text.replace("<", "\\u003c")
+
+
+def json_string(text: str) -> str:
+    """Return ``text`` as a JSON string literal with ``<`` escaped.
 
     Args:
         text: Any text.
 
     Returns:
-        The JSON string literal, quotes included.
+        The JSON string literal, quotes included (see escape_lt).
     """
-    return json.dumps(text).replace("<", r"\u003c")
+    return escape_lt(json.dumps(text))
 
 
 def build_call_skeleton(
