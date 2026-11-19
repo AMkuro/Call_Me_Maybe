@@ -127,7 +127,7 @@ class PipelineTests(unittest.TestCase):
                                      'generate_slot',
                                      side_effect=[encode('12.0,'),
                                                   encode('true}')]):
-                    text = generation.generate_call_json(
+                    text, _ = generation.generate_call_json(
                         'a "quoted" prompt', fn,
                         model=model,
                         vocab={token: bytes([token]) for token in range(128)},

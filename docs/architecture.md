@@ -114,8 +114,9 @@ SDK の encode は Tensor を返すため、`Model.encode` が `tolist()` で普
 
 ## 3. 1件の依頼を呼び出し記録へ変える
 
-`process_prompt` は、関数を選ぶ `select_function`、引数を作る `generate_call_json`、
-生成した記録を確認する `validate_call` の順に進む。それぞれが次の段階へ渡すものを決め、
+`process_prompt` は、関数を選ぶ `select_function`、補正前JSONを作る `generate_call_json`、
+numberの整数表記を補正する `values.normalize_call_json`、記録を確認する `validate_call` の順に進む。
+それぞれが次の段階へ渡すものを決め、
 表示や保存のためにモデルの選択結果を作り直さない。
 
 ![起動から保存までの実行順](diagrams/skeleton-flow.svg)
@@ -280,8 +281,8 @@ Oを伸ばすのは`generate_call_json`だけである。`_commit_fixed_text`と
   Vのバイト列`written`は、IDを1つ確定するたびにそのIDの語彙バイト列を足して保つ（毎ステップの全連結はしない）。
 - 完成したVのSDK復号と語彙バイト列のUTF-8復号が一致したらOへ統合する。
   このextendは確定済みIDの移管であり、再生成や再トークン化ではない。
-- 最後にO全体をSDKで復号し、語彙バイト列および検査済み各断片の連結と完全一致することを確認する。
-  この復号結果を返す。期待断片の文字列は照合用であり、別の出力本文としては使わない。
+- 最後にO全体をSDKで復号し、語彙バイト列と完全一致することを確認する。
+  この復号結果とnumberスロットの文字範囲を返す。各部分の文字列を全文比較用には保持しない（根拠は下記「数値の生成と保存形式」）。
 
 #### 固定JSONの特殊表記とトークン境界
 
@@ -336,9 +337,50 @@ UTF-8途中の単トークンを復号して連結せず、値はbytesで制約�
 
 背景: 小数部を必須にした文法では、timer-flags-01でモデルが`10`の後に選びたい区切りを拒否し、
 `1000…`と続けて256トークン上限に達した。所有者は、LLMには整数でも終了させ、Python側でfloat形式にする方針を決定した。
-採用: 整数の直後にも区切りを許す。`generate_call_json`は復号と断片一致を確認し、保存する本文のnumberスロットだけ、
-`values.float_text`で整数に`.0`を加える。文字列として追加するため桁を丸めず、小数と文字列・booleanは変更しない。
+採用: 整数の直後にも区切りを許す。`generate_call_json`は語彙バイト列とSDKの復号を照合し、補正前JSONを返す。
+`process_prompt`が`values.normalize_call_json`を呼び、numberスロットの整数に`values.float_text`で`.0`を加える。
+文字列として追加するため桁を丸めず、小数と文字列・booleanは変更しない。
 モデルへ戻す文脈は確定したID列のままとし、追加した`.0`はforwardしない。
+
+責務分離（2026-11-20、所有者が範囲を渡す設計を承認）:
+生成の戻り値は`(raw_json, number_ranges)`とする。`number_ranges`は生成時の`ValueSlot.type`がnumberの箇所だけを
+記録した、補正前JSONの文字位置の組`(start, end)`のリストである。開始を含み終了を含まず、各スロットの区切り文字までを含む。
+固定部分と検証済みの完成スロットの文字数を足して位置を求めるため、UTF-8のバイト数やトークン数と混同しない。
+引数がない場合やnumber引数がない場合は空リストとなる。
+
+正規化は渡された範囲だけを`float_text`へ渡し、範囲外を元のまま連結する。
+範囲は同じ生成呼び出しから受け取る内部データで、昇順かつ重複せず、各numberスロットに対応することを生成側が保証する。
+正規化側は関数定義からの再探索やJSON解析を行わない。既存の値文法・文字列表記の処理と一緒に`values.py`へ置き、
+生成処理から保存用補正への依存を外す。`float_text`のインターフェースと正規表現は変更しない。
+`validate_call`は正規化の後で従来のJSON・prompt・name・引数・有限float検証を行い、受理した本文を`_generated_json`へ保持する。
+
+以前の`fragments`と`saved`は、補正前後の断片を並行して保持していた。現在は両方を廃止し、
+生成側には確定ID列、文字位置のカウンターとnumber範囲だけを保持する。
+固定部分のencode結果は期待文字列と一致し、各完成スロットと出力全体はそれぞれ同じ語彙バイト列とSDK復号の一致を検査する。
+出力ID列はこれらの部分ID列の連結なので、その語彙バイト列も各部分の連結となる。
+各部分が完成UTF-8であることも検証済みのため、全文と期待断片の追加比較は重複し、省略できる。
+固定部分・スロット・全文の照合自体は残し、文脈依存のSDK復号不一致も引き続き拒否する。
+
+比較した方法: 文字列だけを返す方法では、正規化側で引数値の位置を再探索する必要がある。
+JSONの再シリアライズは数値・エスケープ・固定部分の表記を変えうるため採らず、
+既知の範囲だけを返すtupleを採用した。新しいパーサーやデータクラスは追加しない。
+検証方法: 固定logitsの回帰テストで、変更前から同じ生のID列・全forward入力・通知と、同じ保存ファイルを確認する。
+Unicode文字列の後にnumberを置く例でも、文字位置による補正が他の表記を変更しないことを検査する。
+
+責務分離の検証結果（2026-11-20）: `make install`、`make lint`（Subject指定mypy、57ソース）、
+`make test`（284テスト）が成功した。lint/testはsandboxのuvキャッシュ書込制限を避けるため、
+`UV_CACHE_DIR=/tmp/cmm-normalization-uv-cache`を指定した。
+固定logitsの保存・通知・全forward入力の回帰テストは変更前にも成功し、変更後も同じ期待値で成功した。
+独立レビューでは指摘がなく、レビュー担当者による生成テストの再実行も成功した。
+
+実GPU（Radeon 8060S、既存の`.venv-gpu`）では、変更前`afa84ba32154daaf08d8cf547196df4180915c9f`の
+generation/pipelineを一時ディレクトリから読み込む実行と、変更後の実行を`make gpu-run`で直列に行った。
+入力・関数定義は既定の標準11件で、両方11件完了・失敗0、保存ファイルは`cmp`で一致した。
+公開Model境界で記録したencode 68回、forward 500回、decode 126回の全記録も`cmp`で一致した。
+これにはJSON本体の確定ID列11件（合計445トークン）、プロンプト、全forward入力とその順序、復号結果が含まれる。
+保存した11件の元のJSON文字列を、入力promptと関数定義に対して既存`validate_call`で再検証し、すべて成功した。
+生の記録・出力・計装と比較スクリプトは`/tmp/cmm-normalization-model-check/`に一時保存した。
+これは既知入力の動作一致とスキーマ検証であり、意味的な正答率の採点や性能測定は行っていない。
 
 数値スロットは区切りを含め32トークンで打ち切り、未完了ならPromptErrorにする。
 これは数字を書き続ける場合の計算量を抑える上限であり、桁数やfloatの有効桁数を表すものではない。
@@ -574,7 +616,8 @@ GPUの実CLIをTTYとリダイレクトで動かす確認と、推論を行わ�
 | 関数を選ぶ処理 | `generation.select_function`、`name_trie.py` | 入力された定義の `FunctionDef` を返す |
 | トークンを選ぶ方法 | `decoder.py` | 許可IDから1つ選び、ID・方式・任意診断を返す。列や上限は管理せず、観察で選択を変えない |
 | 引数値の許可文法・終了条件 | `values.py`、`generate_slot` | 値とスロットのJSON区切りのID列を返す。文字列の中の区切り文字では終了しない |
-| JSON全文の組み立て | `generate_call_json`、`skeleton.py` | 固定IDを1個ずつ確定し、値の確定IDを統合。完成Oの復号・バイト列・期待断片を照合する |
+| JSON全文の組み立て | `generate_call_json`、`skeleton.py` | 固定IDを1個ずつ確定し、値の確定IDを統合。各部分と完成Oの復号をバイト列と照合し、補正前JSONとnumber範囲を返す |
+| numberの保存表記の補正 | `values.normalize_call_json` | 生成時のnumber範囲だけへfloat_textを適用し、他の表記を保持する。process_promptが検証前に呼ぶ |
 | 値の生成上限 | `generation.MAX_VALUE_STEPS`、`MAX_NUMBER_STEPS` | 超過を値の短縮で隠さず、理由付きの PromptError にする |
 | 引数の型と数値の扱い | `schema.py`、値の文法、保存 | 定義のキーを保持し、検証後の値を出力する。変更時は生成と検証の双方を確認する |
 | SDK との接続 | `model_port.py` の具体的な `Model` | 公開 API だけを使い、encode と logits は普通のリスト、decode は文字列を返す |
@@ -964,6 +1007,10 @@ def generate_call_json(
     model: Model,
     vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
+) -> tuple[str, list[tuple[int, int]]]: ...
+
+def normalize_call_json(
+    raw_json: str, number_ranges: Sequence[tuple[int, int]],
 ) -> str: ...
 
 def generate_slot(
@@ -1001,7 +1048,8 @@ __main__._end：resourcesから必要な参照を取り出してDashboardをwith
     → stage(select_function) → select_function(model, functions, trie, progress)
     → stage(generate_call_json) → generate_call_json(model, vocab, fn, progress)
       → 固定IDの逐次確定 / parameter_started(name, type) → generate_slot(model, vocab, slot, P + O, progress)
-    → O全文の復号・整合性検査 → stage(validate_call) → validate_call → prompt一致検査 → FunctionCall
+    → O全文の復号・整合性検査 → (raw_json, number_ranges)
+    → normalize_call_json → stage(validate_call) → validate_call → prompt一致検査 → FunctionCall
   → 成功ごとに保存 → 完了/失敗通知 → 次の入力
 with終了：端末復帰 → 要約 → _endで保存エラー報告または終了コードを返す
 ```
@@ -1030,6 +1078,7 @@ with終了：端末復帰 → 要約 → _endで保存エラー報告または�
 | --- | --- |
 | runtime.py | GenerationAssetsの構築と資源の保持。Model、語彙、Trieを起動時に一度作る |
 | generation.py | 名前・固定文字列・値の生成、復号の照合、生成上限。資源構造体を受け取らず、必要な依存を明示引数で受け取る |
+| values.py | 値の接頭辞文法・終了判定と、生成済みnumber範囲の保存表記の正規化 |
 | pipeline.py | process_allによる反復・成功ごとの保存、process_promptによる段階の調停、validate_callによる出力の受理 |
 | cli.py | Args初期化時の入力検証・出力準備と入力スナップショットの保持。CLI解析だけで終わる場合はI/Oをしない |
 | __main__.py | _startでArgsの入力スナップショットを使って資源を構築。_endの端末コンテキスト管理・保存エラー報告・終了コード。起動失敗はmainで報告する |
@@ -1042,7 +1091,7 @@ __main__ ──→ cli（Args） ──→ loader / writer
    │
    ├──→ pipeline ──→ generation ──→ decoder ──→ model_port
    │        │            └──→ progress
-   │        ├──→ runtime / schema / writer
+   │        ├──→ runtime / schema / values / writer
    │        └──→ progress
    └──→ display ──→ model_port / progress
 ```
@@ -1098,7 +1147,7 @@ SDKハンドルのInstanceOfはModelの型一致だけで、初期化済み・�
 | 資源の4参照 | InstanceOfの検査とfunctionsの読み取り専用の複製（N件）。コンストラクタがModel・vocab・Trieを一度作る。名前の再比較やvocab内容の再走査はしない |
 | モデルのlogits | constrained_argmaxの次元・数値・非有限値・許可ID検査を維持。診断のargmax以外の配列処理を加えない |
 | 採用ID・mode・raw_top | 内部の選択分岐から得るプリミティブ。新たなPydanticモデルへ毎ステップ包み直さない |
-| 固定断片・完成値・JSON全文 | 語彙バイト列とSDK復号の一致、固定encodeの一致、全文と期待断片の一致。固定部分のforwardは増やさない |
+| 固定断片・完成値・JSON全文 | 各部分と全文の語彙バイト列・SDK復号の一致、固定encodeの一致を維持。期待断片の重複保持は省き、number範囲だけを正規化へ渡す |
 | 完成したFunctionCall | 既存のJSON・strict型・数値保持・スキーマ検証を維持。生成制約とは異なる境界 |
 | Dashboardのtotal/model/vocab view | 件数の導出値、同じModel、load_vocabで作った同じview。再包装・内容の再検証・copyをしない |
 

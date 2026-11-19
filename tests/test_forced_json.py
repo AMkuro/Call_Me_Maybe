@@ -5,11 +5,13 @@ import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from src import generation, pipeline, runtime
 from src.errors import PromptError
 from src.model_port import Model
+from src.progress import GenerationProgress
+from src.values import normalize_call_json
 from trie_fixtures import trie_from_paths
 from src.schema import FunctionDef
 from src.writer import save_results
@@ -88,8 +90,10 @@ class ForcedJsonTests(unittest.TestCase):
         )
         expected = head.replace('<', r'\u003c') + members + '}}'
         self.target = expected.encode()
-        return generation.generate_call_json(prompt, fn, model=self.model,
-                                             vocab=self.vocab)
+        raw, _ = generation.generate_call_json(
+            prompt, fn, model=self.model, vocab=self.vocab,
+        )
+        return raw
 
     def test_fixed_ids_commit_individually_after_one_forward(self) -> None:
         """Method B: each fixed ID follows one forward on the full prefix."""
@@ -102,13 +106,17 @@ class ForcedJsonTests(unittest.TestCase):
         self.assertEqual(self.contexts,
                          [[80] + list(b'{"x": '[:end]) for end in range(6)])
 
-    def test_integer_is_saved_as_float_text_but_not_forwarded(self) -> None:
-        """The model ends at 10; Python saves 10.0 (owner, 2026-11-18)."""
+    def test_integer_is_returned_raw_with_number_range(self) -> None:
+        """Return raw text; normalization never enters the model context."""
         fn = self.definition('timer', minutes='number', repeat='boolean')
         self.target = (b'{"prompt":"t","name":"timer","parameters":'
                        b'{"minutes": 10,"repeat": true}}')
-        text = generation.generate_call_json('t', fn, model=self.model,
-                                             vocab=self.vocab)
+        raw, ranges = generation.generate_call_json(
+            't', fn, model=self.model, vocab=self.vocab,
+        )
+        self.assertEqual(raw, self.target.decode())
+        self.assertEqual([raw[start:end] for start, end in ranges], ['10,'])
+        text = normalize_call_json(raw, ranges)
         self.assertEqual(text, '{"prompt":"t","name":"timer","parameters":'
                          '{"minutes": 10.0,"repeat": true}}')
         # The context keeps what the model wrote; ".0" is never forwarded.
@@ -116,6 +124,52 @@ class ForcedJsonTests(unittest.TestCase):
         self.assertIn(b'{"prompt":"t","name":"timer","parameters":'
                       b'{"minutes": 10,"repeat": ', outputs)
         self.assertFalse(any(b'10.0' in output for output in outputs))
+
+    def test_pipeline_preserves_raw_tokens_and_exact_saved_json(self) -> None:
+        """Pin forwarding, notifications and saved bytes before refactoring."""
+        fn = self.definition('record', a='number', s='string', b='number')
+        prompt = '数字12 "quote" \\ newline\n <|im_end|>'
+        head = ('{"prompt":"\\u6570\\u5b5712 \\"quote\\" \\\\ newline\\n '
+                '\\u003c|im_end|>","name":"record","parameters":{"a": ')
+        middle = ',"s": "東2, -5} \\" \\\\ \\n \\u0031","b": '
+        resources = runtime.GenerationAssets.model_construct(
+            model=self.model, vocab=self.vocab, functions={'record': fn},
+            trie=trie_from_paths({'record': (1,)}),
+        )
+        cases = (
+            ('2', '2.0'), ('-5', '-5.0'), ('0', '0.0'), ('-0', '-0.0'),
+            ('12.25', '12.25'), ('2.00', '2.00'),
+            ('9007199254740993', '9007199254740993.0'),
+            ('123456789012345678901234567890',
+             '123456789012345678901234567890.0'),
+        )
+        for raw_number, saved_number in cases:
+            with self.subTest(number=raw_number):
+                self.contexts.clear()
+                self.decodings.clear()
+                raw = head + raw_number + middle + '-0}}'
+                expected = head + saved_number + middle + '-0.0}}'
+                self.target = raw.encode()
+                progress = Mock(spec=GenerationProgress, available=True)
+                with patch.object(pipeline, 'select_function',
+                                  return_value=fn):
+                    call = pipeline.process_prompt(
+                        prompt, resources, progress=progress,
+                    )
+                self.assertEqual(call._generated_json, expected)
+                out = list(self.target)
+                self.assertEqual(self.decodings[-1], out)
+                self.assertEqual(self.contexts,
+                                 [[80] + out[:i] for i in range(len(out))])
+                events = progress.output_token.call_args_list
+                self.assertEqual([c.kwargs['token'] for c in events], out)
+                self.assertEqual(b''.join(c.args[0] for c in events),
+                                 self.target)
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / 'calls.json'
+                    save_results(path, [call])
+                    self.assertEqual(path.read_bytes(),
+                                     ('[\n  ' + expected + '\n]\n').encode())
 
     def test_special_prompt_name_keys_preserve_meaning(self) -> None:
         """Copied special spellings must never become control IDs."""
@@ -213,7 +267,7 @@ class ForcedJsonTests(unittest.TestCase):
             with self.assertRaises(PromptError):
                 self.run_record('number 7', fn, {'n': 7})
 
-    def test_full_decode_must_match_concatenated_fragments(self) -> None:
+    def test_full_decode_must_match_vocabulary_bytes(self) -> None:
         fn = self.definition('f')
         original = self.decode
 
@@ -257,7 +311,7 @@ class ForcedJsonTests(unittest.TestCase):
                 '{"n":9007199254740993.0}}')
         with patch.object(pipeline, 'select_function', return_value=fn), \
                 patch.object(pipeline, 'generate_call_json',
-                             return_value=text):
+                             return_value=(text, [])):
             call = pipeline.process_prompt('request', resources)
         self.assertEqual(call.parameters['n'], 9007199254740993)
         self.assertEqual(call._generated_json, text)
@@ -278,6 +332,23 @@ class ForcedJsonTests(unittest.TestCase):
         )
         with patch.object(pipeline, 'select_function', return_value=fn), \
                 patch.object(pipeline, 'generate_call_json', return_value=(
-                    '{"prompt":"changed","name":"f","parameters":{}}')):
+                    '{"prompt":"changed","name":"f","parameters":{}}', [])):
             with self.assertRaisesRegex(PromptError, 'prompt'):
                 pipeline.process_prompt('original', resources)
+
+    def test_invalid_normalized_json_is_rejected(self) -> None:
+        """Adding .0 must not bypass validation of the completed record."""
+        fn = self.definition('f', n='number')
+        head = '{"prompt":"x","name":"f","parameters":{"n": '
+        raw = head + '2}'  # missing the record's closing brace
+        ranges = [(len(head), len(raw))]
+        self.assertEqual(normalize_call_json(raw, ranges), head + '2.0}')
+        resources = runtime.GenerationAssets.model_construct(
+            model=self.model, vocab=self.vocab, functions={'f': fn},
+            trie=trie_from_paths({'f': (1,)}),
+        )
+        with patch.object(pipeline, 'select_function', return_value=fn), \
+                patch.object(pipeline, 'generate_call_json',
+                             return_value=(raw, ranges)):
+            with self.assertRaisesRegex(PromptError, 'invalid output'):
+                pipeline.process_prompt('x', resources)

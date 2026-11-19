@@ -14,6 +14,7 @@ from .json_io import loads
 from .progress import GenerationProgress, observing
 from .runtime import GenerationAssets
 from .schema import FunctionCall, FunctionDef, build_parameters_model
+from .values import normalize_call_json
 from .writer import save_results
 
 if TYPE_CHECKING:
@@ -67,7 +68,7 @@ def process_prompt(
     *,
     progress: GenerationProgress | None = None,
 ) -> FunctionCall:
-    """Select a function, generate its call and validate it.
+    """Select a function, generate raw JSON, normalize and validate it.
 
     Args:
         user_prompt: The user's request.
@@ -91,16 +92,17 @@ def process_prompt(
     )
     if observing(progress):
         progress.stage("generate_call_json")
-    text = generate_call_json(
+    raw_json, number_ranges = generate_call_json(
         user_prompt,
         fn,
         model=resources.model,
         vocab=resources.vocab,
         progress=progress,
     )
+    normalized_json = normalize_call_json(raw_json, number_ranges)
     if observing(progress):
         progress.stage("validate_call")
-    return validate_call(text, fn, user_prompt)
+    return validate_call(normalized_json, fn, user_prompt)
 
 
 def validate_call(

@@ -136,7 +136,7 @@ class ValidationFlowTests(unittest.TestCase):
             bodies = [
                 '{"prompt":"x","name":"dynamic","parameters":{"":'
                 + literal + '}}'
-                # generate_call_json always saves an integer with ".0".
+                # These generation fixtures already have float notation.
                 for literal in ['9007199254740993.0',
                                 '0.1234567890123456789', '0.1']
             ]
@@ -149,7 +149,7 @@ class ValidationFlowTests(unittest.TestCase):
                                      return_value=str(vocab)), \
                     patch.object(Model, 'logits', return_value=[0.0]), \
                     patch.object(pipeline, 'generate_call_json',
-                                 side_effect=bodies), \
+                                 side_effect=[(b, []) for b in bodies]), \
                     contextlib.redirect_stderr(stderr), \
                     contextlib.redirect_stdout(stdout):
                 status = entry.main([

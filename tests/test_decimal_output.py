@@ -18,7 +18,9 @@ from src.model_port import Model
 from trie_fixtures import trie_from_paths
 from src.schema import FunctionCall, FunctionDef
 from src.skeleton import ValueSlot
-from src.values import allowed_slot_tokens, float_text, is_slot_complete
+from src.values import (
+    allowed_slot_tokens, float_text, is_slot_complete, normalize_call_json,
+)
 from src.writer import save_results
 
 VALID = ('0.0', '-0.0', '2.0', '2.75', '-42.125', '9007199254740993.0',
@@ -50,8 +52,11 @@ def generated(literal: str, prompt: str = '依頼') -> FunctionCall:
     text = ('{"prompt":' + json.dumps(prompt) + ',"name":"record",'
             '"parameters":{"x":' + literal + ',"s":'
             + json.dumps('日本語 " \\ \n 1e10 2.0 <|im_end|>') + ',"b":false}}')
+    start = text.index(literal, text.index('"parameters":{"x":'))
+    ranges = [(start, start + len(literal) + 1)]
     with patch.object(pipeline, 'select_function', return_value=fn), \
-            patch.object(pipeline, 'generate_call_json', return_value=text):
+            patch.object(pipeline, 'generate_call_json',
+                         return_value=(text, ranges)):
         return pipeline.process_prompt(prompt, resources)
 
 
@@ -162,6 +167,34 @@ class DecimalGrammarTests(unittest.TestCase):
 class DecimalSaveTests(unittest.TestCase):
     """Inspect the saved file using standard JSON and Decimal hooks."""
 
+    def test_pipeline_normalizes_integer_before_float_validation(self) -> None:
+        """Integer generation succeeds only after the separate text edit."""
+        for literal in INTEGERS:
+            with self.subTest(literal=literal):
+                call = generated(literal)
+                text = call._generated_json
+                assert text is not None
+                self.assertIn('"x":' + literal + '.0,', text)
+
+    def test_normalization_preserves_all_other_text(self) -> None:
+        """Only supplied character ranges may gain a fraction."""
+        head = '{"prompt":"東 2, \\u0032","parameters":{"s":"-5}","a":'
+        for raw, expected in (
+            ('2,', '2.0,'), ('-5}', '-5.0}'), ('0}', '0.0}'),
+            ('-0}', '-0.0}'), ('12.2500,', '12.2500,'),
+            ('0.12345678901234567890123456789}',
+             '0.12345678901234567890123456789}'),
+            ('9007199254740993}', '9007199254740993.0}'),
+            (' 7 }', ' 7.0 }'), ('1e10}', '1e10}'),
+        ):
+            with self.subTest(raw=raw):
+                text = head + raw + '}'
+                self.assertEqual(normalize_call_json(
+                    text, [(len(head), len(head) + len(raw))],
+                ), head + expected + '}')
+        text = '{"prompt":"数字2,","parameters":{}}'
+        self.assertEqual(normalize_call_json(text, []), text)
+
     def test_generated_lexemes_survive_cumulative_save(self) -> None:
         """Preserve digits, sign and trailing zeros for every value."""
         calls = [generated(literal, str(index))
@@ -212,7 +245,9 @@ class DecimalSaveTests(unittest.TestCase):
         for literal in ('2', '-7'):
             with self.subTest(literal=literal), \
                     self.assertRaisesRegex(PromptError, 'float'):
-                generated(literal)
+                text = ('{"prompt":"p","name":"record","parameters":'
+                        '{"x":' + literal + ',"s":"","b":false}}')
+                pipeline.validate_call(text, definition(), 'p')
         saved = generated('2.0')._generated_json
         assert saved is not None
         self.assertIsInstance(json.loads(saved)['parameters']['x'], float)

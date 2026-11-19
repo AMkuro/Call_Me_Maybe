@@ -10,7 +10,7 @@ from .progress import GenerationProgress, observing
 from .prompt import build_name_prompt, build_parameters_prompt
 from .schema import FunctionDef
 from .skeleton import FixedText, ValueSlot, build_call_skeleton
-from .values import allowed_slot_tokens, float_text, is_slot_complete
+from .values import allowed_slot_tokens, is_slot_complete
 
 MAX_VALUE_STEPS = 256
 # Bound repeated digit generation before it costs 256 forwards;
@@ -145,8 +145,8 @@ def generate_call_json(
     model: Model,
     vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
-) -> str:
-    """Write the JSON record of one call to ``fn``; return its saved text.
+) -> tuple[str, list[tuple[int, int]]]:
+    """Generate raw JSON and locate its number slots for normalization.
 
     Fixed parts of the layout (build_call_skeleton) are committed as is,
     and the model generates each parameter value.
@@ -159,47 +159,42 @@ def generate_call_json(
         progress: Receives each step, or None.
 
     Returns:
-        The decoded output, except that a number written as an integer
-        gains ".0" (float_text); the model's context keeps the integer it
-        wrote.
+        The unmodified decoded output and its number-slot character
+        ranges, in order. Each range includes the slot's terminator,
+        with an inclusive start and exclusive end.
 
     Raises:
-        PromptError: A value cannot be generated, or the decoded output
-            differs from the parts it was built from.
+        PromptError: A value cannot be generated, or SDK decoding differs
+            from the vocabulary bytes of a fixed part, slot or full output.
     """
     prompt_ids = model.encode(build_parameters_prompt(user_prompt, fn))
     # Only this loop extends output_ids; each part gets the prompt and the
     # output so far as context and returns its own IDs.
     output_ids: list[int] = []
-    fragments: list[str] = []  # each part's expected text, to check the whole
-    saved: list[str] = []  # the same, with ".0" added to integer numbers
+    number_ranges: list[tuple[int, int]] = []
+    offset = 0
     for part in build_call_skeleton(user_prompt, fn):
         context = prompt_ids + output_ids
         if isinstance(part, FixedText):
             part_ids = _commit_fixed_text(
                 part.text, context, model=model, vocab=vocab, progress=progress
             )
-            fragments.append(part.text)
-            saved.append(part.text)
+            part_text = part.text
         else:
             if observing(progress):
                 progress.parameter_started(part.name, part.type)
             part_ids = generate_slot(
                 part, context, model=model, vocab=vocab, progress=progress
             )
-            fragments.append(
-                _decode_and_verify_output(part_ids, model=model, vocab=vocab)
+            part_text = _decode_and_verify_output(
+                part_ids, model=model, vocab=vocab
             )
-            saved.append(
-                float_text(fragments[-1])
-                if part.type == "number"
-                else fragments[-1]
-            )
+            if part.type == "number":
+                number_ranges.append((offset, offset + len(part_text)))
+        offset += len(part_text)
         output_ids.extend(part_ids)
     text = _decode_and_verify_output(output_ids, model=model, vocab=vocab)
-    if text != "".join(fragments):
-        raise PromptError("full JSON decoding differs from its fragments")
-    return "".join(saved)
+    return text, number_ranges
 
 
 def generate_slot(

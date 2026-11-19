@@ -8,6 +8,7 @@ from unittest.mock import patch
 from src import generation
 from src.display import Dashboard, render_progress
 from src.model_port import Model
+from src.values import normalize_call_json
 from test_application import definition
 
 
@@ -52,9 +53,9 @@ class PreviewTests(unittest.TestCase):
                 ))
                 contexts.append(llm.call_args_list)
             if enabled:
-                self.assertEqual(dashboard.fields['json'], results[-1])
+                self.assertEqual(dashboard.fields['json'], results[-1][0])
                 self.assertEqual(int(dashboard.fields['tokens']),
-                                 len(results[-1]))
+                                 len(results[-1][0]))
         self.assertEqual(results[0], results[1])
         self.assertEqual(contexts[0], contexts[1])
 
@@ -136,12 +137,14 @@ class PreviewTests(unittest.TestCase):
                 patch.object(Model, 'logits', side_effect=lambda ids:
                              [1. if i == raw[len(ids) - 1] else 0.
                               for i in range(256)]):
-            saved = generation.generate_call_json(
+            text, ranges = generation.generate_call_json(
                 'p', fn, model=model, vocab=vocab, progress=dashboard,
             )
         self.assertEqual(dashboard.fields['json'].encode(), raw)
         self.assertEqual(int(dashboard.fields['tokens']), len(raw))
-        self.assertEqual(saved, raw.decode().replace('2,', '2.0,'))
+        self.assertEqual(text, raw.decode())
+        self.assertEqual(normalize_call_json(text, ranges),
+                         raw.decode().replace('2,', '2.0,'))
 
     def test_resize_reads_terminal_size_at_each_frame(self) -> None:
         """A resized terminal changes wrapping without resetting the prefix."""

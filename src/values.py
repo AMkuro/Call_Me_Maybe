@@ -1,8 +1,8 @@
-"""Recognize prefixes of one JSON value and its slot terminator."""
+"""Recognize JSON value prefixes and normalize generated number slots."""
 
 import codecs
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from .schema import ParamType
 
@@ -50,6 +50,31 @@ def float_text(fragment: str) -> str:
         ``fragment`` with ".0" after an integer, otherwise unchanged.
     """
     return _INTEGER_SLOT.sub(r"\1.0\2", fragment)
+
+
+def normalize_call_json(
+    raw_json: str, number_ranges: Sequence[tuple[int, int]],
+) -> str:
+    """Add missing fractions only within generated number slots.
+
+    Args:
+        raw_json: The verified, unmodified text returned by generation.
+        number_ranges: Ordered, nonoverlapping character ranges from
+            generation, each including the number slot's terminator.
+            Starts are inclusive and ends exclusive.
+
+    Returns:
+        The same JSON text, with integer number slots changed by float_text.
+        No parsing or numeric conversion changes the original digits.
+    """
+    parts: list[str] = []
+    offset = 0
+    for start, end in number_ranges:
+        parts.append(raw_json[offset:start])
+        parts.append(float_text(raw_json[start:end]))
+        offset = end
+    parts.append(raw_json[offset:])
+    return "".join(parts)
 
 
 def _utf8_prefix(data: bytes) -> bool:
