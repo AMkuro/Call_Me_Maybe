@@ -18,14 +18,14 @@ _QUOTE = ord('"')
 _BACKSLASH = ord("\\")
 _UNICODE_ESCAPE = ord("u")  # four hexadecimal digits follow
 
-# States of _advance_string. The four Unicode-escape digit states are
-# numbered so that the next digit state is the current one plus 1.
+# Syntax states of _scan_json_string_fragment. Unicode escape states
+# count down from four remaining hexadecimal digits to one.
 _INVALID = -1
 _BEFORE_STRING = 0
 _IN_STRING = 1
 _AFTER_BACKSLASH = 2
-_FIRST_HEX_DIGIT = 3
-_LAST_HEX_DIGIT = 6
+_ONE_HEX_DIGIT_LEFT = 3
+_FOUR_HEX_DIGITS_LEFT = 6
 _AFTER_STRING = 7
 _AFTER_TERMINATOR = 8
 
@@ -68,54 +68,81 @@ def _utf8_prefix(data: bytes) -> bool:
         return e.reason == "unexpected end of data" and e.end == len(data)
 
 
-def _advance_string(phase: int, data: bytes, terminator: int) -> int:
-    """Consume new bytes from a JSON-string state; return the new state.
+def _scan_json_string_fragment(
+    state: int, fragment: bytes, terminator: int,
+) -> int:
+    """Scan JSON string syntax from ``state`` through a byte fragment.
 
+    This checks syntax only; UTF-8 validity is checked separately.
     Nothing may follow the slot terminator, not even whitespace.
 
     Args:
-        phase: The state before ``data``.
-        data: The new bytes.
-        terminator: The terminator byte.
+        state: The syntax state reached before this fragment.
+        fragment: The next bytes, possibly ending inside an escape.
+        terminator: The slot terminator byte.
 
     Returns:
-        The state after ``data``, or _INVALID.
+        The reached syntax state, or _INVALID for irreparable syntax.
+        _AFTER_TERMINATOR means complete; all other valid states need
+        more bytes. An empty fragment preserves the starting state.
     """
-    for char in data:
-        if phase == _BEFORE_STRING:
-            if char == _QUOTE:
-                phase = _IN_STRING
-            elif char not in _WHITESPACE:
+    for byte in fragment:
+        if state == _BEFORE_STRING:
+            if byte == _QUOTE:
+                state = _IN_STRING
+            elif byte not in _WHITESPACE:
                 return _INVALID
-        elif _FIRST_HEX_DIGIT <= phase <= _LAST_HEX_DIGIT:
-            if char not in b"0123456789abcdefABCDEF":
+        elif state == _IN_STRING:
+            if byte == _BACKSLASH:
+                state = _AFTER_BACKSLASH
+            elif byte == _QUOTE:
+                state = _AFTER_STRING
+            elif byte < 32:  # JSON forbids raw control characters
                 return _INVALID
-            if phase == _LAST_HEX_DIGIT:
-                phase = _IN_STRING
+        elif state == _AFTER_BACKSLASH:
+            if byte == _UNICODE_ESCAPE:
+                state = _FOUR_HEX_DIGITS_LEFT
+            elif byte in b'"\\/bfnrt':
+                state = _IN_STRING
             else:
-                phase += 1
-        elif phase == _AFTER_BACKSLASH:
-            if char == _UNICODE_ESCAPE:
-                phase = _FIRST_HEX_DIGIT
-            elif char not in b'"\\/bfnrt':
                 return _INVALID
+        elif _ONE_HEX_DIGIT_LEFT <= state <= _FOUR_HEX_DIGITS_LEFT:
+            if byte not in b"0123456789abcdefABCDEF":
+                return _INVALID
+            if state == _ONE_HEX_DIGIT_LEFT:
+                state = _IN_STRING
             else:
-                phase = _IN_STRING
-        elif phase == _IN_STRING:
-            if char == _BACKSLASH:
-                phase = _AFTER_BACKSLASH
-            elif char == _QUOTE:
-                phase = _AFTER_STRING
-            elif char < 32:  # JSON forbids raw control characters
-                return _INVALID
-        elif phase == _AFTER_STRING:
-            if char == terminator:
-                phase = _AFTER_TERMINATOR
-            elif char not in _WHITESPACE:
+                state -= 1  # One of the four required digits was consumed.
+        elif state == _AFTER_STRING:
+            if byte == terminator:
+                state = _AFTER_TERMINATOR
+            elif byte not in _WHITESPACE:
                 return _INVALID
         else:
             return _INVALID
-    return phase
+    return state
+
+
+def _string_slot_state(
+    state: int, fragment: bytes, terminator: int, pending_utf8: bytes = b"",
+) -> int:
+    """Classify a string slot after scanning its next fragment.
+
+    Args:
+        state: Syntax state before the fragment.
+        fragment: The bytes to scan.
+        terminator: The slot terminator byte.
+        pending_utf8: An unfinished UTF-8 character from the valid prefix.
+
+    Returns:
+        _INVALID for invalid syntax or UTF-8, _COMPLETE after the
+        terminator, otherwise _INCOMPLETE. Starting at _BEFORE_STRING
+        with no pending UTF-8 classifies a whole slot.
+    """
+    state = _scan_json_string_fragment(state, fragment, terminator)
+    if state == _INVALID or not _utf8_prefix(pending_utf8 + fragment):
+        return _INVALID
+    return _COMPLETE if state == _AFTER_TERMINATOR else _INCOMPLETE
 
 
 def _slot_state(
@@ -132,16 +159,12 @@ def _slot_state(
 
     Returns:
         _COMPLETE after a whole value and its terminator, _INCOMPLETE while
-        it can still become one, and _INVALID otherwise.
+        it can still become one, and _INVALID otherwise. This is the
+        reference classification for completion and candidate filtering.
     """
     data = data.lstrip(_WHITESPACE)
     if kind == "string":
-        phase = _advance_string(_BEFORE_STRING, data, terminator[0])
-        if phase == _INVALID or not _utf8_prefix(data):
-            return _INVALID
-        if phase == _AFTER_TERMINATOR:
-            return _COMPLETE
-        return _INCOMPLETE
+        return _string_slot_state(_BEFORE_STRING, data, terminator[0])
     if data.endswith(terminator):
         value = data[:-1].rstrip(_WHITESPACE)
         if kind == "number":
@@ -188,9 +211,10 @@ def allowed_slot_tokens(
     """
     terminator_bytes = terminator.encode("ascii")
     if param_type == "string":
-        phase = _advance_string(_BEFORE_STRING, written,
-                                terminator_bytes[0])
-        if phase == _INVALID or not _utf8_prefix(written):
+        state = _scan_json_string_fragment(
+            _BEFORE_STRING, written, terminator_bytes[0],
+        )
+        if state == _INVALID or not _utf8_prefix(written):
             return []
         decoder = codecs.getincrementaldecoder("utf-8")()
         decoder.decode(written, final=False)
@@ -199,8 +223,8 @@ def allowed_slot_tokens(
         # advances its own bytes, even for long values.
         end = terminator_bytes[0]
         return [token for token, value in vocab.items()
-                if value and _advance_string(phase, value, end) != _INVALID
-                and _utf8_prefix(pending + value)]
+                if value
+                and _string_slot_state(state, value, end, pending) != _INVALID]
     return [token for token, value in vocab.items()
             if value and _slot_state(written + value, param_type,
                                      terminator_bytes) != _INVALID]

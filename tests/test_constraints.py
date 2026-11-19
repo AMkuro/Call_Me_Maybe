@@ -1,6 +1,7 @@
 """Check actual trie, byte grammar and prompt implementations directly."""
 
 import json
+import random
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,7 +14,11 @@ from src.model_port import EOS, Model
 from src.name_trie import NameTrie
 from trie_fixtures import trie_from_paths
 from src.prompt import build_name_prompt, build_parameters_prompt
-from src.values import allowed_slot_tokens, is_slot_complete
+from src.schema import ParamType
+from src.values import (
+    _COMPLETE, _INCOMPLETE, _INVALID, _slot_state,
+    allowed_slot_tokens, is_slot_complete,
+)
 from src.vocab import load_vocab
 from test_application import definition
 
@@ -339,6 +344,78 @@ class GrammarTests(unittest.TestCase):
             {1: b'\x82"}', 2: b'"}', 3: b'\xff'},
             'string', b'"\xe3\x81', '}',
         ), [1])
+
+    def test_slot_states_have_independent_grammar_expectations(self) -> None:
+        """Classify syntax, UTF-8 and completion without the candidate path."""
+        cases = [
+            (b'', _INCOMPLETE), (b' \n', _INCOMPLETE),
+            (b'"', _INCOMPLETE), (b'"text', _INCOMPLETE),
+            (b'"text"', _INCOMPLETE), (b'"text" \t', _INCOMPLETE),
+            (b'"text"}', _COMPLETE), (b'""}', _COMPLETE),
+            (b'"\\', _INCOMPLETE), (b'"\\"', _INCOMPLETE),
+            (b'"\\u', _INCOMPLETE), (b'"\\u0', _INCOMPLETE),
+            (b'"\\u00', _INCOMPLETE), (b'"\\u00a', _INCOMPLETE),
+            (b'"\\u00aF', _INCOMPLETE), (b'"\\u00aF"}', _COMPLETE),
+            (b'"\\u"}', _INVALID), (b'"\\u0"}', _INVALID),
+            (b'"\\u00"}', _INVALID), (b'"\\u00a"}', _INVALID),
+            (b'"\xe3', _INCOMPLETE), (b'"\xe3\x81', _INCOMPLETE),
+            ('"あ"}'.encode(), _COMPLETE),
+            (b'"\xe3"}', _INVALID), (b'"\xff', _INVALID),
+            (b'"\xe0\x80', _INVALID), (b'"\\u00x', _INVALID),
+            (b'"\\q', _INVALID), (b'"a\n', _INVALID),
+            (b'""} ', _INVALID), (b'""}x', _INVALID),
+            (b'"",', _INVALID), (b'x', _INVALID),
+        ]
+        for data, expected in cases:
+            with self.subTest(data=data):
+                self.assertEqual(_slot_state(data, 'string', b'}'), expected)
+
+    def test_candidate_order_and_ids_match_slot_state(self) -> None:
+        """Incremental candidates obey the reference contract at boundaries."""
+        rng = random.Random(1942)
+        fragments = [b'', b'"', b'\\', b'\\"', b'\\u3042', b'}', b',',
+                     b'"}', b'"} ', b'"}x', b'\x81\x82"}', b'\xe3',
+                     b'\xe3\x81', b'\xe3\x81\x82', b'\xff', b'\xe0\x80']
+        fragments += [bytes([byte]) for byte in range(256)]
+        fragments += [rng.randbytes(rng.randrange(9)) for _ in range(256)]
+        # Descending, nonconsecutive IDs expose sorting or ID substitution.
+        vocab = {10000 - index * 3: fragment
+                 for index, fragment in enumerate(fragments)}
+        kinds: tuple[ParamType, ...] = ('string', 'number', 'boolean')
+        for kind in kinds:
+            for terminator in (',', '}'):
+                end = terminator.encode()
+                if kind == 'string':
+                    texts = ['', 'normal', '日本語🙂', '"\\\n', ',}']
+                    values = [
+                        json.dumps(text, ensure_ascii=ascii_only).encode()
+                        for text in texts for ascii_only in (True, False)
+                    ]
+                    for _ in range(30):
+                        text = ''.join(rng.choices('abcあ🙂"\\\n', k=12))
+                        values.append(json.dumps(
+                            text, ensure_ascii=rng.choice((True, False)),
+                        ).encode())
+                elif kind == 'number':
+                    values = [b'0', b'-12.34', b'123', b'0.01']
+                else:
+                    values = [b'true', b'false']
+                prefixes = set[bytes]()
+                if kind == 'string':
+                    prefixes.update((b'"\xff', b'"\xe0\x80'))
+                for value in values:
+                    data = b' \t' + value + b' \n' + end
+                    prefixes.update(data[:index]
+                                    for index in range(len(data) + 1))
+                for written in sorted(prefixes):
+                    expected = [token for token, value in vocab.items()
+                                if value and _slot_state(
+                                    written + value, kind, end,
+                                ) != _INVALID]
+                    with self.subTest(kind=kind, end=end, written=written):
+                        self.assertEqual(allowed_slot_tokens(
+                            vocab, kind, written, terminator,
+                        ), expected)
 
 
 class PromptTests(unittest.TestCase):
