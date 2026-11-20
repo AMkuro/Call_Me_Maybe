@@ -6,15 +6,15 @@ Call Me Maybe translates natural-language prompts into structured function
 calls: for each prompt it outputs the name of the function to call and its
 arguments as JSON, never executing the function. It uses the small
 Qwen/Qwen3-0.6B model through the supplied `llm_sdk`, and relies on constrained
-decoding so that the output is always valid JSON that matches the function
-definitions.
+decoding and Pydantic validation to save only valid JSON records that match
+the selected function definition. Failed prompts are reported and omitted.
 
 ## Instructions
 
 Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
 
 ```sh
-make install      # create .venv from uv.lock
+make install      # recreate .venv from uv.lock (removes the existing .venv)
 make run          # uv run python -m src
 make debug        # run under pdb
 make test
@@ -27,14 +27,15 @@ make sdk-install  # unpack an SDK zip over llm_sdk (SDK_ZIP=<zip>, default llm_s
 orderedsets (an insertion-ordered set used by the name tree) and the local
 `llm_sdk` (a path dependency); torch is installed as a dependency of the SDK. The SDK downloads the Qwen/Qwen3-0.6B model itself on first use.
 
-When stderr is a terminal, a live dashboard shows the selected function,
-current argument, token choices and diagnostic scores. For each token the
-model chooses, it also lists the ten highest raw logits, marking the tokens
-the constraints mask out and the selected token. Forced tokens are shown
-as forced, without logits, because the model is not called for them.
+When stderr is a terminal and TERM is not `dumb`, a live dashboard shows
+the selected function, current argument, committed JSON and the latest
+token ID and selection mode.
+During function-name selection, a warning identifies the unconstrained best
+token and the selected token when they differ. Forced tokens are marked as
+forced; their forward passes still run, but their scores are not used.
 Redirecting stderr produces warning lines instead of terminal controls.
-Either way, the run ends with one line per prompt, done or failed with
-its time in seconds, and a total.
+Both modes report each completed or failed prompt with its time in seconds
+and a total; an interrupted run also counts unfinished prompts.
 
 The program reads the function definitions and the prompts from
 `data/input/` and writes `data/output/function_calls.json`.
@@ -54,7 +55,10 @@ such as `"2"` or `"２"` are not automatically converted to numbers. This
 validation of structured JSON is separate from interpreting numbers in the
 user's natural-language request.
 
-Specify paths with:
+The CLI accepts `--functions_definition`, `--input` and `--output`; their
+defaults are the paths shown below. `--help` lists the options without
+reading inputs or loading the model. Unknown or abbreviated options are
+rejected with exit status 2. Specify paths with:
 
 ```sh
 uv run python -m src \
@@ -92,25 +96,32 @@ type followed by its delimiter, with nothing after the delimiter.
 
 | Type | Allowed value | Complete when |
 | --- | --- | --- |
-| `number` | `-?(0\|[1-9][0-9]*)(\.[0-9]+)?` (no exponent, `+` or digit grouping) | a whole number and the delimiter |
+| `number` | `-?(0\|[1-9][0-9]*)(\.[0-9]+)?` (no exponent, `+` or digit grouping) | a complete integer or decimal fraction and the delimiter |
 | `string` | a JSON string: escapes, UTF-8, no raw control characters | the closing quote and the delimiter |
 | `boolean` | `true` or `false` | the word and the delimiter |
 
 String masks work on bytes, so a UTF-8 character split across tokens is
-kept. The completed record is parsed as JSON and checked against a Pydantic
-model built from the definition, before it is saved.
+kept. Decoded fixed text, completed slots and the full record must match
+their vocabulary bytes exactly; a mismatch fails the prompt. After number
+normalization, the record is parsed once with the strict JSON reader,
+validated as a `FunctionCallRequest`, and checked against the selected
+definition with a dynamically built Pydantic argument model. The prompt and
+function name must also match the inputs before the record is saved.
 
 ## Design decisions
 
 The function is chosen first, with its own prompt listing every function's
 name, description and argument types; the arguments are generated next,
-with a prompt that shows only the chosen definition. Both prompts use
-Qwen3's chat format with an empty thinking block, and the same instructions
-are used for every input and function set.
+with a prompt that shows the chosen definition without its return type and
+one worked regex-replacement example using a separate, fixed function.
+Both prompts use Qwen3's chat format with an empty thinking block, and the
+same instructions are used for every input and function set.
 
 Every output token, fixed JSON included, is preceded by a forward pass on
 the full context. Skipping the forward pass where only one token is allowed
-would be faster; the cost of this choice is shown in Performance analysis.
+would avoid inference work. Fixed JSON uses the shorter argument prompt
+without the example; parameter slots use the example prompt. Both contexts
+include all output token IDs committed so far, without re-encoding them.
 
 The input prompt is copied, and function names and parameter keys are escaped
 with `json.dumps`. Parameters follow definition order. The SDK is wrapped by
@@ -121,25 +132,32 @@ grammar lets the model end a number right after its integer digits,
 because forbidding that made it keep writing digits (`1000…`) until the
 limit. The saved record then appends `.0` to the generated text (`10`
 becomes `10.0`): a string edit, so no digit is lost to a float conversion,
-and the model's context keeps the tokens it actually chose. Before saving,
-every number argument must load as a finite float with Python's `json`
-module; otherwise the prompt fails.
+and the model's context keeps the tokens it actually chose. This edit
+does not validate the number: a normalized value can still fail the range
+or precision checks below.
 
-When the program validates JSON (the input files and the generated record),
-JSON integers stay Python integers, including values beyond `2**53`.
-Decimal and exponent literals are first parsed exactly with `Decimal`.
-A float is accepted only if its final JSON decimal value equals the source;
-`0.1` is supported. Integral decimal values may instead be stored as exact
-integers when the float representation would round them. Values that would
-lose precision, underflow to zero or overflow the finite float range are
-rejected with a reason, rather than rounded or converted into JSON strings.
+The shared `json_io.loads()` parser keeps integer literals as Python `int`
+and parses decimal or exponent literals exactly as `Decimal`. Parsing is
+separate from number-argument validation: `Number`, used by both
+`FunctionCallRequest` and the dynamic argument model, rejects Python `int`,
+booleans and numeric strings. It accepts finite Python floats; a `Decimal`
+is converted to float only if serializing that float with `json.dumps`
+preserves the source decimal value. Thus `0.1` is supported, but
+`9007199254740993.0` is rejected rather than rounded or retained as an int.
+There is no integer fallback and no second JSON parse for validation.
+
+Values that lose decimal precision, underflow to zero or overflow the finite
+float range are rejected. For an already supplied Python float, validation
+checks finiteness; it cannot recover digits lost before the call. Accepted
+generated JSON is retained as text after normalization and written unchanged,
+including trailing zeros and negative zero, rather than serialized from the
+validated floats again.
 
 Very large integer literals are subject to Python's runtime integer/string
-conversion limit. Decimal/exponent literals must fit the finite float range;
-a large integer literal can therefore be accepted where its exponent form
-is rejected. Long fractional decimals that cannot survive standard JSON
-float output are unsupported. Generation currently permits signed integers
-and decimal fractions, without exponent notation or grouping commas.
+conversion limit even before number-argument validation rejects their type.
+Decimal/exponent literals must satisfy the finite-float and precision checks.
+Generation permits signed integers and decimal fractions, without exponent
+notation or grouping commas; the JSON reader itself accepts exponents.
 These are implementation limits, not additional Subject requirements.
 
 A number value, including its delimiter, is limited to 32 tokens and any
@@ -147,8 +165,10 @@ other value to 256 tokens. Failure to finish reports the parameter and
 limit, skips that prompt and returns a nonzero exit status; the output then
 has no record for that prompt. A generated precision/type error also skips
 that prompt; invalid input files stop startup before loading the model.
-Successful results are saved after each prompt by atomic replacement of the
-output file.
+Successful results are saved in input order after each successful prompt
+by atomic replacement of the output file. If all prompts fail, an empty
+array replaces the previous output. Startup input errors leave existing
+output unchanged; save errors stop the run with exit status 1.
 
 If the final component of the output path is a symbolic link, saving
 replaces the link itself with the new regular output file. This is
@@ -166,7 +186,10 @@ succeed; save-time I/O errors are still reported.
 ## Performance analysis
 
 Measured on a development machine (AMD Ryzen AI MAX+ 395), not on a campus
-computer. Accuracy and time come from separate runs.
+computer. Accuracy and time come from separate runs. These are historical
+measurements from the 2026-11-19 submission audit, before subsequent prompt
+and validation changes; they do not establish current accuracy or runtime.
+They have not been repeated for this documentation audit.
 
 | Measure | Set | Result |
 | --- | --- | --- |
@@ -180,23 +203,24 @@ computer. Accuracy and time come from separate runs.
 The wrong calls are argument errors, not function errors: 17 of the 18 are
 regular expressions for "every number" or "vowels" (for example `aeiou`
 instead of `[aeiouAEIOU]`; one of them also writes `asterisks` instead of
-`*`), and one drops the sign of `-14`. Accuracy therefore stays below 90% on the
-harder sets and depends on how many prompts need such patterns.
+`*`), and one drops the sign of `-14`. Accuracy in those runs was below 90% on the harder sets; those results do
+not predict accuracy for a different mix of prompts.
 
 The time run used CPU cores 0–15 with 6 threads, at most 16 GiB of memory, no
 swap and the model already cached; the 11 prompts took 11.0–38.9 s each. The
 SDK recomputes the whole prefix for every output token and has no cache, so
-each token costs one forward pass whose cost grows with the prompt and the
-output so far. Copying the prompt into the record therefore costs one
-forward pass per token, and a longer prompt or more prompts cost
-proportionally more. Whether all test prompts finish within five minutes on
-the evaluation computer has not been measured. Accuracy runs used the GPU
+each output token in the measured implementation costs one forward pass
+whose cost grows with the prompt and the output so far. Copying the prompt
+into the record therefore costs one forward pass per token. Longer prompts
+or more prompts require more work; runtime scaling was not established by
+that single run. Whether all test prompts finish within five minutes on the
+evaluation computer has not been measured. Accuracy runs used the GPU
 build of the same model in float32; their answers on the 11 examples match
 the CPU run.
 
 String masks parse the shared prefix once, then inspect only each
-candidate's new bytes. The dashboard reuses the logits already computed and
-performs no additional inference.
+candidate's new bytes. Name-selection diagnostics use already computed
+logits; the dashboard performs no additional inference.
 
 ## Challenges faced
 
@@ -221,31 +245,35 @@ performs no additional inference.
   JSON was compacted, measuring accuracy after each change.
 - Regular expressions. The 0.6B model copies literal values well but often
   fails to turn "every number" or "vowels" into `\d+` or `[aeiouAEIOU]`.
-  An instruction sentence about patterns fixed the Subject's number example;
-  the other cases remain the main source of wrong arguments (see
-  Performance analysis). Scoring the wrong and the expected values showed
+  In the recorded experiments, an instruction sentence about patterns fixed
+  the Subject's number example. The other cases were the main source of
+  wrong arguments in that audit (see Performance analysis). Scoring the wrong and the expected values showed
   that the model itself prefers the wrong one in all 18 cases, so a better
   search under the same model (beam search, or decoding faithful to the
-  model's distribution) would not fix them. Two other attempts were too
-  costly for their gain and were not kept:
+  model's distribution) was not expected to fix those cases. Two historical
+  comparisons were:
   - Two worked examples before the request (a character class, and a negative
     number copied as written) raised the 99 prompts from 81 to 89 correct
     when patterns are judged by their effect, but not the Subject's 11
     examples (10/11). They nearly doubled the CPU time of the 11 examples
     (221.8 s to 417.0 s, one run), because every forward pass reads the
-    longer prompt.
+    longer prompt. The current implementation uses one regex example;
+    those two-example results do not measure the current prompt.
   - Letting the model think before the JSON (Qwen3's think block, capped at
     160 tokens) lowered the 11 examples to 9/11, as the thought was cut off,
     and adds a forward pass for every thought token.
 
 ## Testing strategy
 
-Unit tests check tries, masks, forced structure, validation and file handling
-directly. Fixed logits exercise the decode loop, and boundary tests mock only
-the external SDK. They do not download or load the model. `make lint` runs flake8 and mypy
-with the flags required by the Subject.
+Unit tests cover tries, masks, forced structure, validation and file handling
+with fixed data and mocks. Some tests isolate orchestration by replacing
+internal helpers; SDK-boundary tests replace the external SDK. Fixed logits
+exercise decoding without downloading or loading the model. `make lint` runs
+flake8 and mypy with the flags required by the Subject. Tests and lint must
+be rerun after refactoring: these descriptions are not a claim that the current checkout
+passes, and mock tests do not establish real-model accuracy or runtime.
 
-Real-model checks run the application on sets of prompts with expected
+The recorded real-model checks ran the application on prompt sets with
 answers written by hand: the Subject's examples and eight further sets of
 eleven prompts and five functions. One set reuses the example functions
 with new prompts; the others change the functions, and three of them add
