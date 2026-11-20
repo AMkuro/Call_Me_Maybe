@@ -52,7 +52,10 @@ class GenerationProgress(Protocol):
         ...
 
     def name_token(
-        self, tokens: Sequence[int], *, mode: SelectionMode,
+        self,
+        tokens: Sequence[int],
+        *,
+        mode: SelectionMode,
         raw_top: int | None,
     ) -> None:
         """Report one more name token.
@@ -66,7 +69,11 @@ class GenerationProgress(Protocol):
         ...
 
     def output_token(
-        self, data: bytes, *, token: int, mode: SelectionMode,
+        self,
+        data: bytes,
+        *,
+        token: int,
+        mode: SelectionMode,
         fixed: bool = False,
     ) -> None:
         """Observe one committed JSON token's bytes, including fixed text.
@@ -80,7 +87,12 @@ class GenerationProgress(Protocol):
         ...
 
     def value_token(
-        self, written: bytes, step: int, *, token: int, mode: SelectionMode,
+        self,
+        written: bytes,
+        step: int,
+        *,
+        token: int,
+        mode: SelectionMode,
     ) -> None:
         """Report one more value token.
 

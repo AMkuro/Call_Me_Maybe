@@ -48,8 +48,11 @@ def prepare_output(path: Path) -> None:
     try:
         _prepare_destination(path)
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=path.parent,
-            prefix=f".{path.name}.", suffix=".tmp",
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
         ) as probe:
             probe.write("[]\n")
             probe.flush()
@@ -80,8 +83,12 @@ def save_results(path: Path, calls: list[FunctionCallRequest]) -> None:
     temporary: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=path.parent,
-            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
         ) as output:
             temporary = Path(output.name)
             if not calls:
@@ -99,9 +106,13 @@ def save_results(path: Path, calls: list[FunctionCallRequest]) -> None:
                     if call._generated_json is not None:
                         output.write(call._generated_json)
                     else:
-                        json.dump(call.model_dump(), output,
-                                  ensure_ascii=True, allow_nan=False,
-                                  indent=2)
+                        json.dump(
+                            call.model_dump(),
+                            output,
+                            ensure_ascii=True,
+                            allow_nan=False,
+                            indent=2,
+                        )
                 output.write("\n]\n")
         os.replace(temporary, path)
     finally:

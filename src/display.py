@@ -19,23 +19,45 @@ from .model_port import Model
 from .progress import Stage
 from .schema import JsonValueTypes
 
-Row = Literal["input", "stage", "prompt", "function", "parameter", "value",
-              "value_tokens", "token", "warning", "result", "error",
-              "json", "saved_json", "tokens", "elapsed"]
+Row = Literal[
+    "input",
+    "stage",
+    "prompt",
+    "function",
+    "parameter",
+    "value",
+    "value_tokens",
+    "token",
+    "warning",
+    "result",
+    "error",
+    "json",
+    "saved_json",
+    "tokens",
+    "elapsed",
+]
 _ROWS: tuple[tuple[Row, str], ...] = (
-    ("input", "Input"), ("stage", "Stage"), ("elapsed", "Elapsed"),
+    ("input", "Input"),
+    ("stage", "Stage"),
+    ("elapsed", "Elapsed"),
     ("prompt", "Prompt"),
-    ("function", "Function"), ("parameter", "Parameter"),
-    ("value", "Value"), ("value_tokens", "Value tokens"),
+    ("function", "Function"),
+    ("parameter", "Parameter"),
+    ("value", "Value"),
+    ("value_tokens", "Value tokens"),
     ("token", "Token"),
-    ("warning", "Warning"), ("result", "Result"), ("error", "Error"),
+    ("warning", "Warning"),
+    ("result", "Result"),
+    ("error", "Error"),
 )
 # The rows that show the latest generated token. A stage that generates
 # tokens starts them empty; validation keeps them, so a failure shows the
 # last generated value.
 _TOKEN_ROWS: tuple[Row, ...] = ("value", "value_tokens", "token")
-_GENERATING_STAGES: tuple[Stage, ...] = ("select_function",
-                                         "generate_call_json")
+_GENERATING_STAGES: tuple[Stage, ...] = (
+    "select_function",
+    "generate_call_json",
+)
 _FRAME_SECONDS = 0.05  # at most one redraw per interval ...
 # ... except for completed selections and prompt outcomes.
 _DRAW_NOW: tuple[Row, ...] = ("function", "result", "error")
@@ -94,8 +116,7 @@ def _visible(text: str) -> str:
         escape.
     """
     return "".join(
-        char if char.isprintable() else json.dumps(char)[1:-1]
-        for char in text
+        char if char.isprintable() else json.dumps(char)[1:-1] for char in text
     )
 
 
@@ -116,8 +137,10 @@ def _clip(text: str, width: int) -> str:
     sizes: list[int] = []
     used = 0
     for char in text:
-        size = 0 if unicodedata.combining(char) else (
-            2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+        size = (
+            0
+            if unicodedata.combining(char)
+            else (2 if unicodedata.east_asian_width(char) in ("W", "F") else 1)
         )
         if used + size > max(width, 0):
             while sizes and used > width - 1:
@@ -168,8 +191,14 @@ def _json_lines(text: str, width: int) -> list[str]:
         current = ""
         cells = 0
         for char in _visible(line):
-            size = 0 if unicodedata.combining(char) else (
-                2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+            size = (
+                0
+                if unicodedata.combining(char)
+                else (
+                    2
+                    if unicodedata.east_asian_width(char) in ("W", "F")
+                    else 1
+                )
             )
             if cells + size > width and current:
                 wrapped.append(current)
@@ -195,24 +224,33 @@ def render_progress(fields: Mapping[Row, str], width: int, height: int) -> str:
     budget = max(height - 1, 1)
     if "json" not in fields:
         lines = ["Call Me Maybe — generation"]
-        lines.extend(f"{label}: {_visible(fields[key])}"
-                     for key, label in _ROWS if key in fields)
+        lines.extend(
+            f"{label}: {_visible(fields[key])}"
+            for key, label in _ROWS
+            if key in fields
+        )
         lines.append("JSON OUTPUT: waiting for JSON tokens")
-        return "\n".join(_clip(line, width)
-                         for line in lines[:budget])
+        return "\n".join(_clip(line, width) for line in lines[:budget])
     saved = fields.get("saved_json")
-    label = ("SAVED JSON — validated" if saved is not None else
-             "JSON OUTPUT — committed prefix")
+    label = (
+        "SAVED JSON — validated"
+        if saved is not None
+        else "JSON OUTPUT — committed prefix"
+    )
     # The cursor is display-only and never claims an ungenerated brace.
     text = saved if saved is not None else fields["json"] + "▌"
     preview = _json_lines(text, width)
-    header = [f"Call Me Maybe    {fields.get('input', '')}",
-              f"Stage: {fields.get('stage', '')}",
-              f"Function: {fields.get('function', 'selecting')}"]
+    header = [
+        f"Call Me Maybe    {fields.get('input', '')}",
+        f"Stage: {fields.get('stage', '')}",
+        f"Function: {fields.get('function', 'selecting')}",
+    ]
     if fields.get("parameter"):
         header.append(f"Parameter: {fields['parameter']}")
-    header.append(f"Elapsed: {fields.get('elapsed', '0.0 s')}  "
-                  f"Tokens: {fields.get('tokens', '0')}")
+    header.append(
+        f"Elapsed: {fields.get('elapsed', '0.0 s')}  "
+        f"Tokens: {fields.get('tokens', '0')}"
+    )
     if fields.get("token"):
         header.append(f"Token: {fields['token']}")
     for key in ("error", "warning", "result"):
@@ -229,18 +267,23 @@ def render_progress(fields: Mapping[Row, str], width: int, height: int) -> str:
             compact.append(f"Token: {fields['token']}")
         if fields.get("parameter"):
             compact.append(f"Parameter: {fields['parameter']}")
-        compact.extend([header[0],
-                        f"Tokens: {fields.get('tokens', '0')}  "
-                        f"Elapsed: {fields.get('elapsed', '0.0 s')}"])
+        compact.extend(
+            [
+                header[0],
+                f"Tokens: {fields.get('tokens', '0')}  "
+                f"Elapsed: {fields.get('elapsed', '0.0 s')}",
+            ]
+        )
         header_room = max(0, budget - min(2, budget))
-        header = (compact[:header_room - 1] + [label]
-                  if header_room else [])
+        header = compact[: header_room - 1] + [label] if header_room else []
     room = budget - len(header)
     if len(preview) > room:
-        preview = (["… earlier JSON omitted …"] + preview[-(room - 1):]
-                   if room > 1 else preview[-1:])
-    return "\n".join(_clip(_visible(line), width)
-                     for line in header + preview)
+        preview = (
+            ["… earlier JSON omitted …"] + preview[-(room - 1) :]
+            if room > 1
+            else preview[-1:]
+        )
+    return "\n".join(_clip(_visible(line), width) for line in header + preview)
 
 
 class Dashboard:
@@ -273,7 +316,10 @@ class Dashboard:
     """
 
     def __init__(
-        self, total: int, model: Model, vocab: Mapping[int, bytes],
+        self,
+        total: int,
+        model: Model,
+        vocab: Mapping[int, bytes],
     ) -> None:
         """Prepare for ``total`` prompts; nothing is written until ``with``.
 
@@ -285,8 +331,9 @@ class Dashboard:
         self.model = model
         self.vocab = vocab
         self.stream = sys.stderr
-        self.interactive = (self.stream.isatty()
-                            and os.environ.get("TERM") != "dumb")
+        self.interactive = (
+            self.stream.isatty() and os.environ.get("TERM") != "dumb"
+        )
         self.total = total
         self.fields: dict[Row, str] = {"input": f"0/{total}"}
         self.counts = {"done": 0, "failed": 0}
@@ -323,11 +370,9 @@ class Dashboard:
                 self.write(line)
             if self.active:
                 reason = str(exc_info[1]) if len(exc_info) > 1 else ""
-                self.write("Interrupted / not finished: "
-                           f"{_visible(reason)}\n")
+                self.write(f"Interrupted / not finished: {_visible(reason)}\n")
             if self.output_path:
-                self.write("Output file: "
-                           f"{_visible(self.output_path)}\n")
+                self.write(f"Output file: {_visible(self.output_path)}\n")
         done, failed = self.counts["done"], self.counts["failed"]
         left = self.total - done - failed  # an interrupted run
         self.write(
@@ -349,8 +394,9 @@ class Dashboard:
         self.output_tokens = 0
         self.active = True
         self.prompt_started_at = time.monotonic()
-        self.fields.update({"input": f"{index}/{self.total}",
-                            "prompt": prompt})
+        self.fields.update(
+            {"input": f"{index}/{self.total}", "prompt": prompt}
+        )
         self.draw("prompt")
 
     def prompt_done(self, name: str, saved_json: str | None = None) -> None:
@@ -378,8 +424,9 @@ class Dashboard:
         self.draw("error")
         self._end_prompt("failed", reason)
 
-    def _end_prompt(self, status: Literal["done", "failed"],
-                    what: str) -> None:
+    def _end_prompt(
+        self, status: Literal["done", "failed"], what: str
+    ) -> None:
         """Count the outcome and add its summary line with the seconds taken.
 
         The line is written now when logging, or held until the live screen
@@ -392,8 +439,10 @@ class Dashboard:
         self.active = False
         self.counts[status] += 1
         seconds = time.monotonic() - self.prompt_started_at
-        line = (f"[{self.fields['input']}] {status:<7} {_visible(what)}  "
-                f"{seconds:.1f} s\n")
+        line = (
+            f"[{self.fields['input']}] {status:<7} {_visible(what)}  "
+            f"{seconds:.1f} s\n"
+        )
         if self.interactive:
             self.summary.append(line)
         else:
@@ -431,12 +480,21 @@ class Dashboard:
             name: The parameter name.
             param_type: Its type.
         """
-        self.fields.update({"value": "", "value_tokens": "0", "token": "",
-                            "parameter": f"{name} ({param_type})"})
+        self.fields.update(
+            {
+                "value": "",
+                "value_tokens": "0",
+                "token": "",
+                "parameter": f"{name} ({param_type})",
+            }
+        )
         self.draw("parameter")
 
     def name_token(
-        self, tokens: Sequence[int], *, mode: SelectionMode,
+        self,
+        tokens: Sequence[int],
+        *,
+        mode: SelectionMode,
         raw_top: int | None,
     ) -> None:
         """Show the name written so far and how its last token was chosen.
@@ -451,20 +509,30 @@ class Dashboard:
                 computed.
         """
         token = tokens[-1]
-        self.fields.update({"value": _decoded(self.model, tokens),
-                            "value_tokens": str(len(tokens)),
-                            "token": self._token_label(token, mode)})
+        self.fields.update(
+            {
+                "value": _decoded(self.model, tokens),
+                "value_tokens": str(len(tokens)),
+                "token": self._token_label(token, mode),
+            }
+        )
         if mode == "greedy" and raw_top is not None and raw_top != token:
             raw = _token_text(raw_top, self.model, self.vocab)
             selected = _token_text(token, self.model, self.vocab)
-            self._warn("name_selection_constrained: "
-                       f"step={len(tokens)} raw_top={raw} "
-                       f"selected={selected}")
+            self._warn(
+                "name_selection_constrained: "
+                f"step={len(tokens)} raw_top={raw} "
+                f"selected={selected}"
+            )
         else:
             self.draw("token")
 
     def output_token(
-        self, data: bytes, *, token: int, mode: SelectionMode,
+        self,
+        data: bytes,
+        *,
+        token: int,
+        mode: SelectionMode,
         fixed: bool = False,
     ) -> None:
         """Accumulate actual committed bytes; decode split UTF-8 safely.
@@ -477,15 +545,25 @@ class Dashboard:
         """
         if fixed:
             self.fields.pop("parameter", None)
-        self.fields["json"] = (self.fields.get("json", "")
-                               + self.json_decoder.decode(data))
+        self.fields["json"] = self.fields.get(
+            "json", ""
+        ) + self.json_decoder.decode(data)
         self.output_tokens += 1
-        self.fields.update({"tokens": str(self.output_tokens),
-                            "token": self._token_label(token, mode)})
+        self.fields.update(
+            {
+                "tokens": str(self.output_tokens),
+                "token": self._token_label(token, mode),
+            }
+        )
         self.draw("token")
 
     def value_token(
-        self, written: bytes, step: int, *, token: int, mode: SelectionMode,
+        self,
+        written: bytes,
+        step: int,
+        *,
+        token: int,
+        mode: SelectionMode,
     ) -> None:
         """Show the value written so far, its token count and last token.
 
@@ -495,9 +573,13 @@ class Dashboard:
             token: The last token ID.
             mode: How the last token was chosen.
         """
-        self.fields.update({"value": written.decode("utf-8", errors="ignore"),
-                            "value_tokens": str(step),
-                            "token": self._token_label(token, mode)})
+        self.fields.update(
+            {
+                "value": written.decode("utf-8", errors="ignore"),
+                "value_tokens": str(step),
+                "token": self._token_label(token, mode),
+            }
+        )
         self.draw("token")
 
     def _token_label(self, token: int, mode: SelectionMode) -> str:

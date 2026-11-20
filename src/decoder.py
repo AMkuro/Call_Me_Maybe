@@ -12,7 +12,8 @@ SelectionMode = Literal["forced", "greedy"]
 
 
 def constrained_argmax(
-    logits: Sequence[float], allowed: Collection[int],
+    logits: Sequence[float],
+    allowed: Collection[int],
 ) -> int:
     """Return the best-scoring token among ``allowed``.
 
@@ -37,8 +38,9 @@ def constrained_argmax(
         raise PromptError(f"model returned malformed logits: {e}") from e
     if scores.ndim != 1:
         raise PromptError("model logits must be one-dimensional")
-    if not allowed or any(token < 0 or token >= len(scores)
-                          for token in allowed):
+    if not allowed or any(
+        token < 0 or token >= len(scores) for token in allowed
+    ):
         raise PromptError("no valid token in the decoding mask")
     if np.isnan(scores).any() or np.isposinf(scores).any():
         raise PromptError("model returned invalid logits")
