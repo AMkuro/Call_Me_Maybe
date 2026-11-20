@@ -6,6 +6,8 @@ import stat
 import tempfile
 from pathlib import Path
 
+import simplejson
+
 from .errors import StartupError
 from .schema import FunctionCallRequest
 
@@ -61,12 +63,14 @@ def prepare_output(path: Path) -> None:
 
 
 def save_results(path: Path, calls: list[FunctionCallRequest]) -> None:
-    """Write ``calls`` as a JSON array, replacing the file atomically.
+    """Write ``calls`` as an indented JSON array, replacing it atomically.
 
     The array is written to a temporary file next to ``path``, which then
     replaces ``path``, so a failure or interruption leaves the previous
-    file whole. Each record is written as its ``_generated_json`` text, or
-    with json.dump when that is None. Creates missing parent directories.
+    file whole. Each record is its ``_generated_json`` text, or its
+    model_dump when that is None, written by simplejson with ``indent=2``.
+    Numbers in ``_generated_json`` keep the spelling the LLM wrote.
+    Creates missing parent directories.
     A final symbolic link is replaced, leaving its target unchanged. No
     fsync is performed, so crash or power-loss durability is not guaranteed.
 
@@ -91,29 +95,21 @@ def save_results(path: Path, calls: list[FunctionCallRequest]) -> None:
             delete=False,
         ) as output:
             temporary = Path(output.name)
-            if not calls:
-                output.write("[]\n")
-            else:
-                output.write("[\n")
-                for index, call in enumerate(calls):
-                    if index:
-                        output.write(",\n")
-                    output.write("  ")
-                    # validate_call set _generated_json only after checking
-                    # it, so it is written without parsing it again.
-                    # Re-encoding its numbers could add exponent notation
-                    # or lose the decimal digits selected by the LLM.
-                    if call._generated_json is not None:
-                        output.write(call._generated_json)
-                    else:
-                        json.dump(
-                            call.model_dump(),
-                            output,
-                            ensure_ascii=True,
-                            allow_nan=False,
-                            indent=2,
-                        )
-                output.write("\n]\n")
+            # validate_call set _generated_json only after checking it.
+            # RawJSON writes each number as the LLM spelled it; a float
+            # could add exponent notation or drop its decimal digits.
+            records = [
+                (
+                    call.model_dump()
+                    if call._generated_json is None
+                    else json.loads(
+                        call._generated_json, parse_float=simplejson.RawJSON
+                    )
+                )
+                for call in calls
+            ]
+            simplejson.dump(records, output, indent=2, allow_nan=False)
+            output.write("\n")
         os.replace(temporary, path)
     finally:
         if temporary is not None:

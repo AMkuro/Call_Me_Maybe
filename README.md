@@ -24,7 +24,9 @@ make sdk-install  # unpack an SDK zip over llm_sdk (SDK_ZIP=<zip>, default llm_s
 ```
 
 `uv sync` alone also works. The dependencies are numpy, Pydantic,
-orderedsets (an insertion-ordered set used by the name tree) and the local
+orderedsets (an insertion-ordered set used by the name tree), simplejson
+(writes the indented output without changing how numbers are spelled) and
+the local
 `llm_sdk` (a path dependency); torch is installed as a dependency of the SDK. The SDK downloads the Qwen/Qwen3-0.6B model itself on first use.
 
 When stderr is a terminal and TERM is not `dumb`, a live dashboard shows
@@ -185,16 +187,22 @@ succeed; save-time I/O errors are still reported.
 
 ## Performance analysis
 
-Measured on a development machine (AMD Ryzen AI MAX+ 395), not on a campus
-computer. Accuracy and time come from separate runs of the current
-implementation (2026-11-20, one run each).
+Accuracy was measured on a development machine (AMD Ryzen AI MAX+ 395);
+time was measured on the development machine and on a 42 campus computer
+(CPU only). Accuracy and time come from separate runs of the current
+implementation (2026-11-20).
 
 | Measure | Set | Result |
 | --- | --- | --- |
-| Valid, schema-compliant records | 99 prompts (9 sets) | 99/99 |
-| Correct function | 99 prompts | 99/99 |
 | Correct call (function and every argument) | Subject's 11 examples | 10/11 (90.9%) |
-| Total time, `python -m src` on the 11 examples, CPU only | 1 run | 243.0 s |
+| Total time, `python -m src` on the 11 examples, development machine, CPU only | 1 run | 243.0 s |
+| Total time, `python -m src` on the 11 examples, 42 campus computer | 3 consecutive runs | 259.5 s, 274.9 s, 275.1 s |
+
+On the campus computer the regular-expression prompts took 49.6–51.8 s,
+33.1–33.8 s and 48.7–50.5 s, about half of the total. The second and third
+runs were about 6% slower than the first for every prompt alike; the cause
+(for example the processor's clock under sustained load) was not measured.
+The slowest run left 24.9 s of the five-minute budget.
 
 The one wrong call is an argument, not a function: for "Replace all vowels
 in 'Programming is fun' with asterisks" the model writes `[aeiou]` where
@@ -210,8 +218,9 @@ each output token in the measured implementation costs one forward pass
 whose cost grows with the prompt and the output so far. Copying the prompt
 into the record therefore costs one forward pass per token. Longer prompts
 or more prompts require more work; runtime scaling was not established by
-that single run. Whether all test prompts finish within five minutes on the
-evaluation computer has not been measured. Accuracy runs used the GPU
+these runs. The 11 examples finish within five minutes on the campus
+computer; prompts that are longer, or more numerous, than these were not
+timed there. Accuracy runs used the GPU
 build of the same model in float32; their answers on the 11 examples match
 the CPU run.
 
@@ -291,16 +300,33 @@ uv run python -m src
 uv run python -m src --input my_prompts.json --output /tmp/calls.json
 ```
 
-An excerpt of `data/output/function_calls.json` from the 11 examples (the
-spaces inside `parameters` were written by the model and are valid JSON):
+An excerpt of `data/output/function_calls.json` from the 11 examples:
 
 ```json
 [
-  {"prompt":"What is the sum of 2 and 3?","name":"fn_add_numbers","parameters":{"a": 2.0,"b": 3.0}},
-  {"prompt":"Greet shrek","name":"fn_greet","parameters":{"name":  "shrek"  }},
-  {"prompt":"Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS","name":"fn_substitute_string_with_regex","parameters":{"source_string":  "Hello 34 I'm 233 years old","regex":  "\\d+","replacement":  "NUMBERS"}}
+  {
+    "prompt": "What is the sum of 2 and 3?",
+    "name": "fn_add_numbers",
+    "parameters": {
+      "a": 2.0,
+      "b": 3.0
+    }
+  },
+  {
+    "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS",
+    "name": "fn_substitute_string_with_regex",
+    "parameters": {
+      "source_string": "Hello 34 I'm 233 years old",
+      "regex": "\\d+",
+      "replacement": "NUMBERS"
+    }
+  }
 ]
 ```
+
+The output is indented with two spaces. Each number keeps the digits the
+model wrote (`2.00` stays `2.00`), because the generated text is re-indented
+with simplejson's `RawJSON` rather than converted to a float and back.
 
 Each record has exactly `prompt`, `name` and `parameters`. When stderr is
 redirected, the run ends with one line per prompt and a total, for example
