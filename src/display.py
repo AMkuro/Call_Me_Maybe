@@ -279,7 +279,7 @@ def render_progress(fields: Mapping[Row, str], width: int, height: int) -> str:
     room = budget - len(header)
     if len(preview) > room:
         preview = (
-            ["… earlier JSON omitted …"] + preview[-(room - 1) :]
+            ["… earlier JSON omitted …"] + preview[-(room - 1):]
             if room > 1
             else preview[-1:]
         )
