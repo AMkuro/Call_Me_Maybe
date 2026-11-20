@@ -17,34 +17,23 @@ ParamType = Literal["number", "string", "boolean"]
 _LOGGER = logging.getLogger(__name__)
 
 
-def validate_number(value: object) -> int | float:
-    """Return a JSON number as an int or float with the same value.
-
-    A Decimal becomes the float whose JSON text has the same value, or an
-    int when it is integral.
+def validate_number(value: object) -> float:
+    """Return a finite float preserving the JSON decimal value.
 
     Args:
         value: An int, a float, or the Decimal that json_io.loads produces.
 
     Returns:
-        The number.
+        The checked float; ints undergo the same decimal check as Decimals.
 
     Raises:
-        ValueError: ``value`` is a bool or another type, is not finite, is
-            an int too long to write, or is a Decimal that overflows,
-            underflows to zero, or that no float or int represents exactly.
+        ValueError: The type is invalid, the value is nonfinite, overflows,
+            underflows to zero, or loses precision in JSON float output.
     """
     if isinstance(value, bool):
         raise ValueError("boolean is not a JSON number argument")
     if isinstance(value, int):
-        # A Python int may also have been constructed without parsing JSON.
-        try:
-            str(value)
-        except ValueError as e:
-            raise ValueError(
-                f"integer exceeds JSON serialization limit: {e}",
-            ) from e
-        return value
+        value = Decimal(value)
     if isinstance(value, Decimal):
         if not value.is_finite():
             raise ValueError("number must be finite")
@@ -55,9 +44,6 @@ def validate_number(value: object) -> int | float:
             raise ValueError("decimal underflows to zero")
         if Decimal(json.dumps(candidate, allow_nan=False)) == value:
             return candidate
-        # A finite float bounds the size of this exact integral fallback.
-        if value == value.to_integral_value():
-            return int(value)
         raise ValueError("decimal precision would be lost in JSON output")
     if isinstance(value, float):
         if not math.isfinite(value):
@@ -66,7 +52,7 @@ def validate_number(value: object) -> int | float:
     raise ValueError("expected a JSON number, not a string or another type")
 
 
-Number = Annotated[int | float, BeforeValidator(validate_number)]
+Number = Annotated[float, BeforeValidator(validate_number)]
 Scalar = str | bool | Number
 
 

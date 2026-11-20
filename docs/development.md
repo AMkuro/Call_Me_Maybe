@@ -81,9 +81,11 @@ lookup, without changing forward calls or claiming a measured runtime gain
 
 JSON readers now share stdlib hooks that reject duplicate keys before overwrite,
 reject NaN/Infinity and retain Decimal source values. Pydantic owns strict
-shape/type validation and metadata warnings. Integers remain exact ints;
-decimals use a float only when JSON serialization retains the source value,
-with exact integral fallback or a clear precision/range error (ADR-0017).
+shape/type validation and metadata warnings. Parsing retains integers as ints
+and decimals as Decimal. Number argument validation converts both to finite
+floats only when JSON serialization retains the decimal value; precision loss,
+overflow and underflow are errors, with no integral fallback. This also applies
+to directly constructed FunctionCall records.
 Blank descriptions/argument names warn on stderr without rewriting input.
 The independent measurement comparison no longer accepts bool/number equality
 or rounded expected numbers. The historical model measurements below predate

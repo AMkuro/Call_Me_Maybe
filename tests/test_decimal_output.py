@@ -23,8 +23,8 @@ from src.values import (
 )
 from src.writer import save_results
 
-VALID = ('0.0', '-0.0', '2.0', '2.75', '-42.125', '9007199254740993.0',
-         '0.00000001', '123456789012345678901234567890.0', '2.00')
+VALID = ('0.0', '-0.0', '2.0', '2.75', '-42.125', '9007199254740992.0',
+         '0.00000001', '10.0', '-3.0', '0.1', '2.00')
 # The terminator may follow an integer (owner decision, 2026-11-18).
 INTEGERS = ('0', '-0', '2', '-2', '10', '9007199254740993')
 INVALID = ('2.', '.5', '+2.0', '01.0', '01', '-', '1e10', '1.0e10',
@@ -66,7 +66,9 @@ class DecimalGrammarTests(unittest.TestCase):
     def test_every_valid_prefix_reaches_both_terminators(self) -> None:
         """No legal next byte is masked before the complete decimal value."""
         vocab = {token: bytes([token]) for token in range(128)}
-        for literal in VALID + INTEGERS:
+        for literal in VALID + INTEGERS + (
+                '9007199254740993.0',
+                '123456789012345678901234567890.0'):
             for terminator in (',', '}'):
                 with self.subTest(literal=literal, terminator=terminator):
                     written = b''
@@ -169,12 +171,13 @@ class DecimalSaveTests(unittest.TestCase):
 
     def test_pipeline_normalizes_integer_before_float_validation(self) -> None:
         """Integer generation succeeds only after the separate text edit."""
-        for literal in INTEGERS:
+        for literal in INTEGERS[:-1]:
             with self.subTest(literal=literal):
                 call = generated(literal)
                 text = call._generated_json
                 assert text is not None
                 self.assertIn('"x":' + literal + '.0,', text)
+                self.assertIs(type(call.parameters['x']), float)
 
     def test_normalization_preserves_all_other_text(self) -> None:
         """Only supplied number-slot slices may gain a fraction."""
@@ -229,14 +232,18 @@ class DecimalSaveTests(unittest.TestCase):
     def test_precision_rejections_keep_existing_reasons(self) -> None:
         """Keep precision and finite-range checks."""
         for literal, reason in (
+            ('9007199254740993', 'precision'),
+            ('9007199254740993.0', 'precision'),
+            ('123456789012345678901234567890', 'precision'),
+            ('123456789012345678901234567890.0', 'precision'),
             ('0.1234567890123456789', 'precision'),
             ('1.' + '0' * 18 + '1', 'precision'),
             ('0.' + '0' * 400 + '1', 'underflow'),
             ('9' * 309 + '.0', 'overflow'),
         ):
             with self.subTest(literal=literal[:30]):
-                self.assertTrue(re.fullmatch(r'-?(0|[1-9][0-9]*)\.[0-9]+',
-                                             literal))
+                self.assertTrue(re.fullmatch(
+                    r'-?(0|[1-9][0-9]*)(?:\.[0-9]+)?', literal))
                 with self.assertRaisesRegex(PromptError, reason):
                     generated(literal)
 
@@ -267,6 +274,7 @@ class DecimalSaveTests(unittest.TestCase):
         """Manually built calls still use ordinary JSON serialization."""
         call = FunctionCall(prompt='手動', name='record',
                             parameters={'x': 2, 's': '1e10', 'b': True})
+        self.assertIs(type(call.parameters['x']), float)
         self.assertIsNone(call._generated_json)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'calls.json'

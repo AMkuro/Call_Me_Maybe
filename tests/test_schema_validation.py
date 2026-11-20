@@ -137,7 +137,7 @@ class ValidationFlowTests(unittest.TestCase):
                 '{"prompt":"x","name":"dynamic","parameters":{"":'
                 + literal + '}}'
                 # These generation fixtures already have float notation.
-                for literal in ['9007199254740993.0',
+                for literal in ['9007199254740992.0',
                                 '0.1234567890123456789', '0.1']
             ]
             stderr, stdout = io.StringIO(), io.StringIO()
@@ -159,7 +159,7 @@ class ValidationFlowTests(unittest.TestCase):
             self.assertEqual(status, 1)
             saved = json.loads(output.read_text(), parse_float=Decimal)
             self.assertEqual([row['parameters'][''] for row in saved],
-                             [9007199254740993, Decimal('0.1')])
+                             [9007199254740992, Decimal('0.1')])
             self.assertEqual(stdout.getvalue(), '')
             self.assertIn('description', stderr.getvalue())
             self.assertIn('parameter', stderr.getvalue())

@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -27,23 +28,39 @@ def record(literal: str) -> str:
 class NumericIntegrityTests(unittest.TestCase):
     """Number validation must preserve the eventual JSON number or fail."""
 
-    def test_integer_boundaries_and_large_integers_remain_exact(self) -> None:
-        """Integers beyond binary64 precision or range remain Python ints."""
+    def test_direct_numeric_inputs_become_checked_floats(self) -> None:
+        """Direct construction and declared numbers use the same checks."""
         model = build_parameters_model(definition(value='number'))
-        for literal in ['0', '-2', '2', '9007199254740991',
-                        '9007199254740992', '9007199254740993',
-                        '-' + '9' * 400]:
-            with self.subTest(literal=literal[:35]):
-                checked = model.model_validate({'value': int(literal)})
-                value = checked.model_dump(by_alias=True)['value']
-                self.assertIs(type(value), int)
-                self.assertEqual(value, int(literal))
+        values: list[Any] = [0, -2, 2, 9007199254740992,
+                             Decimal('0.1'), 2.75]
+        for value in values:
+            with self.subTest(value=value):
+                checked = model.model_validate({'value': value})
+                result = checked.model_dump(by_alias=True)['value']
+                call = FunctionCall(prompt='x', name='dynamic',
+                                    parameters={'value': value})
+                self.assertIs(type(result), float)
+                self.assertTrue(math.isfinite(result))
+                self.assertIs(type(call.parameters['value']), float)
+                self.assertEqual(Decimal(json.dumps(result)), Decimal(value))
+        invalid: list[tuple[Any, str]] = [
+            (9007199254740993, 'precision'),
+            (Decimal('9007199254740993'), 'precision'),
+            (10 ** 400, 'overflow'),
+        ]
+        for value, reason in invalid:
+            with self.subTest(reason=reason, type=type(value)):
+                with self.assertRaisesRegex(ValidationError, reason):
+                    model.model_validate({'value': value})
+                with self.assertRaisesRegex(ValidationError, reason):
+                    FunctionCall(prompt='x', name='dynamic',
+                                 parameters={'value': value})
 
     def test_regular_decimals_and_integral_decimal_are_preserved(self) -> None:
         """Allow 0.1 and preserve integer-valued decimals without rounding."""
         fn = definition(value='number')
         for literal in ['0.1', '2.5', '-12.75', '1.00', '-0.0',
-                        '1e-300', '9007199254740993.0']:
+                        '1e-300', '9007199254740992.0']:
             with self.subTest(literal=literal):
                 call = validate_call(record(literal), fn, 'x')
                 encoded = json.dumps(call.parameters, allow_nan=False)
@@ -65,8 +82,8 @@ class NumericIntegrityTests(unittest.TestCase):
     def test_saved_json_keeps_numeric_type_and_decimal_value(self) -> None:
         """Use an independent decimal parser on the actual saved file."""
         fn = definition(value='number')
-        literals = ['9007199254740993.0', '9' * 300 + '.0', '-12.75', '0.1',
-                    '-0.0']
+        literals = ['9007199254740992.0', '1' + '0' * 300 + '.0',
+                    '-12.75', '0.1', '-0.0']
         calls = [validate_call(record(literal), fn, 'x')
                  for literal in literals]
         with tempfile.TemporaryDirectory() as temporary:
@@ -128,15 +145,6 @@ class NumericIntegrityTests(unittest.TestCase):
         with self.assertRaisesRegex(PromptError, 'limit|digits'):
             validate_call(record('9' * (limit + 1)),
                           definition(value='number'), 'x')
-
-    def test_measurement_does_not_cast_huge_integers_to_float(self) -> None:
-        """Scoring an exact integer outside float range must not overflow."""
-        literal = '9' * 400
-        call = FunctionCall(prompt='x', name='dynamic',
-                            parameters={'number': int(literal)})
-        self.assertTrue(assess_call({
-            'expected_name': 'dynamic', 'requested_number_literal': literal,
-        }, call))
 
     def test_measurement_checks_types_and_exact_decimals(self) -> None:
         """Python True == 1 must not make a wrong typed argument correct."""
