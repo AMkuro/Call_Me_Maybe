@@ -9,7 +9,7 @@ SDK_ZIP ?= llm_sdk.zip
 
 help:
 	@echo "Available targets:"
-	@echo "  make install       Recreate $(VENV) from scratch (CPU torch, from uv.lock)"
+	@echo "  make install       Install dependencies into $(VENV) with uv sync (CPU torch)"
 	@echo "  make sdk-install   Unpack an SDK zip over llm_sdk (SDK_ZIP=<zip>, default llm_sdk.zip)"
 	@echo "  make run           Run the project"
 	@echo "  make debug         Run the project with pdb"
@@ -18,13 +18,9 @@ help:
 	@echo "  make lint          Run flake8 and required mypy checks"
 	@echo "  make lint-strict   Run flake8 and mypy --strict"
 
-# --reinstall-package llm-sdk: uv otherwise reuses a stale cached build of the local SDK.
+# Plain uv sync, as reviewers run it; pyproject.toml reinstalls the local SDK.
 install:
-	@set -eu; \
-	rm -rf $(VENV); \
-	echo "Creating clean virtual environment..."; \
-	$(UV) sync --locked --reinstall-package llm-sdk; \
-	echo "Install to virtualenv $(VENV) Successful."
+	$(UV) sync
 
 sdk-install:
 	test -f $(SDK_ZIP) || { echo "Error: $(SDK_ZIP) not found." >&2; exit 1; }
