@@ -24,8 +24,8 @@ class Small_LLM_Model:
         Computation device. If *None* we automatically select ``mps`` when available on macOS,
         ``cuda`` when available, otherwise we fall back to ``cpu``.
     dtype: torch.dtype | None, default=None
-        Numerical precision. LOCAL CHANGE: ``float32`` on every device (the original
-        defaulted to ``float16`` on GPU or MPS).
+        Numerical precision. When using a GPU or MPS we default to ``float16`` to keep memory
+        usage reasonable; on CPU we keep ``float32`` for maximum compatibility.
     """
 
     def __init__(
@@ -49,10 +49,7 @@ class Small_LLM_Model:
         self._device = device
 
         if dtype is None:
-            # LOCAL CHANGE (not in the distributed SDK): the original used float16 on
-            # cuda/mps. We use float32 everywhere so GPU results match the CPU review
-            # machine. `make sdk-install` restores the original from llm_sdk.zip.
-            dtype = torch.float32
+            dtype = torch.float16 if self._device in ["cuda", "mps"] else torch.float32
         self._dtype = dtype
 
         # --- load tokenizer & model -------------------------------------------------
