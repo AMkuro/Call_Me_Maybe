@@ -1,5 +1,5 @@
-# Development-only targets, included by the Makefile with `-include dev.mk`.
-# Not listed in submission-files.txt, so the submitted Makefile has none of it.
+# Development-only targets, included by GNUmakefile after Makefile.
+# Neither file is in submission-files.txt; the submitted Makefile never names them.
 
 # Local overrides (git-ignored), e.g. `export HF_HOME := ...`.
 -include .local.mk

@@ -1,6 +1,7 @@
 # Paths are relative to the repository root. Only committed regular files.
 # Read by tools/export_submission.py. Everything else (tests, docs, tools,
-# dev.mk, research, examples, .github, AGENTS.md) stays in the development repo.
+# GNUmakefile, dev.mk, research, examples, .github, AGENTS.md) stays in the
+# development repo.
 .gitignore
 .flake8
 Makefile

@@ -61,5 +61,3 @@ lint-strict: check-env
 	@result=0; $(UV) run --no-sync flake8 . || result=1; \
 	$(UV) run --no-sync mypy . --strict || result=1; \
 	exit $$result
-
--include dev.mk
