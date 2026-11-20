@@ -336,7 +336,7 @@ class GrammarTests(unittest.TestCase):
                 data = value.encode() + terminator.encode()
                 for index in range(len(data)):
                     written = data[:index]
-                    token = data[index : index + 1]
+                    token = data[index: index + 1]
                     self.assertFalse(
                         is_argument_part_complete(
                             written,
@@ -430,7 +430,7 @@ class GrammarTests(unittest.TestCase):
                 self.assertIn(
                     1,
                     allowed_tokens_for_argument(
-                        {1: value[index : index + 1]},
+                        {1: value[index: index + 1]},
                         "string",
                         value[:index],
                         "}",
@@ -443,7 +443,7 @@ class GrammarTests(unittest.TestCase):
             self.assertIn(
                 1,
                 allowed_tokens_for_argument(
-                    {1: escaped[index : index + 1]},
+                    {1: escaped[index: index + 1]},
                     "string",
                     escaped[:index],
                     "}",

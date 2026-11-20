@@ -168,7 +168,7 @@ class ProbeContractTests(unittest.TestCase):
                 """Use fake cache files and real process facts."""
                 prefix = "/sys/devices/system/cpu/"
                 if str(value).startswith(prefix):
-                    return root / str(value)[len(prefix) :]
+                    return root / str(value)[len(prefix):]
                 return Path(value)
 
             with (

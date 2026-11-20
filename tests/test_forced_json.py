@@ -64,7 +64,7 @@ class ForcedJsonTests(unittest.TestCase):
         self.assertNotIn(400, ids, "special control ID in output context")
         written = b"".join(self.vocab[t] for t in ids[1:])
         self.assertTrue(self.target.startswith(written), repr(written))
-        remaining = self.target[len(written) :]
+        remaining = self.target[len(written):]
         scores = [-10.0] * 512
         scores[0] = 1000.0  # NUL cannot occur in these JSON values.
         for token, data in self.vocab.items():
