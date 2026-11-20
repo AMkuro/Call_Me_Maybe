@@ -1,4 +1,0 @@
-cool_wait_s=10 tctl_start_mc=49750
-wall_s=53.54 max_rss_kib=4869724
-exit_code=0 stop=none prompts=10-10
-profile=phys16-t6 mem_max=16G swap=0 cpus=0-15 omp=6

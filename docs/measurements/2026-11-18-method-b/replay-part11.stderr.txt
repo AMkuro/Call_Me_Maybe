@@ -1,3 +1,0 @@
-Loading weights:   0%|          | 0/311 [00:00<?, ?it/s]Loading weights: 100%|██████████| 311/311 [00:00<00:00, 4321.06it/s]
-phase1 11/11 12.62s
-phase2 11 name=3.3s params=43.7s

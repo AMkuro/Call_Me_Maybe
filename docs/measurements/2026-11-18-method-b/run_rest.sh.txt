@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# Prompts 9, 10, 11 one per process; each waits to cool to 50C (inside run_b.sh).
-set -u
-bash <scratch>/run_b.sh part09 9 9
-echo "part09 rc=$?"
-bash <scratch>/run_b.sh part10 10 10
-echo "part10 rc=$?"
-bash <scratch>/run_b.sh part11 11 11
-echo "part11 rc=$?"

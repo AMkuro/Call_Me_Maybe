@@ -1,3 +1,0 @@
-[
-  {"prompt":"Set a timer for 10 minutes that repeats.","name":"fn_schedule_timer","parameters":{"minutes": 10.0,"repeat":  true}}
-]

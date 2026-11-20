@@ -1,3 +1,0 @@
-cool_wait_s=0
-exit_code=143 stop=thermal_95C
-profile=phys16-t6 mem_max=16G swap=0 cpus=0-15 omp=6

@@ -1,6 +1,0 @@
-TTY status 0
-Redirected status 0
-Byte-identical saved JSON: [
-  {"prompt":"What is the sum of 2 and 3?","name":"fn_add_numbers","parameters":{"a": 2.0,"b": 3.0}},
-  {"prompt":"Reverse the string 'hello'","name":"fn_reverse_string","parameters":{"s":  "hello"  }}
-]
