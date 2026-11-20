@@ -7,7 +7,7 @@ dependencies = [
     'pydantic>=2,<3',
     'llm-sdk',
     'orderedsets>=2026.1',
-    "simplejson>=4.3.0",
+    'simplejson>=4.3.0',
 ]
 
 [dependency-groups]
@@ -16,6 +16,7 @@ dev = [
     'mypy==2.4.1',
     'packaging>=24',
     'tomli>=2; python_version < "3.11"',
+    'types-simplejson==4.3.0.20261112',
     'uv==0.11.21',
 ]
 # torch is declared here so the CPU index applies (transitive deps ignore
