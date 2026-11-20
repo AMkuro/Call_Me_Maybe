@@ -55,14 +55,20 @@ def loads(text: str) -> Any:
             NaN or Infinity, or exceeds the parser's limits.
     """
     try:
-        return json.loads(text, object_pairs_hook=_unique_object,
-                          parse_float=Decimal, parse_constant=_reject_constant)
+        return json.loads(
+            text,
+            object_pairs_hook=_unique_object,
+            parse_float=Decimal,
+            parse_constant=_reject_constant,
+        )
     except DecimalException as e:
-        raise ValueError(f"JSON number exceeds Decimal parser limits: {e}") \
-            from e
+        raise ValueError(
+            f"JSON number exceeds Decimal parser limits: {e}"
+        ) from e
     except RecursionError as e:
-        raise ValueError("JSON nesting exceeds the parser recursion limit") \
-            from e
+        raise ValueError(
+            "JSON nesting exceeds the parser recursion limit"
+        ) from e
 
 
 def load(path: Path) -> Any:
