@@ -134,6 +134,7 @@ dev = [
     { name = "mypy" },
     { name = "packaging" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "types-simplejson" },
     { name = "uv" },
 ]
 
@@ -153,6 +154,7 @@ dev = [
     { name = "mypy", specifier = "==2.4.1" },
     { name = "packaging", specifier = ">=24" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2" },
+    { name = "types-simplejson", specifier = "==4.3.0.20261112" },
     { name = "uv", specifier = "==0.11.21" },
 ]
 
@@ -2215,6 +2217,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ad/8f/21021859316f44289101638dc74d82e13d722d8533e4b8708a3ab7c8461a/typer-0.28.0.tar.gz", hash = "sha256:69ab84ef79fd601cff071bbd2566d855ecadfd93adbc4b3360b9924359bdd857", size = 205415, upload-time = "2026-11-06T08:37:19.779Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/19/98/8ef60c7cd773dbab9d276a4c7bff505913a25b61acd8a9ef01ceeb70f554/typer-0.28.0-py3-none-any.whl", hash = "sha256:afd18929180b706c5e9a239f53c3c8136903553c0c2d460598bbaa924191d4ab", size = 123253, upload-time = "2026-11-06T08:37:18.611Z" },
+]
+
+[[package]]
+name = "types-simplejson"
+version = "4.3.0.20261112"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/0e/3c2ac873db7fad9b7f320a8b445b233573b9fd5a4eeaf1aeb9950683eaf7/types_simplejson-4.3.0.20261112.tar.gz", hash = "sha256:33cf64539eaa674b1bd37be591c44b3b583ad5340d46d3b85632850bd76d4d16", size = 11437, upload-time = "2026-11-12T08:54:59.608Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cf/64/6bdce38ef9b003db4eca4dcda0fbafef09d505f0d0269077399beffcfd40/types_simplejson-4.3.0.20261112-py3-none-any.whl", hash = "sha256:ef066526755d5d8e82a037d335ad4ef6123c14488d83af63cb0f10d640a288c9", size = 10693, upload-time = "2026-11-12T08:54:58.609Z" },
 ]
 
 [[package]]
