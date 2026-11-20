@@ -14,7 +14,7 @@ the selected function definition. Failed prompts are reported and omitted.
 Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
 
 ```sh
-make install      # recreate .venv from uv.lock (removes the existing .venv)
+make install      # uv sync
 make run          # uv run python -m src
 make debug        # run under pdb
 make test
@@ -23,7 +23,10 @@ make clean
 make sdk-install  # unpack an SDK zip over llm_sdk (SDK_ZIP=<zip>, default llm_sdk.zip)
 ```
 
-`uv sync` alone also works. The dependencies are numpy, Pydantic,
+`make install` runs plain `uv sync`, which also installs flake8 and mypy
+(the default `dev` group) and the CPU build of torch (the default `cpu`
+group). Every sync rebuilds the local `llm_sdk`, so a replaced SDK is not
+taken from uv's cache. The dependencies are numpy, Pydantic,
 orderedsets (an insertion-ordered set used by the name tree), simplejson
 (writes the indented output without changing how numbers are spelled) and
 the local
