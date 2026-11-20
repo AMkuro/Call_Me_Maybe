@@ -7,10 +7,17 @@ from .errors import PromptError
 from .model_port import Model
 from .name_trie import NameTrie
 from .progress import GenerationProgress, observing
-from .prompt import build_name_prompt, build_parameters_prompt
+from .prompt import build_arguments_prompt, build_name_prompt
 from .schema import FunctionDef
-from .skeleton import FixedText, ValueSlot, build_call_skeleton
-from .values import allowed_slot_tokens, is_slot_complete
+from .skeleton import (
+    ArgumentGenerationPart,
+    FixedTextPart,
+    build_call_skeleton,
+)
+from .values import (
+    allowed_tokens_for_arguments,
+    is_argument_generation_complete,
+)
 
 MAX_VALUE_STEPS = 256
 # Bound repeated digit generation before it costs 256 forwards;
@@ -69,7 +76,7 @@ def select_function(
         raise PromptError(f"function name: {e}") from e
 
 
-def _decode_and_verify_output(
+def _decode_tokens_with_vocab_check(
     ids: list[int], *, model: Model, vocab: Mapping[int, bytes]
 ) -> str:
     """Return the text of ``ids``, checked against their vocabulary bytes.
@@ -98,7 +105,11 @@ def _decode_and_verify_output(
 
 
 def _commit_fixed_text(
-    text: str, context: list[int], *, model: Model, vocab: Mapping[int, bytes],
+    text: str,
+    context: list[int],
+    *,
+    model: Model,
+    vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
 ) -> list[int]:
     """Return the token IDs of the fixed JSON ``text``.
@@ -123,7 +134,10 @@ def _commit_fixed_text(
             the model fails.
     """
     tokens = model.encode(text)
-    if _decode_and_verify_output(tokens, model=model, vocab=vocab) != text:
+    if (
+        _decode_tokens_with_vocab_check(tokens, model=model, vocab=vocab)
+        != text
+    ):
         raise PromptError("fixed JSON text differs from its encoded tokens")
     committed: list[int] = []
     for token in tokens:
@@ -168,7 +182,7 @@ def generate_call_json(
         PromptError: A value cannot be generated, or SDK decoding differs
             from the vocabulary bytes of a fixed part, slot or full output.
     """
-    prompt_ids = model.encode(build_parameters_prompt(user_prompt, fn))
+    prompt_ids = model.encode(build_arguments_prompt(user_prompt, fn))
     # Only this loop extends output_ids; each part gets the prompt and the
     # output so far as context and returns its own IDs.
     output_ids: list[int] = []
@@ -176,7 +190,7 @@ def generate_call_json(
     generated_char_count = 0
     for part in build_call_skeleton(user_prompt, fn):
         context = prompt_ids + output_ids
-        if isinstance(part, FixedText):
+        if isinstance(part, FixedTextPart):
             part_ids = _commit_fixed_text(
                 part.text, context, model=model, vocab=vocab, progress=progress
             )
@@ -184,10 +198,10 @@ def generate_call_json(
         else:
             if observing(progress):
                 progress.parameter_started(part.name, part.type)
-            part_ids = generate_slot(
+            part_ids = generate_argument_part(
                 part, context, model=model, vocab=vocab, progress=progress
             )
-            part_text = _decode_and_verify_output(
+            part_text = _decode_tokens_with_vocab_check(
                 part_ids, model=model, vocab=vocab
             )
             if part.type == "number":
@@ -199,12 +213,14 @@ def generate_call_json(
                 )
         generated_char_count += len(part_text)
         output_ids.extend(part_ids)
-    text = _decode_and_verify_output(output_ids, model=model, vocab=vocab)
+    text = _decode_tokens_with_vocab_check(
+        output_ids, model=model, vocab=vocab
+    )
     return text, number_slot_slices
 
 
-def generate_slot(
-    slot: ValueSlot,
+def generate_argument_part(
+    slot: ArgumentGenerationPart,
     ids: list[int],
     *,
     model: Model,
@@ -236,9 +252,11 @@ def generate_slot(
     limit = MAX_NUMBER_STEPS if slot.type == "number" else MAX_VALUE_STEPS
     try:
         while True:
-            if is_slot_complete(written, slot.type, slot.terminator):
+            if is_argument_generation_complete(
+                written, slot.type, slot.terminator
+            ):
                 return generated
-            allowed = allowed_slot_tokens(
+            allowed = allowed_tokens_for_arguments(
                 vocab, slot.type, written, slot.terminator
             )
             if len(generated) >= limit:

@@ -53,7 +53,8 @@ def float_text(fragment: str) -> str:
 
 
 def normalize_call_json(
-    raw_json: str, number_slot_slices: Sequence[slice],
+    raw_json: str,
+    number_slot_slices: Sequence[slice],
 ) -> str:
     """Add missing fractions only within generated number slots.
 
@@ -71,7 +72,7 @@ def normalize_call_json(
     parts: list[str] = []
     copied_until = 0
     for number_slice in number_slot_slices:
-        parts.append(raw_json[copied_until:number_slice.start])
+        parts.append(raw_json[copied_until : number_slice.start])
         parts.append(float_text(raw_json[number_slice]))
         copied_until = number_slice.stop
     parts.append(raw_json[copied_until:])
@@ -95,7 +96,9 @@ def _utf8_prefix(data: bytes) -> bool:
 
 
 def _scan_json_string_fragment(
-    state: int, fragment: bytes, terminator: int,
+    state: int,
+    fragment: bytes,
+    terminator: int,
 ) -> int:
     """Scan JSON string syntax from ``state`` through a byte fragment.
 
@@ -150,7 +153,10 @@ def _scan_json_string_fragment(
 
 
 def _string_slot_state(
-    state: int, fragment: bytes, terminator: int, pending_utf8: bytes = b"",
+    state: int,
+    fragment: bytes,
+    terminator: int,
+    pending_utf8: bytes = b"",
 ) -> int:
     """Classify a string slot after scanning its next fragment.
 
@@ -171,7 +177,7 @@ def _string_slot_state(
     return _COMPLETE if state == _AFTER_TERMINATOR else _INCOMPLETE
 
 
-def _slot_state(
+def _value_syntax_state(
     data: bytes,
     kind: ParamType,
     terminator: bytes,
@@ -214,7 +220,7 @@ def _slot_state(
     return _INVALID
 
 
-def allowed_slot_tokens(
+def allowed_tokens_for_arguments(
     vocab: Mapping[int, bytes],
     param_type: ParamType,
     written: bytes,
@@ -242,7 +248,9 @@ def allowed_slot_tokens(
     terminator_bytes = terminator.encode("ascii")
     if param_type == "string":
         state = _scan_json_string_fragment(
-            _BEFORE_STRING, written, terminator_bytes[0],
+            _BEFORE_STRING,
+            written,
+            terminator_bytes[0],
         )
         if state == _INVALID or not _utf8_prefix(written):
             return []
@@ -262,12 +270,12 @@ def allowed_slot_tokens(
         token
         for token, value in vocab.items()
         if value
-        and _slot_state(written + value, param_type, terminator_bytes)
+        and _value_syntax_state(written + value, param_type, terminator_bytes)
         != _INVALID
     ]
 
 
-def is_slot_complete(
+def is_argument_generation_complete(
     written: bytes,
     param_type: ParamType,
     terminator: str,
@@ -285,5 +293,5 @@ def is_slot_complete(
         Whether the slot is complete.
     """
     terminator_bytes = terminator.encode("ascii")
-    state = _slot_state(written, param_type, terminator_bytes)
+    state = _value_syntax_state(written, param_type, terminator_bytes)
     return state == _COMPLETE

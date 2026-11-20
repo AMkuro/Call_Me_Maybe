@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from .schema import FunctionDef, ParamType
 
 
-class FixedText(BaseModel):
+class FixedTextPart(BaseModel):
     """JSON text written as is: braces, keys, the prompt and the name.
 
     Attributes:
@@ -20,7 +20,7 @@ class FixedText(BaseModel):
     text: str
 
 
-class ValueSlot(BaseModel):
+class ArgumentGenerationPart(BaseModel):
     """A parameter value, including its following terminator ("," or "}").
 
     Attributes:
@@ -34,6 +34,9 @@ class ValueSlot(BaseModel):
     name: str
     type: ParamType
     terminator: Literal[",", "}"]
+
+
+JsonPart = FixedTextPart | ArgumentGenerationPart
 
 
 def escape_lt(text: str) -> str:
@@ -66,8 +69,9 @@ def json_string(text: str) -> str:
 
 
 def build_call_skeleton(
-    user_prompt: str, fn: FunctionDef,
-) -> list[FixedText | ValueSlot]:
+    user_prompt: str,
+    fn: FunctionDef,
+) -> list[JsonPart]:
     """Lay out ``{"prompt":...,"name":...,"parameters":{"k": ...}}``.
 
     The prompt and the name are fixed text: the prompt is copied from the
@@ -83,18 +87,23 @@ def build_call_skeleton(
     Returns:
         The parts in output order.
     """
-    head = FixedText(text=f'{{"prompt":{json_string(user_prompt)},'
-                          f'"name":{json_string(fn.name)}')
+    head = FixedTextPart(
+        text=f'{{"prompt":{json_string(user_prompt)},'
+        f'"name":{json_string(fn.name)}'
+    )
     if not fn.parameters:
-        return [head, FixedText(text=',"parameters":{}}')]
-    parts: list[FixedText | ValueSlot] = [head]
+        return [head, FixedTextPart(text=',"parameters":{}}')]
+    parts: list[FixedTextPart | ArgumentGenerationPart] = [head]
     for index, (name, spec) in enumerate(fn.parameters.items()):
-        prefix = ',"parameters":{' if index == 0 else ''
+        prefix = ',"parameters":{' if index == 0 else ""
         # Keep ": ": without the space, Qwen3 never ended "2.0" in our runs.
-        parts.append(FixedText(text=prefix + json_string(name) + ': '))
-        parts.append(ValueSlot(
-            name=name, type=spec.type,
-            terminator='}' if index == len(fn.parameters) - 1 else ',',
-        ))
-    parts.append(FixedText(text='}'))
+        parts.append(FixedTextPart(text=prefix + json_string(name) + ": "))
+        parts.append(
+            ArgumentGenerationPart(
+                name=name,
+                type=spec.type,
+                terminator="}" if index == len(fn.parameters) - 1 else ",",
+            )
+        )
+    parts.append(FixedTextPart(text="}"))
     return parts

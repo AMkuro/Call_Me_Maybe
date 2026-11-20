@@ -238,10 +238,10 @@ class LoopObservationTests(unittest.TestCase):
 
     def test_value_forced_and_duplicate_bytes_keep_actual_id(self) -> None:
         """Mode and selected ID are not inferred from displayed bytes."""
-        from src.skeleton import ValueSlot
+        from src.skeleton import ArgumentGenerationPart
 
         model = object.__new__(Model)
-        slot = ValueSlot(name='flag', type='boolean', terminator='}')
+        slot = ArgumentGenerationPart(name='flag', type='boolean', terminator='}')
         for vocab, expected, mode in (
             ({1: b'true}'}, 1, 'forced'),
             ({1: b'true}', 2: b'true}'}, 2, 'greedy'),
@@ -251,7 +251,7 @@ class LoopObservationTests(unittest.TestCase):
                 dashboard = Dashboard(1, model, vocab)
                 with patch.object(Model, 'logits',
                                   return_value=[0.0, 1.0, 2.0]) as llm:
-                    result = generation.generate_slot(
+                    result = generation.generate_argument_part(
                         slot, [9], model=model, vocab=vocab,
                         progress=dashboard,
                     )

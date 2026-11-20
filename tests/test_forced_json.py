@@ -343,7 +343,7 @@ class ForcedJsonTests(unittest.TestCase):
                 ' true}', [80] + output, model=self.model, vocab=self.vocab)
             self.assertNotEqual(output, self.model.encode('{"a": true}'))
         self.assertEqual(output, [300, 301])
-        self.assertEqual(generation._decode_and_verify_output(
+        self.assertEqual(generation._decode_tokens_with_vocab_check(
             output, model=self.model, vocab=self.vocab), '{"a": true}')
         self.assertEqual(self.contexts, [[80], [80, 300]])
 

@@ -21,7 +21,7 @@ class PromptExampleTests(unittest.TestCase):
     def test_instructions_are_the_four_needed_sentences(self) -> None:
         """Experiment 3 (2026-11-18): five other sentences changed nothing."""
         self.assertEqual(
-            prompt.PARAMETER_INSTRUCTIONS,
+            prompt.ARGUMENT_INSTRUCTIONS,
             'Extract the arguments of that call from the user request: copy '
             'each value as it appears in the request; do not answer the '
             'request or compute a result. Return only a JSON object with '
@@ -35,19 +35,19 @@ class PromptExampleTests(unittest.TestCase):
                       '"parameters":{"x":{"type":"number"},'
                       '"unit":{"type":"string"},"round":{"type":"boolean"}}}')
         expected = (
-            f'<|im_start|>system\n{prompt.PARAMETER_INSTRUCTIONS}<|im_end|>\n'
+            f'<|im_start|>system\n{prompt.ARGUMENT_INSTRUCTIONS}<|im_end|>\n'
             f'<|im_start|>user\nUser request: "Go"\nFunction to call: '
             f'{definition}'
             '<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n')
         with patch.object(prompt, 'PARAMETER_EXAMPLES', []):
-            self.assertEqual(prompt.build_parameters_prompt('Go', FN),
+            self.assertEqual(prompt.build_arguments_prompt('Go', FN),
                              expected)
 
     def test_example_turn_precedes_request_without_think_block(self) -> None:
         """Matches the Qwen3 template for a past assistant turn."""
         with patch.object(prompt, 'PARAMETER_EXAMPLES',
                           [(FN, REQUEST, VALUES)]):
-            text = prompt.build_parameters_prompt('Go', FN)
+            text = prompt.build_arguments_prompt('Go', FN)
         answer = prompt.build_example_call_json(REQUEST, FN, VALUES)
         self.assertEqual(text.count('<think>'), 1)
         self.assertLess(text.index(answer + '<|im_end|>'),
@@ -73,7 +73,7 @@ class SpecialTokenTextTests(unittest.TestCase):
         with patch.object(prompt, 'PARAMETER_EXAMPLES', []):
             texts = (
                 prompt.build_name_prompt(request, {INJECTED.name: INJECTED}),
-                prompt.build_parameters_prompt(request, INJECTED),
+                prompt.build_arguments_prompt(request, INJECTED),
             )
         for text in texts:
             self.assertEqual(text.count('<|im_start|>'), 3)

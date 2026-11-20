@@ -17,9 +17,9 @@ from src.errors import PromptError
 from src.model_port import Model
 from trie_fixtures import trie_from_paths
 from src.schema import FunctionCall, FunctionDef
-from src.skeleton import ValueSlot
+from src.skeleton import ArgumentGenerationPart
 from src.values import (
-    allowed_slot_tokens, float_text, is_slot_complete, normalize_call_json,
+    allowed_tokens_for_arguments, float_text, is_argument_generation_complete, normalize_call_json,
 )
 from src.writer import save_results
 
@@ -71,14 +71,14 @@ class DecimalGrammarTests(unittest.TestCase):
                 with self.subTest(literal=literal, terminator=terminator):
                     written = b''
                     for token in (literal + terminator).encode():
-                        self.assertFalse(is_slot_complete(
+                        self.assertFalse(is_argument_generation_complete(
                             written, 'number', terminator))
-                        self.assertIn(token, allowed_slot_tokens(
+                        self.assertIn(token, allowed_tokens_for_arguments(
                             vocab, 'number', written, terminator))
                         written += bytes([token])
-                    self.assertTrue(is_slot_complete(
+                    self.assertTrue(is_argument_generation_complete(
                         written, 'number', terminator))
-                    self.assertEqual(allowed_slot_tokens(
+                    self.assertEqual(allowed_tokens_for_arguments(
                         vocab, 'number', written, terminator), [])
 
     def test_invalid_literals_cannot_be_committed_whole(self) -> None:
@@ -87,14 +87,14 @@ class DecimalGrammarTests(unittest.TestCase):
             for terminator in (',', '}'):
                 with self.subTest(literal=literal, terminator=terminator):
                     payload = (literal + terminator).encode()
-                    self.assertFalse(is_slot_complete(
+                    self.assertFalse(is_argument_generation_complete(
                         payload, 'number', terminator))
-                    self.assertEqual(allowed_slot_tokens(
+                    self.assertEqual(allowed_tokens_for_arguments(
                         {9: payload}, 'number', b'', terminator), [])
         for prefix, allowed in ((b'2', [9]), (b'-2', [9]), (b'2.', []),
                                 (b'-', [])):
             for terminator in (',', '}'):
-                self.assertEqual(allowed_slot_tokens(
+                self.assertEqual(allowed_tokens_for_arguments(
                     {9: terminator.encode()}, 'number', prefix, terminator,
                 ), allowed)
 
@@ -102,14 +102,14 @@ class DecimalGrammarTests(unittest.TestCase):
         """A token cannot hide an exponent or trailing material."""
         vocab = {1: b'2.0', 2: b'2.0,', 3: b'.0}', 4: b'1e10',
                  5: b'1.0e10', 6: b'0,', 7: b'2.0, extra'}
-        self.assertEqual(allowed_slot_tokens(vocab, 'number', b'', ','),
+        self.assertEqual(allowed_tokens_for_arguments(vocab, 'number', b'', ','),
                          [1, 2, 6])
-        self.assertEqual(allowed_slot_tokens(vocab, 'number', b'2', '}'),
+        self.assertEqual(allowed_tokens_for_arguments(vocab, 'number', b'2', '}'),
                          [1, 3])
-        self.assertEqual(allowed_slot_tokens(vocab, 'number', b'2.', ','),
+        self.assertEqual(allowed_tokens_for_arguments(vocab, 'number', b'2.', ','),
                          [6])
-        self.assertTrue(is_slot_complete(b'2.0}', 'number', '}'))
-        self.assertFalse(is_slot_complete(b'2.0', 'number', '}'))
+        self.assertTrue(is_argument_generation_complete(b'2.0}', 'number', '}'))
+        self.assertFalse(is_argument_generation_complete(b'2.0', 'number', '}'))
 
     def test_float_text_adds_only_a_missing_fraction(self) -> None:
         """String edit, so large integers keep every digit."""
@@ -125,10 +125,10 @@ class DecimalGrammarTests(unittest.TestCase):
         # 00} and 05} cannot start a number, so 2. is the only first token.
         vocab = {1: b'2.', 2: b'00}', 3: b'05}', 4: b'1e10'}
         scores = [0.0, 0.0, 1.0, 2.0, 1000.0]
-        slot = ValueSlot(name='x', type='number', terminator='}')
+        slot = ArgumentGenerationPart(name='x', type='number', terminator='}')
         with patch.object(Model, 'logits', return_value=scores) as forward, \
                 patch.object(Model, 'encode') as encode:
-            ids = generation.generate_slot(
+            ids = generation.generate_argument_part(
                 slot, [90, 91], model=model, vocab=vocab)
         self.assertEqual(ids, [1, 3])
         self.assertEqual(b''.join(vocab[t] for t in ids), b'2.05}')
@@ -152,15 +152,15 @@ class DecimalGrammarTests(unittest.TestCase):
 
             with self.subTest(length=length), \
                     patch.object(Model, 'logits', side_effect=logits):
-                slot = ValueSlot(name='x', type='number', terminator='}')
+                slot = ArgumentGenerationPart(name='x', type='number', terminator='}')
                 if length == 32:
-                    ids = generation.generate_slot(
+                    ids = generation.generate_argument_part(
                         slot, [], model=model, vocab=vocab)
                     self.assertEqual(b''.join(vocab[t] for t in ids), target)
                 else:
                     with self.assertRaisesRegex(
                             PromptError, 'token limit 32'):
-                        generation.generate_slot(
+                        generation.generate_argument_part(
                             slot, [], model=model, vocab=vocab)
 
 

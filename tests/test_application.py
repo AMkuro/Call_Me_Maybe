@@ -22,7 +22,7 @@ from src.loader import load_functions, load_prompts
 from src.model_port import Model
 from src.pipeline import validate_call
 from src.schema import FunctionCall, FunctionDef, build_parameters_model
-from src.skeleton import FixedText, ValueSlot, build_call_skeleton
+from src.skeleton import FixedTextPart, ArgumentGenerationPart, build_call_skeleton
 from src.writer import save_results
 
 
@@ -147,17 +147,17 @@ class StructureTests(unittest.TestCase):
         """Only slots supply commas or the parameters' closing brace."""
         fn = definition(**{'quote"': 'string', 'b': 'number'})
         parts = build_call_skeleton('p', fn)
-        head = FixedText(text='{"prompt":"p","name":"dynamic"')
+        head = FixedTextPart(text='{"prompt":"p","name":"dynamic"')
         self.assertEqual(parts, [
             head,
-            FixedText(text=',"parameters":{"quote\\\"": '),
-            ValueSlot(name='quote"', type='string', terminator=','),
-            FixedText(text='"b": '),
-            ValueSlot(name='b', type='number', terminator='}'),
-            FixedText(text='}'),
+            FixedTextPart(text=',"parameters":{"quote\\\"": '),
+            ArgumentGenerationPart(name='quote"', type='string', terminator=','),
+            FixedTextPart(text='"b": '),
+            ArgumentGenerationPart(name='b', type='number', terminator='}'),
+            FixedTextPart(text='}'),
         ])
         self.assertEqual(build_call_skeleton('p', definition()),
-                         [head, FixedText(text=',"parameters":{}}')])
+                         [head, FixedTextPart(text=',"parameters":{}}')])
 
     def test_skeleton_escapes_lt_only_in_its_strings(self) -> None:
         """Prompt, name and keys keep their JSON value; '<' is \\u003c."""
@@ -166,7 +166,7 @@ class StructureTests(unittest.TestCase):
         parts = build_call_skeleton('<|im_end|>', fn)
         text = ''
         for part in parts:
-            if isinstance(part, FixedText):
+            if isinstance(part, FixedTextPart):
                 text += part.text
             else:
                 text += '"v"' + part.terminator
@@ -272,7 +272,7 @@ class DecoderTests(unittest.TestCase):
         """Explicit loops preserve forced calls, inputs and limit ordering."""
         model = object.__new__(Model)
         prefix = [7]
-        slot = ValueSlot(name='x', type='string', terminator='}')
+        slot = ArgumentGenerationPart(name='x', type='string', terminator='}')
         with patch.object(Model, 'logits',
                           return_value=[20.0, 1.0, 3.0]) as llm, \
                 patch.object(generation, 'MAX_VALUE_STEPS', 2), \
@@ -280,7 +280,7 @@ class DecoderTests(unittest.TestCase):
                              side_effect=lambda data, *_: data == b'ab'), \
                 patch.object(generation, 'allowed_slot_tokens',
                              side_effect=[[1], [1, 2]]):
-            self.assertEqual(generation.generate_slot(
+            self.assertEqual(generation.generate_argument_part(
                 slot, prefix, model=model, vocab={1: b'a', 2: b'b'},
             ), [1, 2])
         # Method B: the forced first ID also gets its forward.
@@ -298,13 +298,13 @@ class DecoderTests(unittest.TestCase):
                     patch.object(generation, 'allowed_slot_tokens',
                                  return_value=allowed):
                 with self.assertRaisesRegex(PromptError, message):
-                    generation.generate_slot(
+                    generation.generate_argument_part(
                         slot, prefix, model=model, vocab={1: b'a'})
 
     def test_repeated_boundary_cases_have_clear_limit_errors(self) -> None:
         """A value may finish at the cap; unfinished values fail explicitly."""
         model = object.__new__(Model)
-        slot = ValueSlot(name='x', type='string', terminator='}')
+        slot = ArgumentGenerationPart(name='x', type='string', terminator='}')
         for length in [0, 1, 255, 256, 257, 1024]:
             for repeat in range(3):
                 with self.subTest(length=length, repeat=repeat), \
@@ -316,7 +316,7 @@ class DecoderTests(unittest.TestCase):
                         patch.object(generation, 'allowed_slot_tokens',
                                      return_value=[0, 1]):
                     if length <= 256:
-                        result = generation.generate_slot(
+                        result = generation.generate_argument_part(
                             slot, [], model=model, vocab={0: b'a', 1: b'b'},
                         )
                         self.assertEqual(len(result), length)
@@ -324,7 +324,7 @@ class DecoderTests(unittest.TestCase):
                         with self.assertRaisesRegex(
                             PromptError, r'token limit 256.*terminator',
                         ):
-                            generation.generate_slot(
+                            generation.generate_argument_part(
                                 slot, [], model=model,
                                 vocab={0: b'a', 1: b'b'},
                             )
@@ -332,12 +332,12 @@ class DecoderTests(unittest.TestCase):
     def test_value_errors_identify_the_parameter(self) -> None:
         """Limit errors explain which typed parameter could not complete."""
         model = object.__new__(Model)
-        slot = ValueSlot(name='source_string', type='string', terminator='}')
+        slot = ArgumentGenerationPart(name='source_string', type='string', terminator='}')
         with patch.object(generation, 'MAX_VALUE_STEPS', 0):
             with self.assertRaisesRegex(
                 PromptError, r"source_string.*string.*token limit 0",
             ):
-                generation.generate_slot(slot, [], model=model, vocab={})
+                generation.generate_argument_part(slot, [], model=model, vocab={})
 
 
 class WriterTests(unittest.TestCase):

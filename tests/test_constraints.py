@@ -13,11 +13,11 @@ from src.errors import PromptError, StartupError
 from src.model_port import EOS, Model
 from src.name_trie import NameTrie
 from trie_fixtures import trie_from_paths
-from src.prompt import build_name_prompt, build_parameters_prompt
+from src.prompt import build_name_prompt, build_arguments_prompt
 from src.schema import ParamType
 from src.values import (
-    _COMPLETE, _INCOMPLETE, _INVALID, _slot_state,
-    allowed_slot_tokens, is_slot_complete,
+    _COMPLETE, _INCOMPLETE, _INVALID, _value_syntax_state,
+    allowed_tokens_for_arguments, is_argument_generation_complete,
 )
 from src.vocab import load_vocab
 from test_application import definition
@@ -285,36 +285,36 @@ class GrammarTests(unittest.TestCase):
                 for index in range(len(data)):
                     written = data[:index]
                     token = data[index:index + 1]
-                    self.assertFalse(is_slot_complete(
+                    self.assertFalse(is_argument_generation_complete(
                         written, 'number', terminator,
                     ))
-                    self.assertIn(1, allowed_slot_tokens(
+                    self.assertIn(1, allowed_tokens_for_arguments(
                         {1: token}, 'number', written, terminator,
                     ))
-                self.assertTrue(is_slot_complete(data, 'number', terminator))
-        self.assertTrue(is_slot_complete(b' \n-12.5 \t}', 'number', '}'))
+                self.assertTrue(is_argument_generation_complete(data, 'number', terminator))
+        self.assertTrue(is_argument_generation_complete(b' \n-12.5 \t}', 'number', '}'))
 
     def test_invalid_numbers_and_crossing_tokens_are_masked(self) -> None:
         """A candidate cannot add bad syntax or text after a terminator."""
         vocab = {0: b'1', 1: b'.', 2: b',', 3: b', "next":',
                  4: b'e2', 5: b'}', 6: b'', 7: b'0'}
-        self.assertEqual(set(allowed_slot_tokens(
+        self.assertEqual(set(allowed_tokens_for_arguments(
             vocab, 'number', b'12', ',',
         )), {0, 1, 2, 7})
         for value in [b'01,', b'+1,', b'.1,', b'1.,', b'NaN,', b'-,',
                       b'1e3,', b'1.0e3,', b'1, ', b'1,true', b'1}']:
-            self.assertFalse(is_slot_complete(value, 'number', ','))
+            self.assertFalse(is_argument_generation_complete(value, 'number', ','))
 
     def test_boolean_grammar(self) -> None:
         """Only lowercase JSON booleans can reach their terminator."""
-        self.assertEqual(allowed_slot_tokens(
+        self.assertEqual(allowed_tokens_for_arguments(
             {1: b'ue}', 2: b'ue}junk', 3: b'ue,', 4: b'ue'},
             'boolean', b'tr', '}',
         ), [1, 4])
         for value in [b'true}', b'false}', b' true \n}']:
-            self.assertTrue(is_slot_complete(value, 'boolean', '}'))
+            self.assertTrue(is_argument_generation_complete(value, 'boolean', '}'))
         for value in [b'True}', b'1}', b'false', b'true},', b'true} ']:
-            self.assertFalse(is_slot_complete(value, 'boolean', '}'))
+            self.assertFalse(is_argument_generation_complete(value, 'boolean', '}'))
 
     def test_strings_accept_every_byte_prefix_and_json_escape(self) -> None:
         """Split UTF-8 and split escapes stay valid until completion."""
@@ -322,13 +322,13 @@ class GrammarTests(unittest.TestCase):
                      '日本語é🙂', 'commas, and braces }']:
             value = json.dumps(text, ensure_ascii=False).encode() + b'}'
             for index in range(len(value)):
-                self.assertIn(1, allowed_slot_tokens(
+                self.assertIn(1, allowed_tokens_for_arguments(
                     {1: value[index:index + 1]}, 'string', value[:index], '}',
                 ), msg=f'{text!r}, byte {index}')
-            self.assertTrue(is_slot_complete(value, 'string', '}'))
+            self.assertTrue(is_argument_generation_complete(value, 'string', '}'))
         escaped = b'"\\u3042"}'
         for index in range(len(escaped)):
-            self.assertIn(1, allowed_slot_tokens(
+            self.assertIn(1, allowed_tokens_for_arguments(
                 {1: escaped[index:index + 1]}, 'string', escaped[:index], '}',
             ))
 
@@ -336,11 +336,11 @@ class GrammarTests(unittest.TestCase):
         """Valid terminators inside strings never terminate a value early."""
         for token in [b'"a\n"}', b'"\\q"}', b'"\\u00xz"}', b'"a"}x',
                       b'"a"} ', b'"\xff"}', b'"\xe3"}', b'"a",']:
-            self.assertEqual(allowed_slot_tokens(
+            self.assertEqual(allowed_tokens_for_arguments(
                 {1: token}, 'string', b'', '}',
             ), [], msg=repr(token))
-        self.assertFalse(is_slot_complete(b'"a}', 'string', '}'))
-        self.assertEqual(allowed_slot_tokens(
+        self.assertFalse(is_argument_generation_complete(b'"a}', 'string', '}'))
+        self.assertEqual(allowed_tokens_for_arguments(
             {1: b'\x82"}', 2: b'"}', 3: b'\xff'},
             'string', b'"\xe3\x81', '}',
         ), [1])
@@ -368,7 +368,7 @@ class GrammarTests(unittest.TestCase):
         ]
         for data, expected in cases:
             with self.subTest(data=data):
-                self.assertEqual(_slot_state(data, 'string', b'}'), expected)
+                self.assertEqual(_value_syntax_state(data, 'string', b'}'), expected)
 
     def test_candidate_order_and_ids_match_slot_state(self) -> None:
         """Incremental candidates obey the reference contract at boundaries."""
@@ -409,11 +409,11 @@ class GrammarTests(unittest.TestCase):
                                     for index in range(len(data) + 1))
                 for written in sorted(prefixes):
                     expected = [token for token, value in vocab.items()
-                                if value and _slot_state(
+                                if value and _value_syntax_state(
                                     written + value, kind, end,
                                 ) != _INVALID]
                     with self.subTest(kind=kind, end=end, written=written):
-                        self.assertEqual(allowed_slot_tokens(
+                        self.assertEqual(allowed_tokens_for_arguments(
                             vocab, kind, written, terminator,
                         ), expected)
 
@@ -435,7 +435,7 @@ class PromptTests(unittest.TestCase):
     def test_parameter_prompt_has_selected_definition(self) -> None:
         """Parameter extraction must not execute the requested function."""
         fn = definition(text='string')
-        prompt = build_parameters_prompt('Keep the text', fn)
+        prompt = build_arguments_prompt('Keep the text', fn)
         self.assertIn(fn.description, prompt)
         self.assertIn('Keep the text', prompt)
         self.assertIn('Extract the arguments', prompt)

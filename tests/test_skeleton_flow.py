@@ -15,7 +15,7 @@ from src import __main__ as entry, generation, pipeline, runtime
 from src.errors import PromptError
 from src.model_port import Model
 from src.schema import FunctionCall, FunctionDef
-from src.skeleton import ValueSlot
+from src.skeleton import ArgumentGenerationPart
 from test_constraints import encode_name
 
 
@@ -57,7 +57,7 @@ class PipelineTests(unittest.TestCase):
         for target in ('12.0,', '1.5}', '-0.25,', '0.0}'):
             with self.subTest(target=target):
                 model = object.__new__(Model)
-                slot = ValueSlot.model_validate({
+                slot = ArgumentGenerationPart.model_validate({
                     'name': 'number', 'type': 'number',
                     'terminator': target[-1],
                 })
@@ -100,7 +100,7 @@ class PipelineTests(unittest.TestCase):
                             lambda scores, permitted:
                             max(permitted, key=scores.__getitem__)
                         )):
-                    result = generation.generate_slot(
+                    result = generation.generate_argument_part(
                         slot, [127], model=model,
                         vocab={token: bytes([token]) for token in range(128)},
                     )
