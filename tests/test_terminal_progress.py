@@ -39,7 +39,8 @@ class ObservationTests(unittest.TestCase):
                 )
         self.assertEqual(observed, plain)
         self.assertIn('unavailable', dashboard.fields['value'])
-        self.assertEqual(dashboard.fields['token'], '2 (forced)')
+        self.assertEqual(dashboard.fields['token'],
+                         "2 '<text unavailable; ids=[2]>' (forced)")
 
     def test_name_warning_and_progress_without_ranking(self) -> None:
         """Warn only for a masked raw preference; keep ID/mode progress."""
@@ -65,7 +66,7 @@ class ObservationTests(unittest.TestCase):
             self.assertEqual(dashboard.fields['value'], 'b')
             self.assertEqual(dashboard.fields['function'], 'fn_b')
             # The greedy choice of 2 is followed by the forced EOS 0.
-            self.assertEqual(dashboard.fields['token'], '0 (forced)')
+            self.assertEqual(dashboard.fields['token'], "0 'x' (forced)")
             self.assertEqual('warning' in dashboard.fields, warned)
             self.assertEqual('name_selection_constrained' in output.getvalue(),
                              warned)
@@ -114,7 +115,8 @@ class ObservationTests(unittest.TestCase):
                     self.assertEqual([c.kwargs for c in values.call_args_list],
                                      [dict(token=1, mode='greedy'),
                                       dict(token=3, mode='greedy')])
-                    self.assertEqual(dashboard.fields['token'], '253 (forced)')
+                    self.assertEqual(dashboard.fields['token'],
+                                     "253 '}' (forced)")
         self.assertEqual(results, [{
             'prompt': 'request', 'name': 'f', 'parameters': {'a': 1.0},
         }] * 4)
@@ -233,7 +235,7 @@ class LoopObservationTests(unittest.TestCase):
                          [((1,), 'forced'), ((1, 3), 'greedy'),
                           ((1, 3, 0), 'forced')])
         self.assertEqual(len({item[0] for item in seen}), 1)
-        self.assertEqual(dashboard.fields['token'], '0 (forced)')
+        self.assertEqual(dashboard.fields['token'], "0 'b' (forced)")
         self.assertIn('step=2', dashboard.fields['warning'])
 
     def test_value_forced_and_duplicate_bytes_keep_actual_id(self) -> None:
@@ -260,4 +262,4 @@ class LoopObservationTests(unittest.TestCase):
                 llm.assert_called_once_with([9])
                 self.assertEqual(dashboard.fields['value'], 'true}')
                 self.assertEqual(dashboard.fields['token'],
-                                 f'{expected} ({mode})')
+                                 f"{expected} 'true}}' ({mode})")

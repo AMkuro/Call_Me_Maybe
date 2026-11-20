@@ -886,7 +886,7 @@ Model.decodeと配布SDKの公開decode実装を確認したところ、listは�
 bytesの取得は生成済み内容の観測であり、表示用decode・repr・文字列整形ではない。
 名前と値の表示用decode、警告文、ID/方式の表記、制御文字処理はdisplayへ集約する。
 
-表示は例えば`Token: 42 (forced)`または`Token: 42 (greedy)`という1つの現在トークン欄を追加する。
+表示は例えば`Token: 42 ',' (forced)`または`Token: 42 ',' (greedy)`という1つの現在トークン欄を追加する。IDの後に語彙のバイト列をreprで示す（UTF-8の途中ならbytesのrepr）。
 logitや確率の欄、ランキングは追加しない。name_token/value_tokenは各ステップの値・件数・ID/方式を
 まとめてfieldsへ反映してから描画し、新しいIDと前ステップの途中内容を混ぜて描かない。
 これは受信メソッド内の局所的な更新であり、新しい状態機械や通知のトランザクション機構は作らない。

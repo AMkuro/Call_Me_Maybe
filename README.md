@@ -29,7 +29,7 @@ orderedsets (an insertion-ordered set used by the name tree) and the local
 
 When stderr is a terminal and TERM is not `dumb`, a live dashboard shows
 the selected function, current argument, committed JSON and the latest
-token ID and selection mode.
+token ID, its text and selection mode.
 During function-name selection, a warning identifies the unconstrained best
 token and the selected token when they differ. Forced tokens are marked as
 forced; their forward passes still run, but their scores are not used.

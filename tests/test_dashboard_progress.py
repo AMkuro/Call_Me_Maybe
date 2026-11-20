@@ -99,7 +99,7 @@ class DashboardTests(unittest.TestCase):
         """Token frames throttle at 50 ms; selections and outcomes force."""
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
-            dashboard = Dashboard(2, object.__new__(Model), {})
+            dashboard = Dashboard(2, object.__new__(Model), {1: b'1', 2: b'2'})
         dashboard.interactive = True
         with patch.object(display.time, 'monotonic',
                           return_value=10.0) as clock:
@@ -109,7 +109,7 @@ class DashboardTests(unittest.TestCase):
             clock.return_value = 10.01
             dashboard.value_token(b'1', 1, token=1, mode='forced')
             self.assertEqual(output.getvalue(), '')
-            self.assertEqual(dashboard.fields['token'], '1 (forced)')
+            self.assertEqual(dashboard.fields['token'], "1 '1' (forced)")
             clock.return_value = 10.049
             dashboard.value_token(b'12', 2, token=2, mode='greedy')
             self.assertEqual(output.getvalue(), '')
@@ -141,7 +141,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(text.count(display._CLEAR), 1)
         self.assertIn('Value: a', text)
         self.assertIn('Value tokens: 1', text)
-        self.assertIn('Token: 1 (greedy)', text)
+        self.assertIn("Token: 1 'a' (greedy)", text)
         self.assertIn("Warning: name_selection_constrained: step=1", text)
 
     def test_flush_failure_preserves_counts_and_stops_writes(self) -> None:
@@ -189,21 +189,23 @@ class BorrowedProgressTests(unittest.TestCase):
         ids = [1]
         with patch.object(Model, 'decode', return_value='first') as decode:
             dashboard.name_token(ids, mode='forced', raw_top=None)
-            self.assertIs(decode.call_args.args[0], ids)
+            # Calls: the name, then its last token for the Token row.
+            self.assertIs(decode.call_args_list[0].args[0], ids)
             self.assertEqual(ids, [1])
             self.assertFalse(any(value is ids
                                  for value in vars(dashboard).values()))
             ids.append(2)
             self.assertEqual(dashboard.fields['value'], 'first')
-            self.assertEqual(dashboard.fields['token'], '1 (forced)')
+            self.assertEqual(dashboard.fields['token'], "1 'first' (forced)")
             dashboard.name_token((1, 2), mode='greedy', raw_top=None)
-            self.assertIsInstance(decode.call_args.args[0], list)
-            self.assertEqual(decode.call_args.args[0], [1, 2])
+            self.assertIsInstance(decode.call_args_list[2].args[0], list)
+            self.assertEqual(decode.call_args_list[2].args[0], [1, 2])
 
     def test_atomic_token_fields_and_stage_reset(self) -> None:
         """Each draw sees the ID, mode, count and value from the same step."""
         with contextlib.redirect_stderr(io.StringIO()):
-            dashboard = Dashboard(1, object.__new__(Model), {})
+            dashboard = Dashboard(1, object.__new__(Model),
+                                  {42: b'\xe6', 43: b'\x9d\xb1'})
         dashboard.interactive = True
         frames: list[dict[display.Row, str]] = []
         with patch.object(dashboard, 'draw', side_effect=(
@@ -213,13 +215,13 @@ class BorrowedProgressTests(unittest.TestCase):
             dashboard.value_token(b'\xe6\x9d\xb1', 2, token=43, mode='greedy')
             dashboard.stage('generate_call_json')
             dashboard.argument_started('x', 'string')
-        self.assertEqual(frames[0]['token'], '42 (forced)')
+        self.assertEqual(frames[0]['token'], "42 b'\\xe6' (forced)")
         self.assertEqual(frames[0]['value_tokens'], '1')
-        self.assertEqual(frames[1]['token'], '43 (greedy)')
+        self.assertEqual(frames[1]['token'], "43 b'\\x9d\\xb1' (greedy)")
         self.assertEqual(frames[1]['value'], '東')
         self.assertNotIn('token', frames[2])
         self.assertEqual(frames[3]['value_tokens'], '0')
         self.assertEqual(frames[3]['token'], '')
         self.assertEqual(frames[3]['parameter'], 'x (string)')
-        self.assertIn('Token: 43 (greedy)',
+        self.assertIn("Token: 43 b'\\x9d\\xb1' (greedy)",
                       render_progress(frames[1], 80, 30))
