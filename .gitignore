@@ -224,4 +224,9 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Generated runtime results are not submitted.
+output/
 data/output/
+
+# Local make overrides
+.local.mk
+.venv-gpu/

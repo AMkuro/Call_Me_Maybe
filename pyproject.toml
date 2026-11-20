@@ -2,7 +2,7 @@
 name = 'Call_Me_Maybe'
 version = '0.1.0'
 requires-python = '>=3.10'
-dependencies = ['numpy>=1.26', 'pydantic>=2,<3']
+dependencies = ['numpy>=1.26', 'pydantic>=2,<3', 'llm-sdk', 'orderedsets>=2026.1']
 
 [dependency-groups]
 dev = [
@@ -10,14 +10,34 @@ dev = [
     'mypy==2.4.1',
     'packaging>=24',
     'tomli>=2; python_version < "3.11"',
+    'uv==0.11.21',
 ]
+# torch is declared here so the CPU index applies (transitive deps ignore
+# tool.uv.sources). A GPU build is overlaid by `make install` (see Makefile).
+cpu = ['torch>=2.0.0']
+
+[tool.uv]
+default-groups = ['dev', 'cpu']
+
+[tool.uv.sources]
+llm-sdk = { path = 'llm_sdk' }
+torch = { index = 'pytorch-cpu', group = 'cpu' }
+
+[[tool.uv.index]]
+name = 'pytorch-cpu'
+url = 'https://download.pytorch.org/whl/cpu'
+explicit = true
 
 [tool.mypy]
 mypy_path = 'llm_sdk'
-exclude = ['^llm_sdk/', '^\.venv/']
+exclude = ['^llm_sdk/', '^\.venv/', '^\.venv-gpu/']
 
-# Only the unchanged vendor implementation is audited separately.
-# Preserve its public annotations when checking application calls.
+# The distributed SDK is not linted (excluded above). follow_imports = 'silent'
+# keeps its public annotations for checking application calls.
 [[tool.mypy.overrides]]
 module = ['llm_sdk', 'llm_sdk.*']
 follow_imports = 'silent'
+
+[tool.ruff]
+line-length = 79
+extend-exclude = ['.venv-gpu', '.cache', 'llm_sdk']

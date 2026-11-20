@@ -1,2 +1,2 @@
 [flake8]
-extend-exclude = .venv,.cache,.mypy_cache
+extend-exclude = .venv,.venv-gpu,.cache,.mypy_cache,llm_sdk
