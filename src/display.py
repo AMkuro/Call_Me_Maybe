@@ -453,7 +453,7 @@ class Dashboard:
         token = tokens[-1]
         self.fields.update({"value": _decoded(self.model, tokens),
                             "value_tokens": str(len(tokens)),
-                            "token": f"{token} ({mode})"})
+                            "token": self._token_label(token, mode)})
         if mode == "greedy" and raw_top is not None and raw_top != token:
             raw = _token_text(raw_top, self.model, self.vocab)
             selected = _token_text(token, self.model, self.vocab)
@@ -481,7 +481,7 @@ class Dashboard:
                                + self.json_decoder.decode(data))
         self.output_tokens += 1
         self.fields.update({"tokens": str(self.output_tokens),
-                            "token": f"{token} ({mode})"})
+                            "token": self._token_label(token, mode)})
         self.draw("token")
 
     def value_token(
@@ -497,8 +497,20 @@ class Dashboard:
         """
         self.fields.update({"value": written.decode("utf-8", errors="ignore"),
                             "value_tokens": str(step),
-                            "token": f"{token} ({mode})"})
+                            "token": self._token_label(token, mode)})
         self.draw("token")
+
+    def _token_label(self, token: int, mode: SelectionMode) -> str:
+        """Return a token's ID, its text and how it was chosen.
+
+        Args:
+            token: The token ID.
+            mode: How it was chosen.
+
+        Returns:
+            For example ``2 '.0}' (greedy)``.
+        """
+        return f"{token} {_token_text(token, self.model, self.vocab)} ({mode})"
 
     def _warn(self, text: str) -> None:
         """Show a warning; when logging, also write it as a line.
