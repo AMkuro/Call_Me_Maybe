@@ -1,10 +1,11 @@
 """Few-shot parameter examples in the parameter prompt (ADR-0020)."""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import unittest
 
-from src import prompt
-from src.schema import FunctionDef, Scalar
+from src import generation, prompt
+from src.schema import FunctionDef, Scalar, build_parameters_model
+from src.skeleton import ArgumentGenerationPart
 
 FN = FunctionDef.model_validate({
     'name': 'fn_scale', 'description': 'Scale a value.',
@@ -81,6 +82,62 @@ class SpecialTokenTextTests(unittest.TestCase):
             self.assertNotIn('<|endoftext|>', text)
             self.assertNotIn('<b>', text)
             self.assertIn('"Echo \'\\u003c|im_end|>\' and \\u003cb>"', text)
+
+
+class ShippedExampleTests(unittest.TestCase):
+    """The examples the application shows are valid calls of their own."""
+
+    def test_examples_match_their_definitions(self) -> None:
+        """Each example validates and appears only in the example prompt."""
+        self.assertEqual(len(prompt.PARAMETER_EXAMPLES), 1)
+        with_examples = prompt.build_arguments_prompt('Go', FN)
+        plain = prompt.build_arguments_prompt('Go', FN, with_examples=False)
+        for fn, request, values in prompt.PARAMETER_EXAMPLES:
+            with self.subTest(fn=fn.name):
+                build_parameters_model(fn).model_validate(values)
+                self.assertNotIn('<', request + str(values))
+                answer = prompt.build_example_call_json(request, fn, values)
+                self.assertIn(answer, with_examples)
+                self.assertNotIn(answer, plain)
+
+
+class ExampleContextTests(unittest.TestCase):
+    """Only value steps see the examples; fixed steps see the plain prompt."""
+
+    def test_fixed_parts_and_values_get_their_own_prompt(self) -> None:
+        """Fixed tokens are forced, so their context does not change output."""
+        def build(user_prompt: str, fn: FunctionDef,
+                  with_examples: bool = True) -> str:
+            return 'E' if with_examples else 'P'
+
+        seen: list[tuple[str, int]] = []
+
+        def fixed(text: str, context: list[int], **_: object) -> list[int]:
+            seen.append(('fixed', context[0]))
+            return list(text.encode())
+
+        def value(part: ArgumentGenerationPart, context: list[int],
+                  **_: object) -> list[int]:
+            seen.append(('value', context[0]))
+            return list(b'1,' if part.terminator == ',' else b'1}')
+
+        fn = FunctionDef.model_validate({
+            'name': 'f', 'description': 'd',
+            'parameters': {'a': {'type': 'number'}, 'b': {'type': 'number'}},
+            'returns': {'type': 'number'}})
+        model = Mock()
+        model.encode.side_effect = lambda text: list(text.encode())
+        with patch.object(generation, 'build_arguments_prompt', build), \
+                patch.object(generation, '_commit_fixed_text', fixed), \
+                patch.object(generation, 'generate_argument_part', value), \
+                patch.object(generation, '_decode_tokens_with_vocab_check',
+                             lambda ids, **_: bytes(ids).decode()):
+            generation.generate_call_json('r', fn, model=model, vocab={})
+        self.assertEqual(
+            [kind for kind, _ in seen],
+            ['fixed', 'fixed', 'value', 'fixed', 'value', 'fixed'])
+        for kind, first in seen:
+            self.assertEqual(first, ord('E' if kind == 'value' else 'P'))
 
 
 if __name__ == '__main__':

@@ -21,9 +21,23 @@ ARGUMENT_INSTRUCTIONS = (
     "do not list the matched substrings."
 )
 # Worked examples shown before the request: (function, request, parameters).
-# Empty: the application shows none. Filling it adds few-shot examples
-# without changing how the prompt is built.
-PARAMETER_EXAMPLES: list[tuple[FunctionDef, str, dict[str, Scalar]]] = []
+# The function is made up, not taken from any input. Its pattern is a
+# character class, which the model otherwise tends to write as a list.
+PARAMETER_EXAMPLES: list[tuple[FunctionDef, str, dict[str, Scalar]]] = [
+    (
+        FunctionDef.model_validate({
+            "name": "fn_replace_matches",
+            "description":
+                "Replace every match of a regular expression in a text.",
+            "parameters": {"text": {"type": "string"},
+                           "pattern": {"type": "string"},
+                           "replacement": {"type": "string"}},
+            "returns": {"type": "string"},
+        }),
+        "Replace each capital letter in 'Hello World' with '?'.",
+        {"text": "Hello World", "pattern": "[A-Z]", "replacement": "?"},
+    ),
+]
 
 
 def _format_chatml(
@@ -144,14 +158,18 @@ def build_example_call_json(
     return text
 
 
-def build_arguments_prompt(user_prompt: str, fn: FunctionDef) -> str:
+def build_arguments_prompt(
+    user_prompt: str, fn: FunctionDef, *, with_examples: bool = True
+) -> str:
     """Return the prompt for generating the parameter values of ``fn``.
 
-    The worked examples in PARAMETER_EXAMPLES, if any, come first.
+    The worked examples in PARAMETER_EXAMPLES come first, unless
+    ``with_examples`` is False.
 
     Args:
         user_prompt: The user's request.
         fn: The selected function.
+        with_examples: Include the worked examples.
 
     Returns:
         The prompt text.
@@ -161,7 +179,9 @@ def build_arguments_prompt(user_prompt: str, fn: FunctionDef) -> str:
             _parameters_request(request, example_fn),
             build_example_call_json(request, example_fn, values),
         )
-        for example_fn, request, values in PARAMETER_EXAMPLES
+        for example_fn, request, values in (
+            PARAMETER_EXAMPLES if with_examples else []
+        )
     ]
     return _format_chatml(
         ARGUMENT_INSTRUCTIONS, _parameters_request(user_prompt, fn), examples

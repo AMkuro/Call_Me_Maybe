@@ -182,24 +182,36 @@ def generate_call_json(
         PromptError: A value cannot be generated, or SDK decoding differs
             from the vocabulary bytes of a fixed part, slot or full output.
     """
-    prompt_ids = model.encode(build_arguments_prompt(user_prompt, fn))
-    # Only this loop extends output_ids; each part gets the prompt and the
+    # Fixed tokens are forced, so their forward passes' scores are unused:
+    # they run on the shorter prompt without the worked examples.
+    plain_ids = model.encode(
+        build_arguments_prompt(user_prompt, fn, with_examples=False)
+    )
+    example_ids = model.encode(build_arguments_prompt(user_prompt, fn))
+    # Only this loop extends output_ids; each part gets a prompt and the
     # output so far as context and returns its own IDs.
     output_ids: list[int] = []
     number_slot_slices: list[slice] = []
     generated_char_count = 0
     for part in build_call_skeleton(user_prompt, fn):
-        context = prompt_ids + output_ids
         if isinstance(part, FixedTextPart):
             part_ids = _commit_fixed_text(
-                part.text, context, model=model, vocab=vocab, progress=progress
+                part.text,
+                plain_ids + output_ids,
+                model=model,
+                vocab=vocab,
+                progress=progress,
             )
             part_text = part.text
         else:
             if observing(progress):
                 progress.parameter_started(part.name, part.type)
             part_ids = generate_argument_part(
-                part, context, model=model, vocab=vocab, progress=progress
+                part,
+                example_ids + output_ids,
+                model=model,
+                vocab=vocab,
+                progress=progress,
             )
             part_text = _decode_tokens_with_vocab_check(
                 part_ids, model=model, vocab=vocab
