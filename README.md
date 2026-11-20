@@ -24,7 +24,9 @@ make sdk-install  # unpack an SDK zip over llm_sdk (SDK_ZIP=<zip>, default llm_s
 ```
 
 `uv sync` alone also works. The dependencies are numpy, Pydantic,
-orderedsets (an insertion-ordered set used by the name tree) and the local
+orderedsets (an insertion-ordered set used by the name tree), simplejson
+(writes the indented output without changing how numbers are spelled) and
+the local
 `llm_sdk` (a path dependency); torch is installed as a dependency of the SDK. The SDK downloads the Qwen/Qwen3-0.6B model itself on first use.
 
 When stderr is a terminal and TERM is not `dumb`, a live dashboard shows
@@ -298,16 +300,33 @@ uv run python -m src
 uv run python -m src --input my_prompts.json --output /tmp/calls.json
 ```
 
-An excerpt of `data/output/function_calls.json` from the 11 examples (the
-spaces inside `parameters` were written by the model and are valid JSON):
+An excerpt of `data/output/function_calls.json` from the 11 examples:
 
 ```json
 [
-  {"prompt":"What is the sum of 2 and 3?","name":"fn_add_numbers","parameters":{"a": 2.0,"b": 3.0}},
-  {"prompt":"Greet shrek","name":"fn_greet","parameters":{"name":  "shrek"  }},
-  {"prompt":"Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS","name":"fn_substitute_string_with_regex","parameters":{"source_string":  "Hello 34 I'm 233 years old","regex":  "\\d+","replacement":  "NUMBERS"}}
+  {
+    "prompt": "What is the sum of 2 and 3?",
+    "name": "fn_add_numbers",
+    "parameters": {
+      "a": 2.0,
+      "b": 3.0
+    }
+  },
+  {
+    "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS",
+    "name": "fn_substitute_string_with_regex",
+    "parameters": {
+      "source_string": "Hello 34 I'm 233 years old",
+      "regex": "\\d+",
+      "replacement": "NUMBERS"
+    }
+  }
 ]
 ```
+
+The output is indented with two spaces. Each number keeps the digits the
+model wrote (`2.00` stays `2.00`), because the generated text is re-indented
+with simplejson's `RawJSON` rather than converted to a float and back.
 
 Each record has exactly `prompt`, `name` and `parameters`. When stderr is
 redirected, the run ends with one line per prompt and a total, for example

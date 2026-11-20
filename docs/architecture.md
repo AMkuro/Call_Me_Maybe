@@ -444,13 +444,25 @@ Pydantic 2.14.3のstrictなfloatも整数入力を変換するため、型注釈
 非有限値、オーバーフロー、非ゼロ値のゼロへのアンダーフローも拒否する。
 戻り値の公開parametersでは数値を有限のfloatとして保持する。REQ-031に従い、
 `validate_call`はprompt一致・関数名・引数の全検証の後で、生成本文を`FunctionCall._generated_json`へ保持する。
-`save_results`はこの本文を再encodeせず、JSON配列の各要素としてそのまま書く。
+`save_results`はこの本文を`json.loads(..., parse_float=simplejson.RawJSON)`で読み、
+`simplejson.dump(..., indent=2)`で字下げした配列として書く。数値はfloatへ変換せず、本文の綴りをそのまま出す。
 受理した数値は、保存時にも小数点、符号、末尾ゼロを失わない。
 `9007199254740992.0`は受理し、`9007199254740993.0`は精度損失として拒否する。
 numberを文字列化せず、入力側の数値解析も変更しない。
-非公開属性がない直接構築のFunctionCallは、従来どおり`model_dump`と標準JSON保存を用いる。
+非公開属性がない直接構築のFunctionCallは、`model_dump`を同じ`simplejson.dump`で書く。
 
-この本文は内部の信頼済みデータであり、writerは再解析・再検証しない。
+出力の字下げ（2026-11-20、所有者の決定）:
+背景: 本文をそのまま書いていたため、`data/output`の各記録が1行になり読みにくかった。
+採用: simplejsonの`RawJSON`で数値の綴りを保ったまま`indent=2`で書く。文字列の外の空白は整え直す。
+代替: 標準`json.dump(indent=2)`は数値をfloatで書き直し、`2.00`が`2.0`、`10000000000000000.0`が`1e+16`になる（実測）。
+floatのサブクラスで`__repr__`を変えても標準encoderは無視し、`Decimal`を`default=str`で書くと文字列になる（実測）。
+文字列の外の空白だけを組み直す自前の関数（約40行）も実装して試したが、所有者が依存の追加を選んだ。
+制約: Subjectは「You can use the numpy and json packages.」とし、ほかのライブラリはbonusの節で
+「as long as their use is justified」として認めている。Mandatoryでsimplejsonを使うことは、評価で理由の説明を求められうる。
+検証: `test_decimal_output.py`で、`2.00`と特殊な文字列を含む記録が`json.dumps(indent=2)`と同じ形で保存されることと、
+直接構築の記録が`json.dumps(indent=2)`の出力と一致することを確認する。実GPUで標準11件を実行し、字下げした出力を確認した。
+
+この本文は内部の信頼済みデータであり、writerは数値の綴りを保つために解析するだけで再検証しない。
 現行の`pipeline.process_all`は`process_prompt`の戻り値を変更せず直ちに保存し、その後の累積保存でも変更しない。
 別の呼出元がprivate属性へ未検証本文を設定したり、検証後のparameters辞書を書き換えたりする経路は対象外である。
 そのような更新APIを導入する場合は、本文と公開データの一致を改めて保証する必要がある。

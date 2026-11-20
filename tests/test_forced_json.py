@@ -286,9 +286,10 @@ class ForcedJsonTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as directory:
                     path = Path(directory) / "calls.json"
                     save_results(path, [call])
+                    # parse_float=str keeps each number's written spelling.
                     self.assertEqual(
-                        path.read_bytes(),
-                        ("[\n  " + expected + "\n]\n").encode(),
+                        json.loads(path.read_text(), parse_float=str),
+                        [json.loads(expected, parse_float=str)],
                     )
 
     def test_special_prompt_name_keys_preserve_meaning(self) -> None:

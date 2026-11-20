@@ -395,6 +395,28 @@ class DecimalSaveTests(unittest.TestCase):
                 }
             )
 
+    def test_saved_records_are_indented_keeping_spelling(self) -> None:
+        """Only whitespace outside strings changes; 2.00 stays 2.00."""
+        prompt = 'a, "b" {x}: [y]'
+        call = generated("2.00", prompt=prompt)
+        record = (
+            '  {\n    "prompt": ' + json.dumps(prompt) + ",\n"
+            '    "name": "record",\n'
+            '    "parameters": {\n'
+            '      "x": 2.00,\n'
+            '      "s": ' + json.dumps('日本語 " \\ \n 1e10 2.0 <|im_end|>')
+            + ",\n"
+            '      "b": false\n'
+            "    }\n  }"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "calls.json"
+            save_results(path, [call, call])
+            self.assertEqual(
+                path.read_text(encoding="utf-8"),
+                "[\n" + record + ",\n" + record + "\n]\n",
+            )
+
     def test_manual_call_keeps_the_documented_fallback(self) -> None:
         """Manually built calls still use ordinary JSON serialization."""
         call = FunctionCallRequest(
@@ -402,12 +424,17 @@ class DecimalSaveTests(unittest.TestCase):
             name="record",
             parameters={"x": 2.0, "s": "1e10", "b": True},
         )
+        empty = FunctionCallRequest(prompt="p", name="none", parameters={})
         self.assertIs(type(call.parameters["x"]), float)
         self.assertIsNone(call._generated_json)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "calls.json"
-            save_results(path, [call])
-            self.assertEqual(json.loads(path.read_text()), [call.model_dump()])
+            save_results(path, [call, empty])
+            self.assertEqual(
+                path.read_text(),
+                json.dumps([call.model_dump(), empty.model_dump()], indent=2)
+                + "\n",
+            )
             save_results(path, [])
             self.assertEqual(path.read_text(), "[]\n")
 
@@ -434,8 +461,8 @@ class DecimalSaveTests(unittest.TestCase):
             original: Callable[[str], int] = output.write
 
             def write(text: str) -> int:
-                """Raise while writing the raw record, after the array head."""
-                if text.startswith("{"):
+                """Raise while writing the record."""
+                if '"prompt"' in text:
                     raise OSError("write failed")
                 return original(text)
 
