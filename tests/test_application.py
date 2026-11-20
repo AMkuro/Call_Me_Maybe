@@ -14,7 +14,8 @@ from unittest.mock import Mock, patch
 
 from pydantic import ValidationError
 
-from src import __main__ as entry, generation, runtime
+from src import __main__ as entry
+from src import generation, runtime
 from src.cli import parse_args
 from src.decoder import constrained_argmax
 from src.errors import PromptError, StartupError
@@ -22,22 +23,30 @@ from src.loader import load_functions, load_prompts
 from src.model_port import Model
 from src.pipeline import validate_call
 from src.schema import (
-    FunctionCallRequest, FunctionDef, build_argument_validation_model,
+    FunctionCallRequest,
+    FunctionDef,
+    build_argument_validation_model,
 )
 from src.skeleton import (
-    FixedTextPart, ArgumentGenerationPart, build_call_skeleton,
+    ArgumentGenerationPart,
+    FixedTextPart,
+    build_call_skeleton,
 )
 from src.writer import save_results
 
 
 def definition(**parameters: str) -> FunctionDef:
     """Return a definition with arbitrary parameter names and types."""
-    return FunctionDef.model_validate({
-        'name': 'dynamic', 'description': 'A test operation.',
-        'parameters': {name: {'type': kind}
-                       for name, kind in parameters.items()},
-        'returns': {'type': 'string'},
-    })
+    return FunctionDef.model_validate(
+        {
+            "name": "dynamic",
+            "description": "A test operation.",
+            "parameters": {
+                name: {"type": kind} for name, kind in parameters.items()
+            },
+            "returns": {"type": "string"},
+        }
+    )
 
 
 class InputTests(unittest.TestCase):
@@ -45,38 +54,52 @@ class InputTests(unittest.TestCase):
 
     def test_cli_defaults_overrides_and_bad_options(self) -> None:
         """Default paths and explicit paths implement the Subject CLI."""
-        with patch('src.cli.load_functions',
-                   return_value={'dynamic': definition()}), \
-                patch('src.cli.load_prompts', return_value=['request']), \
-                patch('src.cli.prepare_output'):
-            self.assertEqual(parse_args([]).output,
-                             Path('data/output/function_calls.json'))
-            args = parse_args(['--input', 'in.json', '--output', 'out.json',
-                               '--functions_definition', 'functions.json'])
-            self.assertEqual(args.input, Path('in.json'))
-            self.assertEqual(args.functions_definition, Path('functions.json'))
+        with (
+            patch(
+                "src.cli.load_functions",
+                return_value={"dynamic": definition()},
+            ),
+            patch("src.cli.load_prompts", return_value=["request"]),
+            patch("src.cli.prepare_output"),
+        ):
+            self.assertEqual(
+                parse_args([]).output, Path("data/output/function_calls.json")
+            )
+            args = parse_args(
+                [
+                    "--input",
+                    "in.json",
+                    "--output",
+                    "out.json",
+                    "--functions_definition",
+                    "functions.json",
+                ]
+            )
+            self.assertEqual(args.input, Path("in.json"))
+            self.assertEqual(args.functions_definition, Path("functions.json"))
             with contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit) as raised:
-                    parse_args(['--unknown'])
+                    parse_args(["--unknown"])
             self.assertEqual(raised.exception.code, 2)
 
     def test_loaders_accept_dynamic_definitions_and_prompts(self) -> None:
         """Definitions are dynamic and prompt strings preserve their input."""
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'input.json'
-            fn = definition(flag='boolean', text='string', count='number')
-            path.write_text(json.dumps([fn.model_dump()]), encoding='utf-8')
+            path = Path(directory) / "input.json"
+            fn = definition(flag="boolean", text="string", count="number")
+            path.write_text(json.dumps([fn.model_dump()]), encoding="utf-8")
             self.assertEqual(load_functions(path), {fn.name: fn})
-            path.write_text('[{"prompt": "日本語"}, {"prompt": ""}]',
-                            encoding='utf-8')
-            self.assertEqual(load_prompts(path), ['日本語', ''])
+            path.write_text(
+                '[{"prompt": "日本語"}, {"prompt": ""}]', encoding="utf-8"
+            )
+            self.assertEqual(load_prompts(path), ["日本語", ""])
 
     def test_empty_prompt_array_is_insufficient_input(self) -> None:
         """An empty array is an explicit startup error, not a zero-item job."""
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'prompts.json'
-            path.write_text('[]', encoding='utf-8')
-            with self.assertRaisesRegex(StartupError, 'no prompts'):
+            path = Path(directory) / "prompts.json"
+            path.write_text("[]", encoding="utf-8")
+            with self.assertRaisesRegex(StartupError, "no prompts"):
                 load_prompts(path)
 
     def test_empty_array_stops_before_model_and_output(self) -> None:
@@ -85,29 +108,45 @@ class InputTests(unittest.TestCase):
             with self.subTest(existing=existing):
                 with tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)
-                    functions = root / 'functions.json'
-                    functions.write_text(json.dumps([
-                        definition().model_dump(),
-                    ]), encoding='utf-8')
-                    prompts = root / 'prompts.json'
-                    prompts.write_text('[]', encoding='utf-8')
-                    output = root / 'results' / 'calls.json'
+                    functions = root / "functions.json"
+                    functions.write_text(
+                        json.dumps(
+                            [
+                                definition().model_dump(),
+                            ]
+                        ),
+                        encoding="utf-8",
+                    )
+                    prompts = root / "prompts.json"
+                    prompts.write_text("[]", encoding="utf-8")
+                    output = root / "results" / "calls.json"
                     previous = b'["previous run"]\n'
                     if existing:
                         output.parent.mkdir()
                         output.write_bytes(previous)
                     stderr = io.StringIO()
-                    with patch.object(
-                        runtime, 'Model', side_effect=AssertionError(
-                            'model must not load for empty input'
-                        ),
-                    ) as model, contextlib.redirect_stderr(stderr):
-                        status = entry.main([
-                            '--functions_definition', str(functions),
-                            '--input', str(prompts), '--output', str(output),
-                        ])
+                    with (
+                        patch.object(
+                            runtime,
+                            "Model",
+                            side_effect=AssertionError(
+                                "model must not load for empty input"
+                            ),
+                        ) as model,
+                        contextlib.redirect_stderr(stderr),
+                    ):
+                        status = entry.main(
+                            [
+                                "--functions_definition",
+                                str(functions),
+                                "--input",
+                                str(prompts),
+                                "--output",
+                                str(output),
+                            ]
+                        )
                     self.assertEqual(status, 1)
-                    self.assertIn('no prompts', stderr.getvalue())
+                    self.assertIn("no prompts", stderr.getvalue())
                     model.assert_not_called()
                     if existing:
                         self.assertEqual(output.read_bytes(), previous)
@@ -117,29 +156,41 @@ class InputTests(unittest.TestCase):
     def test_bad_function_files_are_startup_errors(self) -> None:
         """Missing, malformed or unsupported definitions fail clearly."""
         fn = definition().model_dump()
-        invalid = ['{', '{}', '[]', json.dumps([fn, fn]),
-                   json.dumps([{**fn, 'name': ''}]),
-                   json.dumps([{**fn, 'name': '   '}]),
-                   json.dumps([{**fn, 'parameters': {
-                       'a': {'type': 'array'},
-                   }}])]
+        invalid = [
+            "{",
+            "{}",
+            "[]",
+            json.dumps([fn, fn]),
+            json.dumps([{**fn, "name": ""}]),
+            json.dumps([{**fn, "name": "   "}]),
+            json.dumps(
+                [
+                    {
+                        **fn,
+                        "parameters": {
+                            "a": {"type": "array"},
+                        },
+                    }
+                ]
+            ),
+        ]
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'functions.json'
+            path = Path(directory) / "functions.json"
             with self.assertRaises(StartupError):
                 load_functions(path)
             for text in invalid:
                 with self.subTest(text=text):
-                    path.write_text(text, encoding='utf-8')
+                    path.write_text(text, encoding="utf-8")
                     with self.assertRaises(StartupError):
                         load_functions(path)
 
     def test_bad_prompt_files_are_startup_errors(self) -> None:
         """Every prompt must be a string in the expected array structure."""
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'prompts.json'
-            for text in ['{', '{}', '[{}]', '[{"prompt": 3}]', '[null]']:
+            path = Path(directory) / "prompts.json"
+            for text in ["{", "{}", "[{}]", '[{"prompt": 3}]', "[null]"]:
                 with self.subTest(text=text):
-                    path.write_text(text, encoding='utf-8')
+                    path.write_text(text, encoding="utf-8")
                     with self.assertRaises(StartupError):
                         load_prompts(path)
 
@@ -149,102 +200,148 @@ class StructureTests(unittest.TestCase):
 
     def test_skeleton_owns_each_terminator_once(self) -> None:
         """Only slots supply commas or the parameters' closing brace."""
-        fn = definition(**{'quote"': 'string', 'b': 'number'})
-        parts = build_call_skeleton('p', fn)
+        fn = definition(**{'quote"': "string", "b": "number"})
+        parts = build_call_skeleton("p", fn)
         head = FixedTextPart(text='{"prompt":"p","name":"dynamic"')
-        self.assertEqual(parts, [
-            head,
-            FixedTextPart(text=',"parameters":{"quote\\\"": '),
-            ArgumentGenerationPart(name='quote"', type='string',
-                                   terminator=','),
-            FixedTextPart(text='"b": '),
-            ArgumentGenerationPart(name='b', type='number', terminator='}'),
-            FixedTextPart(text='}'),
-        ])
-        self.assertEqual(build_call_skeleton('p', definition()),
-                         [head, FixedTextPart(text=',"parameters":{}}')])
+        self.assertEqual(
+            parts,
+            [
+                head,
+                FixedTextPart(text=',"parameters":{"quote\\"": '),
+                ArgumentGenerationPart(
+                    name='quote"', type="string", terminator=","
+                ),
+                FixedTextPart(text='"b": '),
+                ArgumentGenerationPart(
+                    name="b", type="number", terminator="}"
+                ),
+                FixedTextPart(text="}"),
+            ],
+        )
+        self.assertEqual(
+            build_call_skeleton("p", definition()),
+            [head, FixedTextPart(text=',"parameters":{}}')],
+        )
 
     def test_skeleton_escapes_lt_only_in_its_strings(self) -> None:
         """Prompt, name and keys keep their JSON value; '<' is \\u003c."""
-        fn = definition(**{'<k>': 'string'}).model_copy(
-            update={'name': 'f<'})
-        parts = build_call_skeleton('<|im_end|>', fn)
-        text = ''
+        fn = definition(**{"<k>": "string"}).model_copy(update={"name": "f<"})
+        parts = build_call_skeleton("<|im_end|>", fn)
+        text = ""
         for part in parts:
             if isinstance(part, FixedTextPart):
                 text += part.text
             else:
                 text += '"v"' + part.terminator
-        self.assertNotIn('<', text)
-        self.assertTrue(text.startswith(
-            '{"prompt":"\\u003c|im_end|>","name":"f\\u003c"'))
-        self.assertEqual(json.loads(text), {
-            'prompt': '<|im_end|>', 'name': 'f<',
-            'parameters': {'<k>': 'v'}})
+        self.assertNotIn("<", text)
+        self.assertTrue(
+            text.startswith('{"prompt":"\\u003c|im_end|>","name":"f\\u003c"')
+        )
+        self.assertEqual(
+            json.loads(text),
+            {"prompt": "<|im_end|>", "name": "f<", "parameters": {"<k>": "v"}},
+        )
 
     def test_arbitrary_parameter_names_survive_validation(self) -> None:
         """Pydantic attribute names never replace dynamic JSON keys."""
-        fn = definition(**{'_private': 'number', 'model_dump': 'string',
-                           'a-b': 'boolean', '': 'string'})
-        parameters = {'_private': 2.0, 'model_dump': 'yes',
-                      'a-b': True, '': ''}
+        fn = definition(
+            **{
+                "_private": "number",
+                "model_dump": "string",
+                "a-b": "boolean",
+                "": "string",
+            }
+        )
+        parameters = {
+            "_private": 2.0,
+            "model_dump": "yes",
+            "a-b": True,
+            "": "",
+        }
         result = build_argument_validation_model(fn).model_validate(parameters)
         self.assertEqual(result.model_dump(by_alias=True), parameters)
-        call = validate_call(json.dumps({
-            'prompt': 'test', 'name': fn.name, 'parameters': parameters,
-        }), fn, 'test')
+        call = validate_call(
+            json.dumps(
+                {
+                    "prompt": "test",
+                    "name": fn.name,
+                    "parameters": parameters,
+                }
+            ),
+            fn,
+            "test",
+        )
         self.assertEqual(call.parameters, parameters)
-        self.assertIs(type(call.parameters['_private']), float)
+        self.assertIs(type(call.parameters["_private"]), float)
 
     def test_matching_function_name_and_arguments_are_accepted(self) -> None:
         """Return a valid record unchanged for the selected definition."""
-        data = {'prompt': 'test', 'name': 'dynamic',
-                'parameters': {'value': 2.0}}
-        call = validate_call(json.dumps(data), definition(value='number'),
-                             'test')
+        data = {
+            "prompt": "test",
+            "name": "dynamic",
+            "parameters": {"value": 2.0},
+        }
+        call = validate_call(
+            json.dumps(data), definition(value="number"), "test"
+        )
         self.assertEqual(call.model_dump(), data)
 
     def test_validation_owns_prompt_check_and_generated_text(self) -> None:
         """Only a fully checked record keeps its generated JSON text."""
-        text = ('{"prompt":"test","name":"dynamic",'
-                '"parameters":{"value": 2.50}}')
-        call = validate_call(text, definition(value='number'), 'test')
+        text = (
+            '{"prompt":"test","name":"dynamic","parameters":{"value": 2.50}}'
+        )
+        call = validate_call(text, definition(value="number"), "test")
         self.assertEqual(call._generated_json, text)
-        with self.assertRaisesRegex(PromptError,
-                                    'prompt differs from the input'):
-            validate_call(text, definition(value='number'), 'other')
+        with self.assertRaisesRegex(
+            PromptError, "prompt differs from the input"
+        ):
+            validate_call(text, definition(value="number"), "other")
 
     def test_wrong_name_with_valid_arguments_is_rejected(self) -> None:
         """A compatible argument shape cannot hide a different function."""
-        for name in ['other', ' dynamic ']:
+        for name in ["other", " dynamic "]:
             with self.subTest(name=name):
-                text = json.dumps({'prompt': 'test', 'name': name,
-                                   'parameters': {'value': 2.0}})
-                with self.assertRaisesRegex(PromptError,
-                                            'name mismatch') as error:
-                    validate_call(text, definition(value='number'), 'test')
-                self.assertIn(repr('dynamic'), str(error.exception))
+                text = json.dumps(
+                    {
+                        "prompt": "test",
+                        "name": name,
+                        "parameters": {"value": 2.0},
+                    }
+                )
+                with self.assertRaisesRegex(
+                    PromptError, "name mismatch"
+                ) as error:
+                    validate_call(text, definition(value="number"), "test")
+                self.assertIn(repr("dynamic"), str(error.exception))
                 self.assertIn(repr(name), str(error.exception))
 
     def test_matching_name_with_wrong_argument_type_is_rejected(self) -> None:
         """Name agreement does not bypass the selected parameter schema."""
-        text = json.dumps({'prompt': 'test', 'name': 'dynamic',
-                           'parameters': {'value': '2'}})
+        text = json.dumps(
+            {"prompt": "test", "name": "dynamic", "parameters": {"value": "2"}}
+        )
         with self.assertRaises(PromptError):
-            validate_call(text, definition(value='number'), 'test')
+            validate_call(text, definition(value="number"), "test")
 
     def test_missing_extra_and_nonfinite_values_are_rejected(self) -> None:
         """Generated records cannot omit fields or serialize NaN/Infinity."""
-        fn = definition(a='number')
-        for parameters in [{}, {'a': 1, 'other': 2}, {'a': math.inf}]:
+        fn = definition(a="number")
+        for parameters in [{}, {"a": 1, "other": 2}, {"a": math.inf}]:
             with self.subTest(parameters=parameters):
                 with self.assertRaises(ValidationError):
                     build_argument_validation_model(fn).model_validate(
-                        parameters)
+                        parameters
+                    )
         with self.assertRaises(ValidationError):
-            FunctionCallRequest.model_validate({
-                'prompt': 'x', 'name': 'f', 'parameters': {}, 'other': True,
-            })
+            FunctionCallRequest.model_validate(
+                {
+                    "prompt": "x",
+                    "name": "f",
+                    "parameters": {},
+                    "other": True,
+                }
+            )
 
 
 class DecoderTests(unittest.TestCase):
@@ -259,16 +356,21 @@ class DecoderTests(unittest.TestCase):
 
     def test_invalid_or_impossible_masks_report_prompt_error(self) -> None:
         """A decoder never falls through to an invalid vocabulary index."""
-        for logits, allowed in [([1.0], []), ([1.0], [-1]), ([1.0], [1]),
-                                ([math.nan], [0]), ([math.inf], [0]),
-                                ([-math.inf], [0])]:
+        for logits, allowed in [
+            ([1.0], []),
+            ([1.0], [-1]),
+            ([1.0], [1]),
+            ([math.nan], [0]),
+            ([math.inf], [0]),
+            ([-math.inf], [0]),
+        ]:
             with self.subTest(logits=logits, allowed=allowed):
                 with self.assertRaises(PromptError):
                     constrained_argmax(logits, allowed)
 
     def test_malformed_sdk_scores_report_prompt_error(self) -> None:
         """A malformed array never returns a token outside the mask."""
-        malformed: list[Any] = [[[1, 2], [3, 4]], ['not a number'], [[]]]
+        malformed: list[Any] = [[[1, 2], [3, 4]], ["not a number"], [[]]]
         for logits in malformed:
             with self.subTest(logits=logits):
                 with self.assertRaises(PromptError):
@@ -278,74 +380,114 @@ class DecoderTests(unittest.TestCase):
         """Explicit loops preserve forced calls, inputs and limit ordering."""
         model = object.__new__(Model)
         prefix = [7]
-        slot = ArgumentGenerationPart(name='x', type='string', terminator='}')
-        with patch.object(Model, 'logits',
-                          return_value=[20.0, 1.0, 3.0]) as llm, \
-                patch.object(generation, 'MAX_VALUE_STEPS', 2), \
-                patch.object(generation, 'is_argument_part_complete',
-                             side_effect=lambda data, *_: data == b'ab'), \
-                patch.object(generation, 'allowed_tokens_for_argument',
-                             side_effect=[[1], [1, 2]]):
-            self.assertEqual(generation.generate_argument_part(
-                slot, prefix, model=model, vocab={1: b'a', 2: b'b'},
-            ), [1, 2])
+        slot = ArgumentGenerationPart(name="x", type="string", terminator="}")
+        with (
+            patch.object(
+                Model, "logits", return_value=[20.0, 1.0, 3.0]
+            ) as llm,
+            patch.object(generation, "MAX_VALUE_STEPS", 2),
+            patch.object(
+                generation,
+                "is_argument_part_complete",
+                side_effect=lambda data, *_: data == b"ab",
+            ),
+            patch.object(
+                generation,
+                "allowed_tokens_for_argument",
+                side_effect=[[1], [1, 2]],
+            ),
+        ):
+            self.assertEqual(
+                generation.generate_argument_part(
+                    slot,
+                    prefix,
+                    model=model,
+                    vocab={1: b"a", 2: b"b"},
+                ),
+                [1, 2],
+            )
         # Method B: the forced first ID also gets its forward.
-        self.assertEqual([c.args for c in llm.call_args_list],
-                         [([7],), ([7, 1],)])
+        self.assertEqual(
+            [c.args for c in llm.call_args_list], [([7],), ([7, 1],)]
+        )
         self.assertEqual(prefix, [7])
-        for cap, allowed, message in ((2, [1], 'token limit 2'),
-                                      (2, [], 'no allowed'),
-                                      (0, [], 'token limit 0')):
-            with self.subTest(cap=cap, allowed=allowed), \
-                    patch.object(Model, 'logits', return_value=[0.0, 0.0]), \
-                    patch.object(generation, 'MAX_VALUE_STEPS', cap), \
-                    patch.object(generation, 'is_argument_part_complete',
-                                 return_value=False), \
-                    patch.object(generation, 'allowed_tokens_for_argument',
-                                 return_value=allowed):
-                with self.assertRaisesRegex(PromptError, message):
-                    generation.generate_argument_part(
-                        slot, prefix, model=model, vocab={1: b'a'})
+        for cap, allowed, message in (
+            (2, [1], "token limit 2"),
+            (2, [], "no allowed"),
+            (0, [], "token limit 0"),
+        ):
+            with (
+                self.subTest(cap=cap, allowed=allowed),
+                patch.object(Model, "logits", return_value=[0.0, 0.0]),
+                patch.object(generation, "MAX_VALUE_STEPS", cap),
+                patch.object(
+                    generation, "is_argument_part_complete", return_value=False
+                ),
+                patch.object(
+                    generation,
+                    "allowed_tokens_for_argument",
+                    return_value=allowed,
+                ),
+                self.assertRaisesRegex(PromptError, message),
+            ):
+                generation.generate_argument_part(
+                    slot, prefix, model=model, vocab={1: b"a"}
+                )
 
     def test_repeated_boundary_cases_have_clear_limit_errors(self) -> None:
         """A value may finish at the cap; unfinished values fail explicitly."""
         model = object.__new__(Model)
-        slot = ArgumentGenerationPart(name='x', type='string', terminator='}')
+        slot = ArgumentGenerationPart(name="x", type="string", terminator="}")
         for length in [0, 1, 255, 256, 257, 1024]:
             for repeat in range(3):
-                with self.subTest(length=length, repeat=repeat), \
-                        patch.object(Model, 'logits',
-                                     return_value=[0.0, 1.0]), \
-                        patch.object(generation, 'is_argument_part_complete',
-                                     side_effect=lambda data, *_:
-                                     len(data) == length), \
-                        patch.object(generation, 'allowed_tokens_for_argument',
-                                     return_value=[0, 1]):
+                with (
+                    self.subTest(length=length, repeat=repeat),
+                    patch.object(Model, "logits", return_value=[0.0, 1.0]),
+                    patch.object(
+                        generation,
+                        "is_argument_part_complete",
+                        side_effect=lambda data, *_: len(data) == length,
+                    ),
+                    patch.object(
+                        generation,
+                        "allowed_tokens_for_argument",
+                        return_value=[0, 1],
+                    ),
+                ):
                     if length <= 256:
                         result = generation.generate_argument_part(
-                            slot, [], model=model, vocab={0: b'a', 1: b'b'},
+                            slot,
+                            [],
+                            model=model,
+                            vocab={0: b"a", 1: b"b"},
                         )
                         self.assertEqual(len(result), length)
                     else:
                         with self.assertRaisesRegex(
-                            PromptError, r'token limit 256.*terminator',
+                            PromptError,
+                            r"token limit 256.*terminator",
                         ):
                             generation.generate_argument_part(
-                                slot, [], model=model,
-                                vocab={0: b'a', 1: b'b'},
+                                slot,
+                                [],
+                                model=model,
+                                vocab={0: b"a", 1: b"b"},
                             )
 
     def test_value_errors_identify_the_parameter(self) -> None:
         """Limit errors explain which typed parameter could not complete."""
         model = object.__new__(Model)
-        slot = ArgumentGenerationPart(name='source_string', type='string',
-                                      terminator='}')
-        with patch.object(generation, 'MAX_VALUE_STEPS', 0):
+        slot = ArgumentGenerationPart(
+            name="source_string", type="string", terminator="}"
+        )
+        with patch.object(generation, "MAX_VALUE_STEPS", 0):
             with self.assertRaisesRegex(
-                PromptError, r"source_string.*string.*token limit 0",
+                PromptError,
+                r"source_string.*string.*token limit 0",
             ):
-                generation.generate_argument_part(slot, [], model=model,
-                                                  vocab={})
+                generation.generate_argument_part(
+                    slot, [], model=model, vocab={}
+                )
 
 
 class WriterTests(unittest.TestCase):
@@ -354,9 +496,12 @@ class WriterTests(unittest.TestCase):
     def test_save_creates_parents_and_preserves_json_strings(self) -> None:
         """Nested output paths, Unicode and empty results are supported."""
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'nested' / 'calls.json'
-            call = FunctionCallRequest(prompt='日本語\n"', name='dynamic',
-                                       parameters={'s': '\\', 'n': 2.0})
+            path = Path(directory) / "nested" / "calls.json"
+            call = FunctionCallRequest(
+                prompt='日本語\n"',
+                name="dynamic",
+                parameters={"s": "\\", "n": 2.0},
+            )
             save_results(path, [call])
             self.assertEqual(json.loads(path.read_text()), [call.model_dump()])
             save_results(path, [])
@@ -365,9 +510,9 @@ class WriterTests(unittest.TestCase):
     def test_replace_failure_keeps_output_and_removes_temp(self) -> None:
         """A failed final replace cannot destroy the last good file."""
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'calls.json'
-            path.write_text('["previous"]', encoding='utf-8')
-            with patch('os.replace', side_effect=OSError('disk unavailable')):
+            path = Path(directory) / "calls.json"
+            path.write_text('["previous"]', encoding="utf-8")
+            with patch("os.replace", side_effect=OSError("disk unavailable")):
                 with self.assertRaises(OSError):
                     save_results(path, [])
             self.assertEqual(path.read_text(), '["previous"]')
@@ -381,41 +526,54 @@ class ModelBoundaryTests(unittest.TestCase):
         """The wrapper flattens encode without exposing a tensor to callers."""
         sdk = Mock()
         sdk.encode.return_value.tolist.return_value = [[2, 3]]
-        sdk.decode.return_value = '日本語'
+        sdk.decode.return_value = "日本語"
         sdk.get_logits_from_input_ids.return_value = [1.0, 2.0]
-        sdk.get_path_to_vocab_file.return_value = '/tmp/vocab.json'
+        sdk.get_path_to_vocab_file.return_value = "/tmp/vocab.json"
         factory = Mock(return_value=sdk)
-        with patch.dict(sys.modules, {
-            'llm_sdk': SimpleNamespace(Small_LLM_Model=factory),
-        }):
+        with patch.dict(
+            sys.modules,
+            {
+                "llm_sdk": SimpleNamespace(Small_LLM_Model=factory),
+            },
+        ):
             model = Model()
-        self.assertEqual(model.encode('text'), [2, 3])
-        self.assertEqual(model.decode([2, 3]), '日本語')
+        self.assertEqual(model.encode("text"), [2, 3])
+        self.assertEqual(model.decode([2, 3]), "日本語")
         self.assertEqual(model.logits([2, 3]), [1.0, 2.0])
-        self.assertEqual(model.vocab_path(), '/tmp/vocab.json')
+        self.assertEqual(model.vocab_path(), "/tmp/vocab.json")
 
     def test_sdk_failures_report_original_cause(self) -> None:
         """Startup and per-prompt exceptions keep the SDK's reason."""
-        factory = Mock(side_effect=RuntimeError('load failed'))
-        with patch.dict(sys.modules, {
-            'llm_sdk': SimpleNamespace(Small_LLM_Model=factory),
-        }):
-            with self.assertRaisesRegex(StartupError, 'load failed'):
-                Model()
+        factory = Mock(side_effect=RuntimeError("load failed"))
+        with (
+            patch.dict(
+                sys.modules,
+                {
+                    "llm_sdk": SimpleNamespace(Small_LLM_Model=factory),
+                },
+            ),
+            self.assertRaisesRegex(StartupError, "load failed"),
+        ):
+            Model()
         sdk = Mock()
-        with patch.dict(sys.modules, {
-            'llm_sdk': SimpleNamespace(Small_LLM_Model=lambda **kwargs: sdk),
-        }):
+        with patch.dict(
+            sys.modules,
+            {
+                "llm_sdk": SimpleNamespace(
+                    Small_LLM_Model=lambda **kwargs: sdk
+                ),
+            },
+        ):
             model = Model()
-        sdk.encode.side_effect = RuntimeError('encode failed')
-        sdk.decode.side_effect = RuntimeError('decode failed')
-        sdk.get_logits_from_input_ids.side_effect = RuntimeError('forward')
-        sdk.get_path_to_vocab_file.side_effect = OSError('vocab missing')
-        with self.assertRaisesRegex(PromptError, 'encode failed'):
-            model.encode('x')
-        with self.assertRaisesRegex(PromptError, 'decode failed'):
+        sdk.encode.side_effect = RuntimeError("encode failed")
+        sdk.decode.side_effect = RuntimeError("decode failed")
+        sdk.get_logits_from_input_ids.side_effect = RuntimeError("forward")
+        sdk.get_path_to_vocab_file.side_effect = OSError("vocab missing")
+        with self.assertRaisesRegex(PromptError, "encode failed"):
+            model.encode("x")
+        with self.assertRaisesRegex(PromptError, "decode failed"):
             model.decode([1])
-        with self.assertRaisesRegex(PromptError, 'forward'):
+        with self.assertRaisesRegex(PromptError, "forward"):
             model.logits([1])
-        with self.assertRaisesRegex(StartupError, 'vocab missing'):
+        with self.assertRaisesRegex(StartupError, "vocab missing"):
             model.vocab_path()

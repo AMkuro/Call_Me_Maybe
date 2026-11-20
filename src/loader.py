@@ -50,7 +50,8 @@ def load_functions(path: Path) -> dict[str, FunctionDef]:
     try:
         return index_functions(
             TypeAdapter(list[FunctionDef]).validate_python(
-                load(path), strict=True,
+                load(path),
+                strict=True,
             )
         )
     except (OSError, ValueError) as e:
@@ -73,7 +74,8 @@ def load_prompts(path: Path) -> list[str]:
     """
     try:
         entries = TypeAdapter(list[dict[str, str]]).validate_python(
-            load(path), strict=True,
+            load(path),
+            strict=True,
         )
         if not entries:
             raise ValueError("insufficient input: no prompts supplied")

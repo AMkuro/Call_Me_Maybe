@@ -20,7 +20,7 @@ class TokenGenerationTests(unittest.TestCase):
         self.model.decode.return_value = "hello"
         self.sdk = types.ModuleType("llm_sdk")
         self.constructor = MagicMock(return_value=self.model)
-        setattr(self.sdk, "Small_LLM_Model", self.constructor)
+        vars(self.sdk)["Small_LLM_Model"] = self.constructor
         self.stdout = io.StringIO()
         self.stderr = io.StringIO()
 
@@ -45,16 +45,20 @@ class TokenGenerationTests(unittest.TestCase):
         )
         self.model.decode.assert_called_once_with([1, 0, 0])
         for observation in (
-            "input_ids=[10, 11]", "step=1 token_id=1 logit=3.0",
-            "generated_ids=[1, 0, 0]", "generated_text='hello'",
+            "input_ids=[10, 11]",
+            "step=1 token_id=1 logit=3.0",
+            "generated_ids=[1, 0, 0]",
+            "generated_text='hello'",
         ):
             self.assertIn(observation, self.stdout.getvalue())
 
     def test_main_reuses_one_model(self) -> None:
         """Two prompts share a model and have separate input sequences."""
         self.model.get_logits_from_input_ids.return_value = [0.0, 1.0]
-        with patch.dict(sys.modules, {"llm_sdk": self.sdk}), \
-                contextlib.redirect_stdout(self.stdout):
+        with (
+            patch.dict(sys.modules, {"llm_sdk": self.sdk}),
+            contextlib.redirect_stdout(self.stdout),
+        ):
             result = main(["Hi", "Hello", "--max-new-tokens", "2"])
         self.assertEqual(result, 0)
         self.constructor.assert_called_once_with(
@@ -67,13 +71,18 @@ class TokenGenerationTests(unittest.TestCase):
 
     def test_invalid_arguments_do_not_load_model(self) -> None:
         """Reject invalid CLI input before importing or loading the SDK."""
-        for argv in ([""], ["Hi", "--max-new-tokens", "0"],
-                     ["Hi", "--max-new-tokens", "-1"],
-                     ["Hi", "--max-new-tokens", "abc"]):
-            with self.subTest(argv=argv), \
-                    patch.dict(sys.modules, {"llm_sdk": self.sdk}), \
-                    contextlib.redirect_stderr(self.stderr), \
-                    self.assertRaises(SystemExit) as caught:
+        for argv in (
+            [""],
+            ["Hi", "--max-new-tokens", "0"],
+            ["Hi", "--max-new-tokens", "-1"],
+            ["Hi", "--max-new-tokens", "abc"],
+        ):
+            with (
+                self.subTest(argv=argv),
+                patch.dict(sys.modules, {"llm_sdk": self.sdk}),
+                contextlib.redirect_stderr(self.stderr),
+                self.assertRaises(SystemExit) as caught,
+            ):
                 main(argv)
             self.assertEqual(caught.exception.code, 2)
         self.constructor.assert_not_called()
@@ -81,24 +90,30 @@ class TokenGenerationTests(unittest.TestCase):
     def test_invalid_generation_arguments(self) -> None:
         """The function also rejects blank prompts and bad limits."""
         for prompt, limit in ((" ", 1), ("Hi", 0), ("Hi", -1)):
-            with self.subTest(prompt=prompt, limit=limit), \
-                    self.assertRaises(ValueError):
+            with (
+                self.subTest(prompt=prompt, limit=limit),
+                self.assertRaises(ValueError),
+            ):
                 generate(self.model, prompt, limit)
         self.model.encode.assert_not_called()
 
     def test_sdk_initialization_error(self) -> None:
         """Preserve the SDK constructor's exception type and reason."""
         self.constructor.side_effect = OSError("model unavailable")
-        with patch.dict(sys.modules, {"llm_sdk": self.sdk}), \
-                contextlib.redirect_stderr(self.stderr):
+        with (
+            patch.dict(sys.modules, {"llm_sdk": self.sdk}),
+            contextlib.redirect_stderr(self.stderr),
+        ):
             self.assertEqual(main(["Hi"]), 1)
         self.assertIn("SDK import/initialization", self.stderr.getvalue())
         self.assertIn("OSError: model unavailable", self.stderr.getvalue())
 
     def test_sdk_import_error(self) -> None:
         """A missing SDK is a reported failure, not an uncaught traceback."""
-        with patch.dict(sys.modules, {"llm_sdk": None}), \
-                contextlib.redirect_stderr(self.stderr):
+        with (
+            patch.dict(sys.modules, {"llm_sdk": None}),
+            contextlib.redirect_stderr(self.stderr),
+        ):
             self.assertEqual(main(["Hi"]), 1)
         self.assertIn("SDK import/initialization", self.stderr.getvalue())
         self.assertIn("ModuleNotFoundError", self.stderr.getvalue())
@@ -127,14 +142,19 @@ class TokenGenerationTests(unittest.TestCase):
                         lambda: [[]]
                     )
                 else:
-                    values = {"empty_logits": [], "nan": [float("nan")],
-                              "inf": [float("inf")]}
+                    values = {
+                        "empty_logits": [],
+                        "nan": [float("nan")],
+                        "inf": [float("inf")],
+                    }
                     self.model.get_logits_from_input_ids.return_value = values[
                         failure
                     ]
-                with patch.dict(sys.modules, {"llm_sdk": self.sdk}), \
-                        contextlib.redirect_stdout(self.stdout), \
-                        contextlib.redirect_stderr(self.stderr):
+                with (
+                    patch.dict(sys.modules, {"llm_sdk": self.sdk}),
+                    contextlib.redirect_stdout(self.stdout),
+                    contextlib.redirect_stderr(self.stderr),
+                ):
                     self.assertEqual(main(["Hi", "--max-new-tokens", "2"]), 1)
                 self.assertIn(stage, self.stderr.getvalue())
                 if error is not None:
@@ -144,8 +164,10 @@ class TokenGenerationTests(unittest.TestCase):
         """A failed second forward pass reports its step and original cause."""
         error = OSError("second forward failed")
         self.model.get_logits_from_input_ids.side_effect = [[0.0, 1.0], error]
-        with contextlib.redirect_stdout(self.stdout), \
-                self.assertRaises(RuntimeError) as caught:
+        with (
+            contextlib.redirect_stdout(self.stdout),
+            self.assertRaises(RuntimeError) as caught,
+        ):
             generate(self.model, "Hi", 3)
         self.assertIs(caught.exception.__cause__, error)
         self.assertIn("step 2", str(caught.exception))

@@ -6,7 +6,7 @@
 # 出力:   research/evo-x3/measurements/<ラベル>.txt
 # CMM_OMP_THREADS=6 などで比較候補を指定できる。既存プロファイルの採用変更ではない。
 set -u
-LAB=${CMM_LAB:-$HOME/cmm-cpu-lab}  # venv・モデルの置き場 (Git 管理外)
+LAB=${CMM_LAB:-$HOME/cmm-cpu-lab} # venv・モデルの置き場 (Git 管理外)
 THREADS=${CMM_OMP_THREADS:-8}
 if [[ ! $THREADS =~ ^([1-9]|1[0-6])$ ]]; then
   echo 'CMM_OMP_THREADS must be an integer from 1 to 16.' >&2
@@ -33,7 +33,10 @@ export CUDA_VISIBLE_DEVICES= HIP_VISIBLE_DEVICES= HF_HOME=$LAB/hf \
 SENSOR=
 for hwmon in /sys/class/hwmon/hwmon*; do
   case $(cat "$hwmon/name" 2>/dev/null) in
-    coretemp|k10temp|zenpower) SENSOR=$hwmon/temp1_input; break ;;
+  coretemp | k10temp | zenpower)
+    SENSOR=$hwmon/temp1_input
+    break
+    ;;
   esac
 done
 tctl() { [ -n "$SENSOR" ] && cat "$SENSOR" 2>/dev/null; }
@@ -51,7 +54,10 @@ if [ -n "$T" ]; then
     fi
     sleep 1
     T=$(tctl)
-    if [ "$T" -le $((BEST - 1000)) ]; then BEST=$T; LAST_DROP=$SECONDS; fi
+    if [ "$T" -le $((BEST - 1000)) ]; then
+      BEST=$T
+      LAST_DROP=$SECONDS
+    fi
   done
 fi
 COOL_WAIT=$((SECONDS - WAIT_START))
@@ -59,12 +65,17 @@ COOL_WAIT=$((SECONDS - WAIT_START))
 # 実行中の最高温度を 1 秒ごとに記録する。
 T0=$T
 TMAX_FILE="$OUT/$LABEL.tmax"
-echo "${T0:-0}" > "$TMAX_FILE"
-( MAX=${T0:-0}
+echo "${T0:-0}" >"$TMAX_FILE"
+(
+  MAX=${T0:-0}
   while sleep 1; do
     T=$(tctl)
-    if [ -n "$T" ] && [ "$T" -gt "$MAX" ]; then MAX=$T; echo "$MAX" > "$TMAX_FILE"; fi
-  done ) &
+    if [ -n "$T" ] && [ "$T" -gt "$MAX" ]; then
+      MAX=$T
+      echo "$MAX" >"$TMAX_FILE"
+    fi
+  done
+) &
 SAMPLER=$!
 
 systemd-run --user --scope --quiet -p MemoryMax=16G -p MemorySwapMax=0 \
@@ -84,7 +95,7 @@ LIMIT=not_reached
     "tctl_max_mc=$([ -n "$T0" ] && echo "$TMAX" || echo unavailable)" \
     "cool_wait_s=$COOL_WAIT cool_target_c=$COOL_TARGET thermal_limit=$LIMIT"
   echo "profile=phys16-t$THREADS mem_max=16G swap=0 cpus=0-15 omp=$THREADS"
-} > "$OUT/$LABEL.txt"
+} >"$OUT/$LABEL.txt"
 rm -f "$OUT/$LABEL.time" "$TMAX_FILE"
 cat "$OUT/$LABEL.txt"
 exit $RC

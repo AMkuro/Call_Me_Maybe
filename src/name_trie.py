@@ -6,7 +6,11 @@ from types import MappingProxyType
 
 from orderedsets import OrderedSet
 from pydantic import (
-    BaseModel, ConfigDict, PrivateAttr, field_serializer, field_validator,
+    BaseModel,
+    ConfigDict,
+    PrivateAttr,
+    field_serializer,
+    field_validator,
     model_validator,
 )
 
@@ -60,7 +64,8 @@ class NameTrie(BaseModel):
     @field_validator("paths")
     @classmethod
     def _read_only(
-        cls, paths: Mapping[str, TokenPath],
+        cls,
+        paths: Mapping[str, TokenPath],
     ) -> Mapping[str, TokenPath]:
         """Wrap the new dict Pydantic built, so no outside alias exists.
 
@@ -105,25 +110,30 @@ class NameTrie(BaseModel):
         if not self.paths:
             raise ValueError("a name tree needs at least one name")
         following: defaultdict[TokenPath, OrderedSet[int]] = defaultdict(
-            OrderedSet)
+            OrderedSet
+        )
         names: dict[TokenPath, str] = {}
         for name, path in self.paths.items():
             if not path:
                 raise ValueError(f"{name!r} has an empty token path")
             if path in names:
-                raise ValueError(f"{name!r} and {names[path]!r} have the "
-                                 "same token path")
+                raise ValueError(
+                    f"{name!r} and {names[path]!r} have the same token path"
+                )
             names[path] = name
             for prefix_length, next_token in enumerate(path):
                 prefix = path[:prefix_length]
                 following[prefix].add(next_token)
         for path, name in names.items():
             if path in following:  # membership does not create an entry
-                raise ValueError(f"the token path of {name!r} is a prefix "
-                                 "of another name's path")
+                raise ValueError(
+                    f"the token path of {name!r} is a prefix "
+                    "of another name's path"
+                )
             following[path] = OrderedSet()
         self._next = MappingProxyType(
-            {prefix: tuple(tokens) for prefix, tokens in following.items()})
+            {prefix: tuple(tokens) for prefix, tokens in following.items()}
+        )
         self._names = MappingProxyType(names)
         return self
 

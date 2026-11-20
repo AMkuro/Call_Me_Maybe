@@ -45,16 +45,12 @@ def generate(
             next_id = max(range(len(logits)), key=logits.__getitem__)
             input_ids.append(next_id)
             generated_ids.append(next_id)
-            print(
-                f"step={step} token_id={next_id} logit={logits[next_id]}"
-            )
+            print(f"step={step} token_id={next_id} logit={logits[next_id]}")
         print(f"generated_ids={generated_ids}")
         stage = "decode"
         print(f"generated_text={model.decode(generated_ids)!r}")
     except Exception as exc:
-        raise RuntimeError(
-            f"{stage}: {type(exc).__name__}: {exc}"
-        ) from exc
+        raise RuntimeError(f"{stage}: {type(exc).__name__}: {exc}") from exc
     return generated_ids
 
 
@@ -75,9 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from llm_sdk import Small_LLM_Model
 
-        model = Small_LLM_Model(
-            "Qwen/Qwen3-0.6B", trust_remote_code=False
-        )
+        model = Small_LLM_Model("Qwen/Qwen3-0.6B", trust_remote_code=False)
         for index, prompt in enumerate(args.prompts, start=1):
             stage = f"prompt {index} generation"
             print(f"prompt_index={index}")

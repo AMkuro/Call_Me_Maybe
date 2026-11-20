@@ -1,22 +1,23 @@
 """Check skeleton orchestration with fixed data and replaced leaf stubs."""
 
 import contextlib
-from collections.abc import Sequence
 import io
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from collections.abc import Sequence
+from pathlib import Path
 from unittest.mock import patch
 
 from pydantic import BaseModel
+from test_constraints import encode_name
 
-from src import __main__ as entry, generation, pipeline, runtime
+from src import __main__ as entry
+from src import generation, pipeline, runtime
 from src.errors import PromptError
 from src.model_port import Model
 from src.schema import FunctionCallRequest, FunctionDef
 from src.skeleton import ArgumentGenerationPart
-from test_constraints import encode_name
 
 
 def encode(text: str) -> list[int]:
@@ -26,19 +27,23 @@ def encode(text: str) -> list[int]:
 
 def decode(ids: list[int]) -> str:
     """Decode the fixture IDs without loading a model."""
-    return ''.join(chr(token) for token in ids)
+    return "".join(chr(token) for token in ids)
 
 
-def definition(name: str = 'f') -> FunctionDef:
+def definition(name: str = "f") -> FunctionDef:
     """Provide a function whose parameters exercise all supported types."""
-    return FunctionDef.model_validate({
-        'name': name, 'description': 'fixture',
-        'parameters': {
-            'number': {'type': 'number'}, 'text': {'type': 'string'},
-            'flag': {'type': 'boolean'},
-        },
-        'returns': {'type': 'number'},
-    })
+    return FunctionDef.model_validate(
+        {
+            "name": name,
+            "description": "fixture",
+            "parameters": {
+                "number": {"type": "number"},
+                "text": {"type": "string"},
+                "flag": {"type": "boolean"},
+            },
+            "returns": {"type": "number"},
+        }
+    )
 
 
 class Parameters(BaseModel):
@@ -54,16 +59,21 @@ class PipelineTests(unittest.TestCase):
 
     def test_numbers_continue_until_the_chosen_terminator(self) -> None:
         """A valid numeric prefix must not truncate a decimal."""
-        for target in ('12.0,', '1.5}', '-0.25,', '0.0}'):
+        for target in ("12.0,", "1.5}", "-0.25,", "0.0}"):
             with self.subTest(target=target):
                 model = object.__new__(Model)
-                slot = ArgumentGenerationPart.model_validate({
-                    'name': 'number', 'type': 'number',
-                    'terminator': target[-1],
-                })
+                slot = ArgumentGenerationPart.model_validate(
+                    {
+                        "name": "number",
+                        "type": "number",
+                        "terminator": target[-1],
+                    }
+                )
 
                 def complete(
-                    written: bytes, kind: str, terminator: str = '',
+                    written: bytes,
+                    kind: str,
+                    terminator: str = "",
                 ) -> bool:
                     """Implement the documented completion contract as data."""
                     if not written or not written.endswith(
@@ -77,12 +87,14 @@ class PipelineTests(unittest.TestCase):
                         return False
 
                 def allowed(
-                    vocab: dict[int, bytes], kind: str, written: bytes,
-                    terminator: str = '',
+                    vocab: dict[int, bytes],
+                    kind: str,
+                    written: bytes,
+                    terminator: str = "",
                 ) -> list[int]:
                     """Offer the fixture continuation and another digit."""
                     token = ord(target[len(written)])
-                    return [token, ord('0') if token != ord('0') else ord('1')]
+                    return [token, ord("0") if token != ord("0") else ord("1")]
 
                 def logits(ids: list[int]) -> list[float]:
                     """Return fixed scores for each fixture position."""
@@ -90,81 +102,124 @@ class PipelineTests(unittest.TestCase):
                     scores[ord(target[len(ids) - 1])] = 1.0
                     return scores
 
-                with patch.object(Model, 'decode', side_effect=decode), \
-                        patch.object(Model, 'logits', side_effect=logits), \
-                        patch.object(generation, 'is_argument_part_complete',
-                                     side_effect=complete), \
-                        patch.object(generation, 'allowed_tokens_for_argument',
-                                     side_effect=allowed), \
-                        patch('src.decoder.constrained_argmax', side_effect=(
-                            lambda scores, permitted:
-                            max(permitted, key=scores.__getitem__)
-                        )):
+                with (
+                    patch.object(Model, "decode", side_effect=decode),
+                    patch.object(Model, "logits", side_effect=logits),
+                    patch.object(
+                        generation,
+                        "is_argument_part_complete",
+                        side_effect=complete,
+                    ),
+                    patch.object(
+                        generation,
+                        "allowed_tokens_for_argument",
+                        side_effect=allowed,
+                    ),
+                    patch(
+                        "src.decoder.constrained_argmax",
+                        side_effect=(
+                            lambda scores, permitted: max(
+                                permitted, key=scores.__getitem__
+                            )
+                        ),
+                    ),
+                ):
                     result = generation.generate_argument_part(
-                        slot, [127], model=model,
+                        slot,
+                        [127],
+                        model=model,
                         vocab={token: bytes([token]) for token in range(128)},
                     )
                 self.assertEqual(decode(result), target)
 
     def test_names_and_terminators_round_trip_through_json(self) -> None:
         """Escaped names and slot-owned terminators form one valid record."""
-        for name in ('normal', 'f"x', 'f\\path', 'f\nname'):
+        for name in ("normal", 'f"x', "f\\path", "f\nname"):
             with self.subTest(name=name):
                 model = object.__new__(Model)
-                fn = FunctionDef.model_validate({
-                    'name': name, 'description': 'fixture',
-                    'parameters': {
-                        'a': {'type': 'number'}, 'b': {'type': 'boolean'},
-                    },
-                    'returns': {'type': 'number'},
-                })
-                with patch.object(Model, 'encode', side_effect=encode), \
-                        patch.object(Model, 'decode', side_effect=decode), \
-                        patch.object(Model, 'logits', return_value=[0.0]), \
-                        patch.object(generation, 'build_arguments_prompt',
-                                     return_value=''), \
-                        patch.object(generation,
-                                     'generate_argument_part',
-                                     side_effect=[encode('12.0,'),
-                                                  encode('true}')]):
+                fn = FunctionDef.model_validate(
+                    {
+                        "name": name,
+                        "description": "fixture",
+                        "parameters": {
+                            "a": {"type": "number"},
+                            "b": {"type": "boolean"},
+                        },
+                        "returns": {"type": "number"},
+                    }
+                )
+                with (
+                    patch.object(Model, "encode", side_effect=encode),
+                    patch.object(Model, "decode", side_effect=decode),
+                    patch.object(Model, "logits", return_value=[0.0]),
+                    patch.object(
+                        generation, "build_arguments_prompt", return_value=""
+                    ),
+                    patch.object(
+                        generation,
+                        "generate_argument_part",
+                        side_effect=[encode("12.0,"), encode("true}")],
+                    ),
+                ):
                     text, _ = generation.generate_call_json(
-                        'a "quoted" prompt', fn,
+                        'a "quoted" prompt',
+                        fn,
                         model=model,
                         vocab={token: bytes([token]) for token in range(128)},
                     )
                 try:
                     record = json.loads(text)
                 except ValueError:
-                    self.fail(f'invalid assembled JSON: {text!r}')
-                self.assertEqual(record, {
-                    'prompt': 'a "quoted" prompt', 'name': name,
-                    'parameters': {'a': 12, 'b': True},
-                })
+                    self.fail(f"invalid assembled JSON: {text!r}")
+                self.assertEqual(
+                    record,
+                    {
+                        "prompt": 'a "quoted" prompt',
+                        "name": name,
+                        "parameters": {"a": 12, "b": True},
+                    },
+                )
 
     def test_validated_parameters_reach_the_output(self) -> None:
         """The output uses normalized numbers and preserves other types."""
-        text = json.dumps({
-            'prompt': 'x', 'name': 'f',
-            'parameters': {'number': 12.0, 'text': '12', 'flag': True},
-        })
-        with patch.object(pipeline, 'build_argument_validation_model',
-                          return_value=Parameters):
-            result = pipeline.validate_call(text, definition(), 'x')
-        self.assertIs(type(result.parameters['number']), float)
-        self.assertEqual(result.model_dump(), {
-            'prompt': 'x', 'name': 'f',
-            'parameters': {'number': 12.0, 'text': '12', 'flag': True},
-        })
+        text = json.dumps(
+            {
+                "prompt": "x",
+                "name": "f",
+                "parameters": {"number": 12.0, "text": "12", "flag": True},
+            }
+        )
+        with patch.object(
+            pipeline,
+            "build_argument_validation_model",
+            return_value=Parameters,
+        ):
+            result = pipeline.validate_call(text, definition(), "x")
+        self.assertIs(type(result.parameters["number"]), float)
+        self.assertEqual(
+            result.model_dump(),
+            {
+                "prompt": "x",
+                "name": "f",
+                "parameters": {"number": 12.0, "text": "12", "flag": True},
+            },
+        )
 
     def test_invalid_parameters_still_raise_prompt_error(self) -> None:
         """Normalization must not swallow validation failures."""
-        with patch.object(pipeline, 'build_argument_validation_model',
-                          return_value=Parameters):
-            with self.assertRaises(PromptError):
-                pipeline.validate_call(
-                    '{"prompt":"x","name":"f","parameters":{}}',
-                    definition(), 'x',
-                )
+        with (
+            patch.object(
+                pipeline,
+                "build_argument_validation_model",
+                return_value=Parameters,
+            ),
+            self.assertRaises(PromptError),
+        ):
+            pipeline.validate_call(
+                '{"prompt":"x","name":"f","parameters":{}}',
+                definition(),
+                "x",
+            )
 
 
 class MainTests(unittest.TestCase):
@@ -175,89 +230,122 @@ class MainTests(unittest.TestCase):
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
         directory = self.stack.enter_context(tempfile.TemporaryDirectory())
-        self.output = Path(directory) / 'calls.json'
-        self.functions = Path(directory) / 'functions.json'
-        self.prompts = Path(directory) / 'prompts.json'
+        self.output = Path(directory) / "calls.json"
+        self.functions = Path(directory) / "functions.json"
+        self.prompts = Path(directory) / "prompts.json"
         self.functions.write_text(json.dumps([definition().model_dump()]))
         self.stderr = io.StringIO()
         self.saved: list[list[dict[str, object]]] = []
         model = object.__new__(Model)
         fixtures = {
-            (runtime, 'Model'): model,
-            (runtime, 'load_vocab'): {},
+            (runtime, "Model"): model,
+            (runtime, "load_vocab"): {},
         }
         for (module, name), result in fixtures.items():
-            self.stack.enter_context(patch.object(
-                module, name, return_value=result,
-            ))
-        self.stack.enter_context(patch.object(
-            Model, 'encode', side_effect=encode_name,
-        ))
-        self.stack.enter_context(patch.object(
-            Model, 'vocab_path', return_value='unused',
-        ))
-        self.stack.enter_context(patch.object(
-            pipeline, 'save_results', side_effect=self.save,
-        ))
+            self.stack.enter_context(
+                patch.object(
+                    module,
+                    name,
+                    return_value=result,
+                )
+            )
+        self.stack.enter_context(
+            patch.object(
+                Model,
+                "encode",
+                side_effect=encode_name,
+            )
+        )
+        self.stack.enter_context(
+            patch.object(
+                Model,
+                "vocab_path",
+                return_value="unused",
+            )
+        )
+        self.stack.enter_context(
+            patch.object(
+                pipeline,
+                "save_results",
+                side_effect=self.save,
+            )
+        )
 
     def save(self, path: Path, calls: list[FunctionCallRequest]) -> None:
         """Write fixture results without exercising the atomic writer."""
         records = [call.model_dump() for call in calls]
         self.saved.append(records)
-        path.write_text(json.dumps(records), encoding='utf-8')
+        path.write_text(json.dumps(records), encoding="utf-8")
 
     def run_main(
-        self, prompts: list[str],
+        self,
+        prompts: list[str],
         results: Sequence[FunctionCallRequest | Exception],
     ) -> int:
         """Run actual CLI orchestration with fixed per-prompt outcomes."""
-        self.prompts.write_text(json.dumps([{'prompt': p} for p in prompts]))
-        with patch.object(pipeline, 'process_prompt',
-                          side_effect=results), \
-                contextlib.redirect_stderr(self.stderr):
-            return entry.main([
-                '--functions_definition', str(self.functions),
-                '--input', str(self.prompts), '--output', str(self.output),
-            ])
+        self.prompts.write_text(json.dumps([{"prompt": p} for p in prompts]))
+        with (
+            patch.object(pipeline, "process_prompt", side_effect=results),
+            contextlib.redirect_stderr(self.stderr),
+        ):
+            return entry.main(
+                [
+                    "--functions_definition",
+                    str(self.functions),
+                    "--input",
+                    str(self.prompts),
+                    "--output",
+                    str(self.output),
+                ]
+            )
 
     def test_save_error_is_reported_and_stops_processing(self) -> None:
         """A failed write exits nonzero before another prompt is processed."""
-        call = FunctionCallRequest(prompt='x', name='f', parameters={})
-        with patch.object(pipeline, 'save_results',
-                          side_effect=OSError('disk full')):
+        call = FunctionCallRequest(prompt="x", name="f", parameters={})
+        with patch.object(
+            pipeline, "save_results", side_effect=OSError("disk full")
+        ):
             try:
-                result = self.run_main(['x', 'y'], [call])
+                result = self.run_main(["x", "y"], [call])
             except OSError:
-                self.fail('save failure escaped main')
+                self.fail("save failure escaped main")
         self.assertEqual(result, 1)
-        self.assertIn('disk full', self.stderr.getvalue())
+        self.assertIn("disk full", self.stderr.getvalue())
 
     def test_all_failed_results_replace_the_previous_run(self) -> None:
         """A nonempty input with no successful calls saves an empty array."""
         self.output.write_text('[{"prompt":"previous run"}]')
-        self.assertEqual(self.run_main(['x'], [PromptError('failed')]), 1)
+        self.assertEqual(self.run_main(["x"], [PromptError("failed")]), 1)
         self.assertEqual(json.loads(self.output.read_text()), [])
 
     def test_empty_result_save_error_is_reported(self) -> None:
         """Saving an empty array uses the same error handling."""
-        with patch.object(pipeline, 'save_results',
-                          side_effect=OSError('permission denied')):
-            self.assertEqual(self.run_main(['x'], [PromptError('failed')]), 1)
-        self.assertIn('permission denied', self.stderr.getvalue())
+        with patch.object(
+            pipeline, "save_results", side_effect=OSError("permission denied")
+        ):
+            self.assertEqual(self.run_main(["x"], [PromptError("failed")]), 1)
+        self.assertIn("permission denied", self.stderr.getvalue())
 
     def test_partial_success_keeps_each_successful_result(self) -> None:
         """A skipped prompt does not discard either successful result."""
-        first = FunctionCallRequest(prompt='a', name='f', parameters={})
-        last = FunctionCallRequest(prompt='c', name='f', parameters={})
-        self.assertEqual(self.run_main(
-            ['a', 'b', 'c'], [first, PromptError('failed'), last],
-        ), 1)
-        self.assertEqual(json.loads(self.output.read_text()), [
-            {'prompt': 'a', 'name': 'f', 'parameters': {}},
-            {'prompt': 'c', 'name': 'f', 'parameters': {}},
-        ])
+        first = FunctionCallRequest(prompt="a", name="f", parameters={})
+        last = FunctionCallRequest(prompt="c", name="f", parameters={})
+        self.assertEqual(
+            self.run_main(
+                ["a", "b", "c"],
+                [first, PromptError("failed"), last],
+            ),
+            1,
+        )
+        self.assertEqual(
+            json.loads(self.output.read_text()),
+            [
+                {"prompt": "a", "name": "f", "parameters": {}},
+                {"prompt": "c", "name": "f", "parameters": {}},
+            ],
+        )
         self.assertEqual([len(records) for records in self.saved], [1, 2])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

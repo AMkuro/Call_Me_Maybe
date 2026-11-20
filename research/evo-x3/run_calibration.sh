@@ -3,7 +3,7 @@
 # 各条件 3 回。結果は research/evo-x3/runs/<条件>-<n>.txt に bench.* 行だけ保存する。
 # 使い方: bash research/evo-x3/run_calibration.sh
 set -u
-LAB=${CMM_LAB:-$HOME/cmm-cpu-lab}  # venv・モデルの置き場 (Git 管理外)
+LAB=${CMM_LAB:-$HOME/cmm-cpu-lab} # venv・モデルの置き場 (Git 管理外)
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 PY=$LAB/venv/bin/python
 OUT=$REPO/research/evo-x3/runs
@@ -26,12 +26,12 @@ for n in 1 2 3; do
     IFS=: read -r name cpus threads <<<"$c"
     envs=()
     [ -n "$threads" ] && envs=(env OMP_NUM_THREADS="$threads")
-    sleep 20  # 連続実行による熱の持ち越しを減らす
+    sleep 20 # 連続実行による熱の持ち越しを減らす
     # メモリ上限 16GiB、swap 禁止 (校舎 15.3GiB 相当)
     systemd-run --user --scope --quiet -p MemoryMax=16G -p MemorySwapMax=0 \
       taskset -c "$cpus" "${envs[@]}" "$PY" -m tools.campus_survey benchmark \
-      --pc-id "evo-x3-$name" --hf-home $LAB/hf 2>&1 \
-      | grep -E '^bench\.' > "$OUT/$name-$n.txt"
+      --pc-id "evo-x3-$name" --hf-home $LAB/hf 2>&1 |
+      grep -E '^bench\.' >"$OUT/$name-$n.txt"
     echo "done $name-$n"
   done
 done

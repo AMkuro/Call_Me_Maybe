@@ -75,7 +75,7 @@ def normalize_call_json(
     parts: list[str] = []
     copied_until = 0
     for number_slice in raw_json_number_part_slices:
-        parts.append(raw_json[copied_until:number_slice.start])
+        parts.append(raw_json[copied_until : number_slice.start])
         parts.append(integer_to_float_literal(raw_json[number_slice]))
         copied_until = number_slice.stop
     parts.append(raw_json[copied_until:])

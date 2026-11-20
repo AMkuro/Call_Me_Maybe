@@ -30,15 +30,20 @@ ARGUMENT_INSTRUCTIONS = (
 # character class, which the model otherwise tends to write as a list.
 PARAMETER_EXAMPLES: list[tuple[FunctionDef, str, dict[str, Scalar]]] = [
     (
-        FunctionDef.model_validate({
-            "name": "fn_replace_matches",
-            "description":
-                "Replace every match of a regular expression in a text.",
-            "parameters": {"text": {"type": "string"},
-                           "pattern": {"type": "string"},
-                           "replacement": {"type": "string"}},
-            "returns": {"type": "string"},
-        }),
+        FunctionDef.model_validate(
+            {
+                "name": "fn_replace_matches",
+                "description": (
+                    "Replace every match of a regular expression in a text."
+                ),
+                "parameters": {
+                    "text": {"type": "string"},
+                    "pattern": {"type": "string"},
+                    "replacement": {"type": "string"},
+                },
+                "returns": {"type": "string"},
+            }
+        ),
         "Replace each capital letter in 'Hello World' with '?'.",
         {"text": "Hello World", "pattern": "[A-Z]", "replacement": "?"},
     ),

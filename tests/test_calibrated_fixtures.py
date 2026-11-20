@@ -5,7 +5,6 @@ import re
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent / "fixtures" / "calibrated"
 FREQUENCIES = {
     "original": (4, 1, 1, 2, 3),
@@ -30,24 +29,32 @@ class CalibratedFixtureTests(unittest.TestCase):
                 root = ROOT / suite
                 functions = json.loads(
                     (root / "functions_definition.json").read_text(
-                        encoding="utf-8"))
+                        encoding="utf-8"
+                    )
+                )
                 prompts = json.loads(
                     (root / "function_calling_tests.json").read_text(
-                        encoding="utf-8"))
+                        encoding="utf-8"
+                    )
+                )
                 fixture = json.loads(
                     (root / "measurement_fixture.json").read_text(
-                        encoding="utf-8"))
+                        encoding="utf-8"
+                    )
+                )
                 self.assertEqual(functions, fixture["functions"])
-                self.assertEqual(prompts, [
-                    {"prompt": case["prompt"]} for case in fixture["cases"]
-                ])
+                self.assertEqual(
+                    prompts,
+                    [{"prompt": case["prompt"]} for case in fixture["cases"]],
+                )
                 self.assertEqual(len(functions), 5)
                 self.assertEqual(len(prompts), 11)
                 names = [function["name"] for function in functions]
                 self.assertEqual(len(set(names)), 5)
-                self.assertEqual([
-                    len(function["parameters"]) for function in functions
-                ], [2, 1, 1, 1, 3])
+                self.assertEqual(
+                    [len(function["parameters"]) for function in functions],
+                    [2, 1, 1, 1, 3],
+                )
                 indexed = {fn["name"]: fn for fn in functions}
                 counts = {name: 0 for name in indexed}
                 seen: set[str] = set()
@@ -65,9 +72,7 @@ class CalibratedFixtureTests(unittest.TestCase):
                         set(parameters),
                         set(case["expected_parameters"]),
                     )
-                    types = {
-                        spec["type"] for spec in parameters.values()
-                    }
+                    types = {spec["type"] for spec in parameters.values()}
                     mixed_types |= types == {"number", "boolean"}
                     for key, spec in parameters.items():
                         value = case["expected_parameters"][key]
@@ -88,13 +93,13 @@ class CalibratedFixtureTests(unittest.TestCase):
                         for check in case["regex_checks"]:
                             self.assertEqual(
                                 re.sub(
-                                    args["regex"], args["replacement"],
+                                    args["regex"],
+                                    args["replacement"],
                                     check["input"],
                                 ),
                                 check["output"],
                             )
-                self.assertEqual(
-                    tuple(counts.values()), distribution)
+                self.assertEqual(tuple(counts.values()), distribution)
                 self.assertEqual(regex_count, 3)
                 if suite in BOOLEAN_SUITES:
                     self.assertEqual(bool_values, {True, False})

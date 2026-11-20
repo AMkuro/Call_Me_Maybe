@@ -5,7 +5,11 @@ from pathlib import Path
 from types import MappingProxyType
 
 from pydantic import (
-    BaseModel, ConfigDict, InstanceOf, ValidationError, field_validator,
+    BaseModel,
+    ConfigDict,
+    InstanceOf,
+    ValidationError,
+    field_validator,
 )
 
 from .errors import StartupError

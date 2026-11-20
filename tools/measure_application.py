@@ -12,12 +12,12 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from src.decoder import SelectionMode
-from src.progress import Stage
 from src.errors import PromptError, StartupError
+from src.generation import MAX_NUMBER_STEPS, MAX_VALUE_STEPS
 from src.json_io import loads
 from src.loader import index_functions
-from src.generation import MAX_NUMBER_STEPS, MAX_VALUE_STEPS
 from src.pipeline import process_prompt
+from src.progress import Stage
 from src.runtime import GenerationAssets
 from src.schema import FunctionCallRequest, FunctionDef, JsonValueTypes
 
@@ -45,19 +45,31 @@ class MeasurementProgress(BaseModel):
         self.counts[self.parameter] = 0
 
     def name_token(
-        self, tokens: Sequence[int], *, mode: SelectionMode,
+        self,
+        tokens: Sequence[int],
+        *,
+        mode: SelectionMode,
         raw_top: int | None,
     ) -> None:
         """Name observations are not retained by this measurement."""
 
     def output_token(
-        self, data: bytes, *, token: int, mode: SelectionMode,
+        self,
+        data: bytes,
+        *,
+        token: int,
+        mode: SelectionMode,
         fixed: bool = False,
     ) -> None:
         """JSON preview events do not affect per-parameter measurements."""
 
     def value_token(
-        self, written: bytes, step: int, *, token: int, mode: SelectionMode,
+        self,
+        written: bytes,
+        step: int,
+        *,
+        token: int,
+        mode: SelectionMode,
     ) -> None:
         """Record the actual count without retaining token histories."""
         self.counts[self.parameter] = step
@@ -76,19 +88,25 @@ def assess_call(case: dict[str, Any], call: FunctionCallRequest) -> bool:
             if isinstance(wanted, (int, float, Decimal)) and not isinstance(
                 wanted, bool
             ):
-                if (not isinstance(value, (int, float))
-                        or isinstance(value, bool)
-                        or Decimal(str(value)) != Decimal(str(wanted))):
+                if (
+                    not isinstance(value, (int, float))
+                    or isinstance(value, bool)
+                    or Decimal(str(value)) != Decimal(str(wanted))
+                ):
                     return False
             elif type(value) is not type(wanted) or value != wanted:
                 return False
         return True
     requested = Decimal(case["requested_number_literal"])
     numeric_value = call.parameters.get("number")
-    if (not isinstance(numeric_value, (int, float))
-            or isinstance(numeric_value, bool)
-            or (isinstance(numeric_value, float)
-                and not math.isfinite(numeric_value))):
+    if (
+        not isinstance(numeric_value, (int, float))
+        or isinstance(numeric_value, bool)
+        or (
+            isinstance(numeric_value, float)
+            and not math.isfinite(numeric_value)
+        )
+    ):
         return False
     # Compare the number that is actually serialized, independently of
     # any internal numeric conversion used by production validation.
@@ -109,15 +127,18 @@ def main() -> int:
         parser.error("--repeat must be positive")
     try:
         fixture = loads(args.cases.read_text(encoding="utf-8"))
-        functions = index_functions(FunctionDef.model_validate(fn)
-                                    for fn in fixture["functions"])
+        functions = index_functions(
+            FunctionDef.model_validate(fn) for fn in fixture["functions"]
+        )
         resources = GenerationAssets(functions)
         results: list[dict[str, Any]] = []
         report: dict[str, Any] = {
             "measurement": "accuracy/stress; no timing measurements",
-            "model": "Qwen/Qwen3-0.6B", "value_token_limit": MAX_VALUE_STEPS,
+            "model": "Qwen/Qwen3-0.6B",
+            "value_token_limit": MAX_VALUE_STEPS,
             "number_token_limit": MAX_NUMBER_STEPS,
-            "repetitions": args.repeat, "results": results,
+            "repetitions": args.repeat,
+            "results": results,
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)
         for repeat in range(1, args.repeat + 1):
@@ -126,25 +147,38 @@ def main() -> int:
 
                 result: dict[str, Any] = {"id": case["id"], "repeat": repeat}
                 if "requested_number_literal" in case:
-                    result["requested_number_literal"] = (
-                        case["requested_number_literal"]
-                    )
+                    result["requested_number_literal"] = case[
+                        "requested_number_literal"
+                    ]
                 try:
-                    call = process_prompt(case["prompt"], resources,
-                                          progress=progress)
-                    result.update(status="completed", call=call.model_dump(),
-                                  correct=assess_call(case, call))
+                    call = process_prompt(
+                        case["prompt"], resources, progress=progress
+                    )
+                    result.update(
+                        status="completed",
+                        call=call.model_dump(),
+                        correct=assess_call(case, call),
+                    )
                     if "requested_number_literal" in case:
                         result["exact_numeric_agreement"] = result["correct"]
                 except PromptError as e:
                     result.update(status="error", error=str(e), correct=False)
                 result["generated_value_tokens"] = progress.counts
                 results.append(result)
-                args.output.write_text(json.dumps(report, indent=2,
-                                                  allow_nan=False) + "\n",
-                                       encoding="utf-8")
-                print(json.dumps({key: value for key, value in result.items()
-                                  if key != "call"}), flush=True)
+                args.output.write_text(
+                    json.dumps(report, indent=2, allow_nan=False) + "\n",
+                    encoding="utf-8",
+                )
+                print(
+                    json.dumps(
+                        {
+                            key: value
+                            for key, value in result.items()
+                            if key != "call"
+                        }
+                    ),
+                    flush=True,
+                )
     except (StartupError, OSError, ValueError, KeyError) as e:
         print(f"measurement failed: {e}", file=sys.stderr)
         return 1

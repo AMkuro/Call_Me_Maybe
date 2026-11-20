@@ -12,8 +12,13 @@ class SubmissionExport:
     def __init__(self, ref: str) -> None:
         """Pin the commit so branch updates cannot change the export."""
         self.commit = subprocess.check_output(
-            ["git", "rev-parse", "--verify", "--end-of-options",
-             f"{ref}^{{commit}}"],
+            [
+                "git",
+                "rev-parse",
+                "--verify",
+                "--end-of-options",
+                f"{ref}^{{commit}}",
+            ],
             text=True,
         ).strip()
 
@@ -30,7 +35,8 @@ class SubmissionExport:
             ["git", "show", f"{self.commit}:submission-files.txt"], text=True
         )
         return [
-            line.strip() for line in manifest.splitlines()
+            line.strip()
+            for line in manifest.splitlines()
             if line.strip() and not line.lstrip().startswith("#")
         ]
 
@@ -72,9 +78,9 @@ class SubmissionExport:
         for path, blob, mode in selected:
             target = destination / path
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(subprocess.check_output(
-                ["git", "cat-file", "blob", blob]
-            ))
+            target.write_bytes(
+                subprocess.check_output(["git", "cat-file", "blob", blob])
+            )
             target.chmod(0o755 if mode == "100755" else 0o644)
         print(f"Exported {len(selected)} files from {self.commit}")
         print(f"Destination: {destination}")

@@ -7,13 +7,14 @@ import unittest
 from collections.abc import Sequence
 from unittest.mock import patch
 
+from test_application import definition
+from trie_fixtures import trie_from_paths
+
 from src import generation, pipeline, runtime
 from src.decoder import SelectionMode
 from src.display import Dashboard
 from src.errors import PromptError
 from src.model_port import Model
-from trie_fixtures import trie_from_paths
-from test_application import definition
 
 
 class ObservationTests(unittest.TestCase):
@@ -24,105 +25,160 @@ class ObservationTests(unittest.TestCase):
         fn = definition()
         trie = trie_from_paths({fn.name: (1, 2)})
         model = object.__new__(Model)
-        with patch.object(Model, 'encode', return_value=[9]), \
-                patch.object(Model, 'logits', return_value=[0.0]), \
-                patch.object(Model, 'decode',
-                             side_effect=PromptError('diagnostic decode')):
-            plain = generation.select_function('request', model=model,
-                                               functions={fn.name: fn},
-                                               trie=trie)
+        with (
+            patch.object(Model, "encode", return_value=[9]),
+            patch.object(Model, "logits", return_value=[0.0]),
+            patch.object(
+                Model, "decode", side_effect=PromptError("diagnostic decode")
+            ),
+        ):
+            plain = generation.select_function(
+                "request", model=model, functions={fn.name: fn}, trie=trie
+            )
             with contextlib.redirect_stderr(io.StringIO()):
                 dashboard = Dashboard(1, model, {})
                 observed = generation.select_function(
-                    'request', model=model, functions={fn.name: fn},
-                    trie=trie, progress=dashboard,
+                    "request",
+                    model=model,
+                    functions={fn.name: fn},
+                    trie=trie,
+                    progress=dashboard,
                 )
         self.assertEqual(observed, plain)
-        self.assertIn('unavailable', dashboard.fields['value'])
-        self.assertEqual(dashboard.fields['token'],
-                         "2 '<text unavailable; ids=[2]>' (forced)")
+        self.assertIn("unavailable", dashboard.fields["value"])
+        self.assertEqual(
+            dashboard.fields["token"],
+            "2 '<text unavailable; ids=[2]>' (forced)",
+        )
 
     def test_name_warning_and_progress_without_ranking(self) -> None:
         """Warn only for a masked raw preference; keep ID/mode progress."""
-        first = definition().model_copy(update={'name': 'fn_a'})
-        second = definition().model_copy(update={'name': 'fn_b'})
+        first = definition().model_copy(update={"name": "fn_a"})
+        second = definition().model_copy(update={"name": "fn_b"})
         functions = {first.name: first, second.name: second}
-        trie = trie_from_paths({'fn_a': (1, 0), 'fn_b': (2, 0)})
+        trie = trie_from_paths({"fn_a": (1, 0), "fn_b": (2, 0)})
         model = object.__new__(Model)
-        for scores, warned in (([3.0, 1.0, 2.0], True),
-                               ([0.0, 1.0, 2.0], False)):
+        for scores, warned in (
+            ([3.0, 1.0, 2.0], True),
+            ([0.0, 1.0, 2.0], False),
+        ):
             output = io.StringIO()
-            with self.subTest(scores=scores), \
-                    contextlib.redirect_stderr(output), \
-                    patch.object(Model, 'encode', return_value=[9]), \
-                    patch.object(Model, 'decode', return_value='b'), \
-                    patch.object(Model, 'logits', return_value=scores) as llm:
-                dashboard = Dashboard(1, model, {0: b'x', 1: b'a', 2: b'b'})
+            with (
+                self.subTest(scores=scores),
+                contextlib.redirect_stderr(output),
+                patch.object(Model, "encode", return_value=[9]),
+                patch.object(Model, "decode", return_value="b"),
+                patch.object(Model, "logits", return_value=scores) as llm,
+            ):
+                dashboard = Dashboard(1, model, {0: b"x", 1: b"a", 2: b"b"})
                 result = generation.select_function(
-                    'request', model=model, functions=functions,
-                    trie=trie, progress=dashboard,
+                    "request",
+                    model=model,
+                    functions=functions,
+                    trie=trie,
+                    progress=dashboard,
                 )
             self.assertEqual(result, second)
-            self.assertEqual(dashboard.fields['value'], 'b')
-            self.assertEqual(dashboard.fields['function'], 'fn_b')
+            self.assertEqual(dashboard.fields["value"], "b")
+            self.assertEqual(dashboard.fields["function"], "fn_b")
             # The greedy choice of 2 is followed by the forced EOS 0.
-            self.assertEqual(dashboard.fields['token'], "0 'x' (forced)")
-            self.assertEqual('warning' in dashboard.fields, warned)
-            self.assertEqual('name_selection_constrained' in output.getvalue(),
-                             warned)
-            self.assertNotIn('candidates', dashboard.fields)
-            self.assertEqual([c.args for c in llm.call_args_list],
-                             [([9],), ([9, 2],)])
+            self.assertEqual(dashboard.fields["token"], "0 'x' (forced)")
+            self.assertEqual("warning" in dashboard.fields, warned)
+            self.assertEqual(
+                "name_selection_constrained" in output.getvalue(), warned
+            )
+            self.assertNotIn("candidates", dashboard.fields)
+            self.assertEqual(
+                [c.args for c in llm.call_args_list], [([9],), ([9, 2],)]
+            )
 
     def test_complete_call_and_value_progress_with_observation(self) -> None:
         """Real masks/validation keep JSON and model inputs in all modes."""
-        fn = definition(a='number').model_copy(update={'name': 'f'})
-        trie = trie_from_paths({'f': (7, 0)})
+        fn = definition(a="number").model_copy(update={"name": "f"})
+        trie = trie_from_paths({"f": (7, 0)})
         model = object.__new__(Model)
-        vocab = {1: b'1', 2: b'2', 3: b'.0}', 7: b'f'}
+        vocab = {1: b"1", 2: b"2", 3: b".0}", 7: b"f"}
         vocab.update({128 + char: bytes([char]) for char in range(128)})
         resource = runtime.GenerationAssets.model_construct(
-            model=model, vocab=vocab, functions={'f': fn}, trie=trie,
+            model=model,
+            vocab=vocab,
+            functions={"f": fn},
+            trie=trie,
         )
         results = []
         inputs = []
-        for mode in ('none', 'redirected', 'unavailable', 'broken'):
+        for mode in ("none", "redirected", "unavailable", "broken"):
             output = io.StringIO()
-            with contextlib.redirect_stderr(output), \
-                    patch.object(Model, 'encode', side_effect=lambda text:
-                                 [128 + ord(c) for c in text]), \
-                    patch.object(Model, 'decode', side_effect=lambda ids:
-                                 b''.join(vocab[i] for i in ids
-                                          if i != 0).decode()), \
-                    patch.object(Model, 'logits', return_value=(
-                        [0.0, 3.0, 2.0, 4.0] + [-10.0] * 252)) as llm:
+            with (
+                contextlib.redirect_stderr(output),
+                patch.object(
+                    Model,
+                    "encode",
+                    side_effect=lambda text: [128 + ord(c) for c in text],
+                ),
+                patch.object(
+                    Model,
+                    "decode",
+                    side_effect=lambda ids: b"".join(
+                        vocab[i] for i in ids if i != 0
+                    ).decode(),
+                ),
+                patch.object(
+                    Model,
+                    "logits",
+                    return_value=([0.0, 3.0, 2.0, 4.0] + [-10.0] * 252),
+                ) as llm,
+            ):
                 dashboard = Dashboard(1, model, vocab)
-                dashboard.available = mode != 'unavailable'
-                dashboard.interactive = mode == 'broken'
-                with patch.object(dashboard, 'value_token',
-                                  wraps=dashboard.value_token) as values, \
-                        patch.object(output, 'write',
-                                     side_effect=OSError('closed')) if (
-                            mode == 'broken') else contextlib.nullcontext():
-                    results.append(pipeline.process_prompt(
-                        'request', resource,
-                        progress=None if mode == 'none' else dashboard,
-                    ).model_dump())
+                dashboard.available = mode != "unavailable"
+                dashboard.interactive = mode == "broken"
+                with (
+                    patch.object(
+                        dashboard, "value_token", wraps=dashboard.value_token
+                    ) as values,
+                    patch.object(
+                        output, "write", side_effect=OSError("closed")
+                    )
+                    if (mode == "broken")
+                    else contextlib.nullcontext(),
+                ):
+                    results.append(
+                        pipeline.process_prompt(
+                            "request",
+                            resource,
+                            progress=None if mode == "none" else dashboard,
+                        ).model_dump()
+                    )
                     inputs.append(llm.call_args_list)
-                if mode == 'redirected':
-                    self.assertEqual([c.args for c in values.call_args_list],
-                                     [(b'1', 1), (b'1.0}', 2)])
-                    self.assertEqual([c.kwargs for c in values.call_args_list],
-                                     [dict(token=1, mode='greedy'),
-                                      dict(token=3, mode='greedy')])
-                    self.assertEqual(dashboard.fields['token'],
-                                     "253 '}' (forced)")
-        self.assertEqual(results, [{
-            'prompt': 'request', 'name': 'f', 'parameters': {'a': 1.0},
-        }] * 4)
+                if mode == "redirected":
+                    self.assertEqual(
+                        [c.args for c in values.call_args_list],
+                        [(b"1", 1), (b"1.0}", 2)],
+                    )
+                    self.assertEqual(
+                        [c.kwargs for c in values.call_args_list],
+                        [
+                            dict(token=1, mode="greedy"),
+                            dict(token=3, mode="greedy"),
+                        ],
+                    )
+                    self.assertEqual(
+                        dashboard.fields["token"], "253 '}' (forced)"
+                    )
+        self.assertEqual(
+            results,
+            [
+                {
+                    "prompt": "request",
+                    "name": "f",
+                    "parameters": {"a": 1.0},
+                }
+            ]
+            * 4,
+        )
         self.assertTrue(all(item == inputs[0] for item in inputs))
         # Method B: name IDs 7, 0; one byte ID per fixed char; value 1, 3.
-        fixed = '{"prompt":"request","name":"f","parameters":{"a": ' + '}'
+        fixed = '{"prompt":"request","name":"f","parameters":{"a": ' + "}"
         self.assertEqual(len(inputs[0]), 2 + len(fixed) + 2)
 
 
@@ -135,36 +191,40 @@ class TerminalTests(unittest.TestCase):
 
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
-            with Dashboard(2, object.__new__(Model), {}) as dashboard, \
-                    patch.object(Model, 'decode', return_value='x'):
-                dashboard.prompt_started(1, 'request\x1b[2J')
-                dashboard.name_token([5], mode='greedy', raw_top=6)
-                dashboard.function_selected('store_text')
-                dashboard.value_token(b'hello', 1, token=7, mode='greedy')
-                dashboard.prompt_done('store_text')
+            with (
+                Dashboard(2, object.__new__(Model), {}) as dashboard,
+                patch.object(Model, "decode", return_value="x"),
+            ):
+                dashboard.prompt_started(1, "request\x1b[2J")
+                dashboard.name_token([5], mode="greedy", raw_top=6)
+                dashboard.function_selected("store_text")
+                dashboard.value_token(b"hello", 1, token=7, mode="greedy")
+                dashboard.prompt_done("store_text")
         text = output.getvalue()
-        self.assertNotIn('\x1b', text)
-        self.assertIn('store_text', text)
-        self.assertIn('name_selection_constrained: step=1', text)
-        self.assertIn('[1/2]', text)
+        self.assertNotIn("\x1b", text)
+        self.assertIn("store_text", text)
+        self.assertIn("name_selection_constrained: step=1", text)
+        self.assertIn("[1/2]", text)
 
     def test_pseudo_terminal_restores_cursor_after_exception(self) -> None:
         """The live view is cleaned up even when a prompt fails."""
         from src.display import Dashboard
 
-        for error in (RuntimeError('test'), KeyboardInterrupt('test')):
+        for error in (RuntimeError("test"), KeyboardInterrupt("test")):
             master, slave = os.openpty()
             try:
-                with os.fdopen(slave, 'w', encoding='utf-8') as output:
+                with os.fdopen(slave, "w", encoding="utf-8") as output:
                     with contextlib.redirect_stderr(output):
-                        with patch.dict(os.environ, {'TERM': 'xterm'}):
-                            with self.assertRaisesRegex(type(error), 'test'):
+                        with patch.dict(os.environ, {"TERM": "xterm"}):
+                            with self.assertRaisesRegex(type(error), "test"):
                                 with Dashboard(
-                                    1, object.__new__(Model), {},
+                                    1,
+                                    object.__new__(Model),
+                                    {},
                                 ) as dashboard:
-                                    dashboard.prompt_started(1, 'p')
+                                    dashboard.prompt_started(1, "p")
                                     dashboard.function_selected(
-                                        'store_number',
+                                        "store_number",
                                     )
                                     raise error
                 chunks = []
@@ -176,12 +236,13 @@ class TerminalTests(unittest.TestCase):
                     if not chunk:
                         break
                     chunks.append(chunk)
-                text = b''.join(chunks).decode()
-                self.assertIn('\x1b[?25l', text)
-                self.assertIn('\x1b[?25h', text)
-                self.assertIn('store_number', text)
+                text = b"".join(chunks).decode()
+                self.assertIn("\x1b[?25l", text)
+                self.assertIn("\x1b[?25h", text)
+                self.assertIn("store_number", text)
                 self.assertIn(
-                    '1 prompt: 0 done, 0 failed, 1 not finished', text,
+                    "1 prompt: 0 done, 0 failed, 1 not finished",
+                    text,
                 )
             finally:
                 os.close(master)
@@ -190,10 +251,11 @@ class TerminalTests(unittest.TestCase):
         """Prompt text cannot inject terminal commands or break the layout."""
         from src.display import render_progress
 
-        frame = render_progress({'input': '1/1', 'prompt': 'a\x1b[2J\nb'},
-                                width=35, height=20)
-        self.assertNotIn('\x1b', frame)
-        self.assertIn('\\u001b', frame)
+        frame = render_progress(
+            {"input": "1/1", "prompt": "a\x1b[2J\nb"}, width=35, height=20
+        )
+        self.assertNotIn("\x1b", frame)
+        self.assertIn("\\u001b", frame)
         self.assertTrue(all(len(line) <= 35 for line in frame.splitlines()))
 
 
@@ -202,64 +264,83 @@ class LoopObservationTests(unittest.TestCase):
 
     def test_name_forced_then_greedy_uses_same_borrowed_list(self) -> None:
         """Forced and greedy steps call logits and borrow the same list."""
-        first = definition().model_copy(update={'name': 'a'})
-        second = definition().model_copy(update={'name': 'b'})
-        trie = trie_from_paths({'a': (1, 2, 0), 'b': (1, 3, 0)})
+        first = definition().model_copy(update={"name": "a"})
+        second = definition().model_copy(update={"name": "b"})
+        trie = trie_from_paths({"a": (1, 2, 0), "b": (1, 3, 0)})
         model = object.__new__(Model)
         with contextlib.redirect_stderr(io.StringIO()):
-            dashboard = Dashboard(1, model, {1: b'x', 2: b'a', 3: b'b'})
+            dashboard = Dashboard(1, model, {1: b"x", 2: b"a", 3: b"b"})
         seen: list[tuple[int, tuple[int, ...], str]] = []
         original = dashboard.name_token
 
         def observe(
-            tokens: Sequence[int], *, mode: SelectionMode,
+            tokens: Sequence[int],
+            *,
+            mode: SelectionMode,
             raw_top: int | None,
         ) -> None:
             """Capture copies for assertions, then use the real receiver."""
             seen.append((id(tokens), tuple(tokens), mode))
             original(tokens, mode=mode, raw_top=raw_top)
 
-        with patch.object(Model, 'encode', return_value=[9]), \
-                patch.object(Model, 'decode', return_value='b'), \
-                patch.object(Model, 'logits',
-                             return_value=[9.0, 0.0, 1.0, 2.0]) as llm, \
-                patch.object(dashboard, 'name_token', side_effect=observe):
+        with (
+            patch.object(Model, "encode", return_value=[9]),
+            patch.object(Model, "decode", return_value="b"),
+            patch.object(
+                Model, "logits", return_value=[9.0, 0.0, 1.0, 2.0]
+            ) as llm,
+            patch.object(dashboard, "name_token", side_effect=observe),
+        ):
             selected = generation.select_function(
-                'request', model=model, functions={'a': first, 'b': second},
-                trie=trie, progress=dashboard,
+                "request",
+                model=model,
+                functions={"a": first, "b": second},
+                trie=trie,
+                progress=dashboard,
             )
         self.assertIs(selected, second)
-        self.assertEqual([c.args for c in llm.call_args_list],
-                         [([9],), ([9, 1],), ([9, 1, 3],)])
-        self.assertEqual([item[1:] for item in seen],
-                         [((1,), 'forced'), ((1, 3), 'greedy'),
-                          ((1, 3, 0), 'forced')])
+        self.assertEqual(
+            [c.args for c in llm.call_args_list],
+            [([9],), ([9, 1],), ([9, 1, 3],)],
+        )
+        self.assertEqual(
+            [item[1:] for item in seen],
+            [((1,), "forced"), ((1, 3), "greedy"), ((1, 3, 0), "forced")],
+        )
         self.assertEqual(len({item[0] for item in seen}), 1)
-        self.assertEqual(dashboard.fields['token'], "0 'b' (forced)")
-        self.assertIn('step=2', dashboard.fields['warning'])
+        self.assertEqual(dashboard.fields["token"], "0 'b' (forced)")
+        self.assertIn("step=2", dashboard.fields["warning"])
 
     def test_value_forced_and_duplicate_bytes_keep_actual_id(self) -> None:
         """Mode and selected ID are not inferred from displayed bytes."""
         from src.skeleton import ArgumentGenerationPart
 
         model = object.__new__(Model)
-        slot = ArgumentGenerationPart(name='flag', type='boolean',
-                                      terminator='}')
+        slot = ArgumentGenerationPart(
+            name="flag", type="boolean", terminator="}"
+        )
         for vocab, expected, mode in (
-            ({1: b'true}'}, 1, 'forced'),
-            ({1: b'true}', 2: b'true}'}, 2, 'greedy'),
+            ({1: b"true}"}, 1, "forced"),
+            ({1: b"true}", 2: b"true}"}, 2, "greedy"),
         ):
-            with self.subTest(mode=mode), \
-                    contextlib.redirect_stderr(io.StringIO()):
+            with (
+                self.subTest(mode=mode),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
                 dashboard = Dashboard(1, model, vocab)
-                with patch.object(Model, 'logits',
-                                  return_value=[0.0, 1.0, 2.0]) as llm:
+                with patch.object(
+                    Model, "logits", return_value=[0.0, 1.0, 2.0]
+                ) as llm:
                     result = generation.generate_argument_part(
-                        slot, [9], model=model, vocab=vocab,
+                        slot,
+                        [9],
+                        model=model,
+                        vocab=vocab,
                         progress=dashboard,
                     )
                 self.assertEqual(result, [expected])
                 llm.assert_called_once_with([9])
-                self.assertEqual(dashboard.fields['value'], 'true}')
-                self.assertEqual(dashboard.fields['token'],
-                                 f"{expected} 'true}}' ({mode})")
+                self.assertEqual(dashboard.fields["value"], "true}")
+                self.assertEqual(
+                    dashboard.fields["token"], f"{expected} 'true}}' ({mode})"
+                )
