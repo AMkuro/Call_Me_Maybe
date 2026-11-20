@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from .schema import JsonValueTypes
 
 _WHITESPACE = b" \t\r\n"
-# A whole number as the LLM may write it: the fraction is optional, because
+# A complete number as the LLM may write it: the fraction is optional, because
 # forbidding the terminator after an integer made the model write "1000..."
 # to the cap.
 _NUMBER = re.compile(rb"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\Z")
@@ -29,7 +29,7 @@ _FOUR_HEX_DIGITS_LEFT = 6
 _AFTER_STRING = 7
 _AFTER_TERMINATOR = 8
 
-# Results of _slot_state. _INVALID above is the third result.
+# Results of value-prefix classification; _INVALID is the third result.
 _INCOMPLETE = 0
 _COMPLETE = 1
 
@@ -40,8 +40,9 @@ _INTEGER_WITH_TERMINATOR = re.compile(r"\A(\s*-?[0-9]+)(\s*[,}])\Z")
 def integer_to_float_literal(fragment: str) -> str:
     """Add ".0" to a number slot written as an integer: "10," -> "10.0,".
 
-    The model may end a number at an integer, but the saved output holds
-    floats. The text is edited, so no digit is lost to a float conversion.
+    The model may end a number at an integer; normalization supplies the
+    float notation required before validation. This text edit preserves
+    digits but does not check numeric range or precision.
 
     Args:
         fragment: The decoded text of a completed number slot.
@@ -60,13 +61,15 @@ def normalize_call_json(
 
     Args:
         raw_json: The verified, unmodified text returned by generation.
-        number_slot_slices: Ordered, nonoverlapping slices into raw_json
-            before normalization, using Python string indices, not bytes
-            or tokens. Starts are inclusive, stops exclusive, steps None.
+        raw_json_number_part_slices: Ordered, nonoverlapping slices into
+            raw_json before normalization, using Python string indices,
+            not bytes or tokens. Starts are inclusive, stops exclusive,
+            steps None.
             Each includes the number slot's terminator ("," or "}").
 
     Returns:
-        The same JSON text, with integer number slots changed by float_text.
+        The same JSON text, with integer slots given a fraction by
+        integer_to_float_literal. The result still needs validation.
         No parsing or numeric conversion changes the original digits.
     """
     parts: list[str] = []

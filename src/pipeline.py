@@ -121,16 +121,17 @@ def process_prompt(
 def validate_call(
     text: str, fn: FunctionDef, user_prompt: str
 ) -> FunctionCallRequest:
-    """Turn generated JSON into a checked record that keeps that JSON.
+    """Validate normalized JSON and retain its text for saving.
 
     The record must parse, copy ``user_prompt`` exactly, name ``fn`` and
-    match its parameters, and Python's json must read every number
-    argument as a finite float. Only then is ``text`` kept as the record's
-    ``_generated_json``; save_results writes it unchanged, so each number
-    is saved with the digits the model wrote.
+    match its parameters. Number validation rejects ints and returns only
+    finite floats. Only then is ``text`` kept as the record's
+    ``_generated_json``; save_results writes it unchanged, preserving
+    generated digits and any fraction added during normalization. JSON is
+    parsed once; the argument model then checks the validated Python values.
 
     Args:
-        text: The generated JSON record.
+        text: The JSON record after number-slot normalization.
         fn: The selected function.
         user_prompt: The user's request.
 

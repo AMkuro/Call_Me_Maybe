@@ -19,7 +19,7 @@ class BatchLifecycleTests(unittest.TestCase):
     """Exercise actual batch decisions and the CLI's cleanup boundary."""
 
     def test_batch_saves_successes_and_reports_failure(self) -> None:
-        """A failed prompt preserves both successes and exact saved JSON."""
+        """A failed prompt preserves both successful records in input order."""
         prompts = ['first', 'bad', 'last']
         first = FunctionCallRequest(prompt='first', name='f', parameters={})
         last = FunctionCallRequest(prompt='last', name='f', parameters={})

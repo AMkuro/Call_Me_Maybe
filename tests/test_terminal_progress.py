@@ -199,7 +199,7 @@ class LoopObservationTests(unittest.TestCase):
     """Stage loops expose actual decisions without taking control from data."""
 
     def test_name_forced_then_greedy_uses_same_borrowed_list(self) -> None:
-        """A leaf at the name cap succeeds; only branching calls logits."""
+        """Forced and greedy steps call logits and borrow the same list."""
         first = definition().model_copy(update={'name': 'a'})
         second = definition().model_copy(update={'name': 'b'})
         trie = trie_from_paths({'a': (1, 2, 0), 'b': (1, 3, 0)})

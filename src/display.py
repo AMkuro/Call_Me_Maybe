@@ -1,7 +1,7 @@
 """A live stderr dashboard, with ordinary logs when stderr is redirected.
 
-Both modes end with one line per prompt (done or failed, with seconds)
-and a total line.
+Both modes report each completed or failed prompt with seconds and a total
+line. The total also counts unfinished prompts after an interruption.
 """
 
 import codecs
@@ -45,7 +45,7 @@ _CLEAR = "\x1b[H"
 
 
 def _decoded(model: Model, tokens: Sequence[int]) -> str:
-    """Return the text of ``tokens`` for display, never raising.
+    """Decode ``tokens`` for display, substituting text on PromptError.
 
     Args:
         model: Decodes the IDs.
@@ -248,8 +248,9 @@ class Dashboard:
 
     Use it in ``with``: leaving the block restores the terminal and prints
     the summary, even after an exception or Ctrl-C. Each prompt goes
-    through prompt_started, then prompt_done or prompt_failed; the
-    GenerationProgress methods between them only change displayed rows.
+    through prompt_started, then prompt_done or prompt_failed on a normal
+    outcome; an interruption can leave it unfinished. Progress methods
+    update displayed rows and may emit diagnostic warnings.
 
     On a terminal (stderr is a TTY and TERM is not "dumb") it draws a live
     screen; otherwise it writes one log line per prompt and per warning.

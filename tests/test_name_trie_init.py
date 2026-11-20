@@ -27,7 +27,7 @@ class TrieConstructorTests(unittest.TestCase):
         self.assertEqual(trie.leaf_name([97, 50]), 'ab')
 
     def test_encoding_error_preserves_startup_context_and_cause(self) -> None:
-        """Constructor keeps the old factory's error boundary."""
+        """Encoding errors retain startup context and the original cause."""
         error = PromptError('tokenizer failed')
         with patch.object(Model, 'encode', side_effect=error):
             with self.assertRaisesRegex(

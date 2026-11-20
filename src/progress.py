@@ -72,7 +72,7 @@ class GenerationProgress(Protocol):
         """Observe one committed JSON token's bytes, including fixed text.
 
         Args:
-            data: Actual vocabulary bytes, before float-text normalization.
+            data: Actual vocabulary bytes, before number-slot normalization.
             token: The committed token ID.
             mode: How that token was selected.
             fixed: Whether this token belongs to fixed JSON text.

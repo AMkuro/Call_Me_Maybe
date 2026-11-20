@@ -27,7 +27,7 @@ def constrained_argmax(
         The chosen token ID.
 
     Raises:
-        PromptError: The logits are not a one-dimensional list of numbers
+        PromptError: The logits are not a one-dimensional sequence of numbers
             or contain NaN or +inf, ``allowed`` is empty or holds an ID
             outside the logits, or every allowed score is -inf.
     """
@@ -76,7 +76,8 @@ def infer_and_select_next_token(
 
     Raises:
         PromptError: ``allowed`` is empty (raised before any forward pass),
-            or the model or its scores fail.
+            or model inference fails. With multiple candidates, malformed
+            scores or no finite allowed score also raise PromptError.
     """
     if not allowed:
         # The caller adds what was being generated (name or parameter).

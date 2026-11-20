@@ -11,14 +11,14 @@ from .schema import FunctionCallRequest
 
 
 def _prepare_destination(path: Path) -> None:
-    """Create the parent directories; reject a non-regular existing file.
+    """Create parents; reject an existing destination resolving to a non-file.
 
     Args:
         path: The output file.
 
     Raises:
         OSError: A directory cannot be created, or ``path`` exists and is
-            not a regular file.
+            not a regular file after following a symbolic link.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -42,7 +42,7 @@ def prepare_output(path: Path) -> None:
 
     Raises:
         StartupError: The output cannot be prepared, also when ``path``
-            exists but is not a regular file. The message names ``path``
+            resolves to a non-regular file. The message names ``path``
             and the cause.
     """
     try:
@@ -64,6 +64,8 @@ def save_results(path: Path, calls: list[FunctionCallRequest]) -> None:
     replaces ``path``, so a failure or interruption leaves the previous
     file whole. Each record is written as its ``_generated_json`` text, or
     with json.dump when that is None. Creates missing parent directories.
+    A final symbolic link is replaced, leaving its target unchanged. No
+    fsync is performed, so crash or power-loss durability is not guaranteed.
 
     Args:
         path: The output file.
@@ -71,7 +73,8 @@ def save_results(path: Path, calls: list[FunctionCallRequest]) -> None:
 
     Raises:
         OSError: Writing fails, or ``path`` exists and is not a regular
-            file. The temporary file is removed and ``path`` is unchanged.
+            file after following symbolic links. A failure before replacement
+            leaves the previous output intact; cleanup is attempted in finally.
     """
     _prepare_destination(path)
     temporary: Path | None = None

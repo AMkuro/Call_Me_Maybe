@@ -42,7 +42,7 @@ def definition(name: str = 'f') -> FunctionDef:
 
 
 class Parameters(BaseModel):
-    """Stand in for the unavailable dynamic model with real validation."""
+    """A fixed parameter model used in orchestration fixtures."""
 
     number: float
     text: str
@@ -50,7 +50,7 @@ class Parameters(BaseModel):
 
 
 class PipelineTests(unittest.TestCase):
-    """Test real pipeline control flow, not the unfinished leaf algorithms."""
+    """Test pipeline control flow with selected generation helpers replaced."""
 
     def test_numbers_continue_until_the_chosen_terminator(self) -> None:
         """A valid numeric prefix must not truncate a decimal."""
@@ -171,7 +171,7 @@ class MainTests(unittest.TestCase):
     """Test persistence decisions while model and file loaders are stubs."""
 
     def setUp(self) -> None:
-        """Replace unavailable leaves; keep actual output files observable."""
+        """Replace model loading and saving; observe fixture output files."""
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
         directory = self.stack.enter_context(tempfile.TemporaryDirectory())
@@ -201,7 +201,7 @@ class MainTests(unittest.TestCase):
         ))
 
     def save(self, path: Path, calls: list[FunctionCallRequest]) -> None:
-        """Write fixture results in place of the unfinished atomic writer."""
+        """Write fixture results without exercising the atomic writer."""
         records = [call.model_dump() for call in calls]
         self.saved.append(records)
         path.write_text(json.dumps(records), encoding='utf-8')

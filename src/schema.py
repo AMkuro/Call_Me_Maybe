@@ -27,11 +27,15 @@ _LOGGER = logging.getLogger(__name__)
 def validate_number(value: object) -> float:
     """Return a finite float preserving the JSON decimal value.
 
+    Already supplied floats are checked only for finiteness; their source
+    decimal digits are not available for a precision comparison.
+
     Args:
-        value: An int, a float, or the Decimal that json_io.loads produces.
+        value: A finite float or an exactly parsed Decimal. Python ints,
+            booleans and other types are rejected; no int fallback is used.
 
     Returns:
-        The checked float; ints undergo the same decimal check as Decimals.
+        The checked finite float.
 
     Raises:
         ValueError: The type is invalid, the value is nonfinite, overflows,
@@ -171,8 +175,9 @@ class FunctionCallRequest(BaseModel):
 
     Attributes:
         prompt: The user's request.
-        name: The function called.
-        parameters: The argument values by parameter name.
+        name: The selected function name; no function is executed.
+        parameters: String, boolean or checked float values by name.
+            Matching a particular definition is checked by validate_call.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
