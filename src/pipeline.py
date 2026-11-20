@@ -13,7 +13,11 @@ from .generation import generate_call_json, select_function
 from .json_io import loads
 from .progress import GenerationProgress, observing
 from .runtime import GenerationAssets
-from .schema import FunctionCall, FunctionDef, build_parameters_model
+from .schema import (
+    FunctionCallRequest,
+    FunctionDef,
+    build_argument_validation_model,
+)
 from .values import normalize_call_json
 from .writer import save_results
 
@@ -22,7 +26,9 @@ if TYPE_CHECKING:
 
 
 def process_all(
-    prompts: Sequence[str], resources: GenerationAssets, output: Path,
+    prompts: Sequence[str],
+    resources: GenerationAssets,
+    output: Path,
     dashboard: Dashboard,
 ) -> bool:
     """Process the prompts in order; return True when none failed.
@@ -44,7 +50,7 @@ def process_all(
         OSError: Saving fails.
     """
     dashboard.output_path = str(output)
-    calls: list[FunctionCall] = []
+    calls: list[FunctionCallRequest] = []
     for index, user_prompt in enumerate(prompts, 1):
         dashboard.prompt_started(index, user_prompt)
         try:
@@ -67,7 +73,7 @@ def process_prompt(
     resources: GenerationAssets,
     *,
     progress: GenerationProgress | None = None,
-) -> FunctionCall:
+) -> FunctionCallRequest:
     """Select a function, generate raw JSON, normalize and validate it.
 
     Pass generation's ordered, nonoverlapping number-slot slices directly
@@ -97,14 +103,16 @@ def process_prompt(
     )
     if observing(progress):
         progress.stage("generate_call_json")
-    raw_json, number_slot_slices = generate_call_json(
+    raw_json, raw_json_number_part_slices = generate_call_json(
         user_prompt,
         fn,
         model=resources.model,
         vocab=resources.vocab,
         progress=progress,
     )
-    normalized_json = normalize_call_json(raw_json, number_slot_slices)
+    normalized_json = normalize_call_json(
+        raw_json, raw_json_number_part_slices
+    )
     if observing(progress):
         progress.stage("validate_call")
     return validate_call(normalized_json, fn, user_prompt)
@@ -112,7 +120,7 @@ def process_prompt(
 
 def validate_call(
     text: str, fn: FunctionDef, user_prompt: str
-) -> FunctionCall:
+) -> FunctionCallRequest:
     """Turn generated JSON into a checked record that keeps that JSON.
 
     The record must parse, copy ``user_prompt`` exactly, name ``fn`` and
@@ -133,7 +141,7 @@ def validate_call(
         PromptError: A check fails.
     """
     try:
-        call = FunctionCall.model_validate(loads(text))
+        call = FunctionCallRequest.model_validate(loads(text))
         if call.prompt != user_prompt:
             raise ValueError("prompt differs from the input")
         if call.name != fn.name:
@@ -141,7 +149,9 @@ def validate_call(
                 f"function name mismatch: expected {fn.name!r}, "
                 f"got {call.name!r}"
             )
-        parameters = build_parameters_model(fn).model_validate(call.parameters)
+        parameters = build_argument_validation_model(fn).model_validate(
+            call.parameters
+        )
         # The saved output must be float: Python's json reads each number so.
         loaded = json.loads(text)["parameters"]
         for name, spec in fn.parameters.items():
@@ -152,7 +162,7 @@ def validate_call(
                 raise ValueError(f"{name!r} does not load as a finite float")
     except ValueError as e:  # JSON errors and pydantic's are ValueErrors
         raise PromptError(f"invalid output: {e}") from e
-    checked = FunctionCall(
+    checked = FunctionCallRequest(
         prompt=call.prompt,
         name=call.name,
         parameters=parameters.model_dump(by_alias=True),

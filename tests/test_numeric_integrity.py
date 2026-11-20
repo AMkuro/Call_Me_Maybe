@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from src.errors import PromptError
 from src.pipeline import validate_call
-from src.schema import FunctionCall, build_parameters_model
+from src.schema import FunctionCallRequest, build_argument_validation_model
 from src.writer import save_results
 from tools.measure_application import assess_call
 from test_application import definition
@@ -30,15 +30,15 @@ class NumericIntegrityTests(unittest.TestCase):
 
     def test_direct_numeric_inputs_become_checked_floats(self) -> None:
         """Direct construction and declared numbers use the same checks."""
-        model = build_parameters_model(definition(value='number'))
+        model = build_argument_validation_model(definition(value='number'))
         values: list[Any] = [0, -2, 2, 9007199254740992,
                              Decimal('0.1'), 2.75]
         for value in values:
             with self.subTest(value=value):
                 checked = model.model_validate({'value': value})
                 result = checked.model_dump(by_alias=True)['value']
-                call = FunctionCall(prompt='x', name='dynamic',
-                                    parameters={'value': value})
+                call = FunctionCallRequest(prompt='x', name='dynamic',
+                                           parameters={'value': value})
                 self.assertIs(type(result), float)
                 self.assertTrue(math.isfinite(result))
                 self.assertIs(type(call.parameters['value']), float)
@@ -53,8 +53,8 @@ class NumericIntegrityTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValidationError, reason):
                     model.model_validate({'value': value})
                 with self.assertRaisesRegex(ValidationError, reason):
-                    FunctionCall(prompt='x', name='dynamic',
-                                 parameters={'value': value})
+                    FunctionCallRequest(prompt='x', name='dynamic',
+                                        parameters={'value': value})
 
     def test_regular_decimals_and_integral_decimal_are_preserved(self) -> None:
         """Allow 0.1 and preserve integer-valued decimals without rounding."""
@@ -108,8 +108,8 @@ class NumericIntegrityTests(unittest.TestCase):
 
     def test_strict_numeric_and_boolean_types(self) -> None:
         """Do not interpret numeric strings, bools or boolean-like strings."""
-        number = build_parameters_model(definition(value='number'))
-        boolean = build_parameters_model(definition(value='boolean'))
+        number = build_argument_validation_model(definition(value='number'))
+        boolean = build_argument_validation_model(definition(value='boolean'))
         for value in ['2', '２', True, False, None, [], {}]:
             with self.subTest(number=value):
                 with self.assertRaises(ValidationError):
@@ -131,7 +131,7 @@ class NumericIntegrityTests(unittest.TestCase):
                       Decimal('Infinity'), None, [], {}]:
             with self.subTest(value=value):
                 with self.assertRaises(ValidationError):
-                    FunctionCall.model_validate({
+                    FunctionCallRequest.model_validate({
                         'prompt': 'x', 'name': 'dynamic',
                         'parameters': {'value': value},
                     })
@@ -150,10 +150,10 @@ class NumericIntegrityTests(unittest.TestCase):
         """Python True == 1 must not make a wrong typed argument correct."""
         self.assertFalse(assess_call({
             'expected_name': 'dynamic', 'expected_parameters': {'value': 1},
-        }, FunctionCall(prompt='x', name='dynamic',
+        }, FunctionCallRequest(prompt='x', name='dynamic',
                         parameters={'value': True})))
         self.assertTrue(assess_call({
             'expected_name': 'dynamic',
             'expected_parameters': {'value': Decimal('0.1')},
-        }, FunctionCall(prompt='x', name='dynamic',
+        }, FunctionCallRequest(prompt='x', name='dynamic',
                         parameters={'value': 0.1})))

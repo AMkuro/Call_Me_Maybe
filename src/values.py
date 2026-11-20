@@ -4,7 +4,7 @@ import codecs
 import re
 from collections.abc import Mapping, Sequence
 
-from .schema import ParamType
+from .schema import JsonValueTypes
 
 _WHITESPACE = b" \t\r\n"
 # A whole number as the LLM may write it: the fraction is optional, because
@@ -34,10 +34,10 @@ _INCOMPLETE = 0
 _COMPLETE = 1
 
 
-_INTEGER_SLOT = re.compile(r"\A(\s*-?[0-9]+)(\s*[,}])\Z")
+_INTEGER_WITH_TERMINATOR = re.compile(r"\A(\s*-?[0-9]+)(\s*[,}])\Z")
 
 
-def float_text(fragment: str) -> str:
+def integer_to_float_literal(fragment: str) -> str:
     """Add ".0" to a number slot written as an integer: "10," -> "10.0,".
 
     The model may end a number at an integer, but the saved output holds
@@ -49,12 +49,12 @@ def float_text(fragment: str) -> str:
     Returns:
         ``fragment`` with ".0" after an integer, otherwise unchanged.
     """
-    return _INTEGER_SLOT.sub(r"\1.0\2", fragment)
+    return _INTEGER_WITH_TERMINATOR.sub(r"\1.0\2", fragment)
 
 
 def normalize_call_json(
     raw_json: str,
-    number_slot_slices: Sequence[slice],
+    raw_json_number_part_slices: Sequence[slice],
 ) -> str:
     """Add missing fractions only within generated number slots.
 
@@ -71,9 +71,9 @@ def normalize_call_json(
     """
     parts: list[str] = []
     copied_until = 0
-    for number_slice in number_slot_slices:
+    for number_slice in raw_json_number_part_slices:
         parts.append(raw_json[copied_until : number_slice.start])
-        parts.append(float_text(raw_json[number_slice]))
+        parts.append(integer_to_float_literal(raw_json[number_slice]))
         copied_until = number_slice.stop
     parts.append(raw_json[copied_until:])
     return "".join(parts)
@@ -152,7 +152,7 @@ def _scan_json_string_fragment(
     return state
 
 
-def _string_slot_state(
+def _classify_string_continuation(
     state: int,
     fragment: bytes,
     terminator: int,
@@ -177,9 +177,9 @@ def _string_slot_state(
     return _COMPLETE if state == _AFTER_TERMINATOR else _INCOMPLETE
 
 
-def _value_syntax_state(
+def _classify_value_prefix(
     data: bytes,
-    kind: ParamType,
+    kind: JsonValueTypes,
     terminator: bytes,
 ) -> int:
     """Classify ``data``, all the bytes written for one slot so far.
@@ -198,7 +198,9 @@ def _value_syntax_state(
     """
     data = data.lstrip(_WHITESPACE)
     if kind == "string":
-        return _string_slot_state(_BEFORE_STRING, data, terminator[0])
+        return _classify_string_continuation(
+            _BEFORE_STRING, data, terminator[0]
+        )
     if data.endswith(terminator):
         value = data[:-1].rstrip(_WHITESPACE)
         if kind == "number":
@@ -220,9 +222,9 @@ def _value_syntax_state(
     return _INVALID
 
 
-def allowed_tokens_for_arguments(
+def allowed_tokens_for_argument(
     vocab: Mapping[int, bytes],
-    param_type: ParamType,
+    param_type: JsonValueTypes,
     written: bytes,
     terminator: str,
 ) -> list[int]:
@@ -264,20 +266,23 @@ def allowed_tokens_for_arguments(
             token
             for token, value in vocab.items()
             if value
-            and _string_slot_state(state, value, end, pending) != _INVALID
+            and _classify_string_continuation(state, value, end, pending)
+            != _INVALID
         ]
     return [
         token
         for token, value in vocab.items()
         if value
-        and _value_syntax_state(written + value, param_type, terminator_bytes)
+        and _classify_value_prefix(
+            written + value, param_type, terminator_bytes
+        )
         != _INVALID
     ]
 
 
-def is_argument_generation_complete(
+def is_argument_part_complete(
     written: bytes,
-    param_type: ParamType,
+    param_type: JsonValueTypes,
     terminator: str,
 ) -> bool:
     """Return True only after a whole value and its JSON ``terminator``.
@@ -293,5 +298,5 @@ def is_argument_generation_complete(
         Whether the slot is complete.
     """
     terminator_bytes = terminator.encode("ascii")
-    state = _value_syntax_state(written, param_type, terminator_bytes)
+    state = _classify_value_prefix(written, param_type, terminator_bytes)
     return state == _COMPLETE

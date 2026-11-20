@@ -21,7 +21,7 @@ from src.errors import PromptError, StartupError
 from src.loader import load_functions, load_prompts
 from src.model_port import Model
 from src.pipeline import validate_call
-from src.schema import FunctionCall, FunctionDef, build_parameters_model
+from src.schema import FunctionCallRequest, FunctionDef, build_argument_validation_model
 from src.skeleton import FixedTextPart, ArgumentGenerationPart, build_call_skeleton
 from src.writer import save_results
 
@@ -183,7 +183,7 @@ class StructureTests(unittest.TestCase):
                            'a-b': 'boolean', '': 'string'})
         parameters = {'_private': 2.0, 'model_dump': 'yes',
                       'a-b': True, '': ''}
-        result = build_parameters_model(fn).model_validate(parameters)
+        result = build_argument_validation_model(fn).model_validate(parameters)
         self.assertEqual(result.model_dump(by_alias=True), parameters)
         call = validate_call(json.dumps({
             'prompt': 'test', 'name': fn.name, 'parameters': parameters,
@@ -234,9 +234,9 @@ class StructureTests(unittest.TestCase):
         for parameters in [{}, {'a': 1, 'other': 2}, {'a': math.inf}]:
             with self.subTest(parameters=parameters):
                 with self.assertRaises(ValidationError):
-                    build_parameters_model(fn).model_validate(parameters)
+                    build_argument_validation_model(fn).model_validate(parameters)
         with self.assertRaises(ValidationError):
-            FunctionCall.model_validate({
+            FunctionCallRequest.model_validate({
                 'prompt': 'x', 'name': 'f', 'parameters': {}, 'other': True,
             })
 
@@ -347,7 +347,7 @@ class WriterTests(unittest.TestCase):
         """Nested output paths, Unicode and empty results are supported."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'nested' / 'calls.json'
-            call = FunctionCall(prompt='日本語\n"', name='dynamic',
+            call = FunctionCallRequest(prompt='日本語\n"', name='dynamic',
                                 parameters={'s': '\\', 'n': 2.0})
             save_results(path, [call])
             self.assertEqual(json.loads(path.read_text()), [call.model_dump()])

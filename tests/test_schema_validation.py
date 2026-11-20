@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from src import __main__ as entry, pipeline, runtime
 from src.loader import load_functions
 from src.model_port import Model
-from src.schema import FunctionDef, ParamSpec
+from src.schema import FunctionDef, ValueTypeSpec
 from test_application import definition
 from test_constraints import encode_name
 
@@ -24,10 +24,10 @@ class DefinitionValidationTests(unittest.TestCase):
 
     def test_parameters_are_read_only_and_keep_serialization(self) -> None:
         """Freeze validated definitions without sharing mutable input maps."""
-        spec = ParamSpec(type='number')
-        source = {'z': spec, 'a': ParamSpec(type='string')}
+        spec = ValueTypeSpec(type='number')
+        source = {'z': spec, 'a': ValueTypeSpec(type='string')}
         fn = FunctionDef(name='f', description='test', parameters=source,
-                         returns=ParamSpec(type='boolean'))
+                         returns=ValueTypeSpec(type='boolean'))
         source.clear()
         self.assertEqual(list(fn.parameters), ['z', 'a'])
         self.assertIs(fn.parameters['z'], spec)
@@ -68,7 +68,7 @@ class DefinitionValidationTests(unittest.TestCase):
         for spec in [{}, {'type': True}, {'type': 'unknown'},
                      {'type': 'number', 'extra': 1}]:
             with self.assertRaises(ValidationError):
-                ParamSpec.model_validate(spec)
+                ValueTypeSpec.model_validate(spec)
 
     def test_blank_function_names_are_pydantic_errors(self) -> None:
         """Blank identifiers are rejected at the model-validation boundary."""

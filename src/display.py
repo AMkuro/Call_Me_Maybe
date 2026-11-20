@@ -17,7 +17,7 @@ from .decoder import SelectionMode
 from .errors import PromptError
 from .model_port import Model
 from .progress import Stage
-from .schema import ParamType
+from .schema import JsonValueTypes
 
 Row = Literal["input", "stage", "prompt", "function", "parameter", "value",
               "value_tokens", "token", "warning", "result", "error",
@@ -423,7 +423,7 @@ class Dashboard:
         self.fields["function"] = name
         self.draw("function")
 
-    def parameter_started(self, name: str, param_type: ParamType) -> None:
+    def parameter_started(self, name: str, param_type: JsonValueTypes) -> None:
         """Show the parameter whose value starts, clearing the last value.
 
         Args:

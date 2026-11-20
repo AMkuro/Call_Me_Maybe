@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import unittest
 
 from src import generation, prompt
-from src.schema import FunctionDef, Scalar, build_parameters_model
+from src.schema import FunctionDef, Scalar, build_argument_validation_model
 from src.skeleton import ArgumentGenerationPart
 
 FN = FunctionDef.model_validate({
@@ -94,7 +94,7 @@ class ShippedExampleTests(unittest.TestCase):
         plain = prompt.build_arguments_prompt('Go', FN, with_examples=False)
         for fn, request, values in prompt.PARAMETER_EXAMPLES:
             with self.subTest(fn=fn.name):
-                build_parameters_model(fn).model_validate(values)
+                build_argument_validation_model(fn).model_validate(values)
                 self.assertNotIn('<', request + str(values))
                 answer = prompt.build_example_call_json(request, fn, values)
                 self.assertIn(answer, with_examples)

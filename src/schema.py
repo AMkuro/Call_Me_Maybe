@@ -9,11 +9,18 @@ from types import MappingProxyType
 from typing import Annotated, Any, Literal
 
 from pydantic import (
-    BaseModel, BeforeValidator, ConfigDict, Field, PrivateAttr, create_model,
-    field_serializer, field_validator, model_validator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    create_model,
+    field_serializer,
+    field_validator,
+    model_validator,
 )
 
-ParamType = Literal["number", "string", "boolean"]
+JsonValueTypes = Literal["number", "string", "boolean"]
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -56,7 +63,7 @@ Number = Annotated[float, BeforeValidator(validate_number)]
 Scalar = str | bool | Number
 
 
-class ParamSpec(BaseModel):
+class ValueTypeSpec(BaseModel):
     """The type of one parameter (or of a return value).
 
     Attributes:
@@ -65,7 +72,7 @@ class ParamSpec(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
-    type: ParamType
+    type: JsonValueTypes
 
 
 class FunctionDef(BaseModel):
@@ -85,8 +92,8 @@ class FunctionDef(BaseModel):
 
     name: str
     description: str
-    parameters: Mapping[str, ParamSpec]
-    returns: ParamSpec
+    parameters: Mapping[str, ValueTypeSpec]
+    returns: ValueTypeSpec
 
     @field_validator("name")
     @classmethod
@@ -109,8 +116,9 @@ class FunctionDef(BaseModel):
     @field_validator("parameters")
     @classmethod
     def _read_only(
-        cls, parameters: Mapping[str, ParamSpec],
-    ) -> Mapping[str, ParamSpec]:
+        cls,
+        parameters: Mapping[str, ValueTypeSpec],
+    ) -> Mapping[str, ValueTypeSpec]:
         """Wrap the new dict Pydantic built, so no outside alias exists.
 
         Args:
@@ -123,8 +131,9 @@ class FunctionDef(BaseModel):
 
     @field_serializer("parameters")
     def _plain_parameters(
-        self, parameters: Mapping[str, ParamSpec],
-    ) -> dict[str, ParamSpec]:
+        self,
+        parameters: Mapping[str, ValueTypeSpec],
+    ) -> dict[str, ValueTypeSpec]:
         """Serialize the read-only view as an ordinary dict.
 
         Args:
@@ -148,12 +157,16 @@ class FunctionDef(BaseModel):
             _LOGGER.warning("function %r: description is blank", self.name)
         for position, name in enumerate(self.parameters, 1):
             if not name.strip():
-                _LOGGER.warning("function %r: parameter #%d name %r is blank",
-                                self.name, position, name)
+                _LOGGER.warning(
+                    "function %r: parameter #%d name %r is blank",
+                    self.name,
+                    position,
+                    name,
+                )
         return self
 
 
-class FunctionCall(BaseModel):
+class FunctionCallRequest(BaseModel):
     """One output record: exactly the keys prompt, name and parameters.
 
     Attributes:
@@ -174,7 +187,7 @@ class FunctionCall(BaseModel):
     _generated_json: str | None = PrivateAttr(default=None)
 
 
-def build_parameters_model(fn: FunctionDef) -> type[BaseModel]:
+def build_argument_validation_model(fn: FunctionDef) -> type[BaseModel]:
     """Return a strict model of ``fn``'s parameters, in their order.
 
     It requires exactly those names, each of its declared type (numbers
@@ -188,8 +201,10 @@ def build_parameters_model(fn: FunctionDef) -> type[BaseModel]:
     Returns:
         The model class.
     """
-    types: dict[ParamType, Any] = {
-        "number": Number, "string": str, "boolean": bool,
+    types: dict[JsonValueTypes, Any] = {
+        "number": Number,
+        "string": str,
+        "boolean": bool,
     }
     fields: dict[str, Any] = {
         f"parameter_{index}": (types[spec.type], Field(alias=name))
@@ -198,7 +213,10 @@ def build_parameters_model(fn: FunctionDef) -> type[BaseModel]:
     return create_model(
         "Parameters",
         __config__=ConfigDict(
-            frozen=True, extra="forbid", strict=True, allow_inf_nan=False,
+            frozen=True,
+            extra="forbid",
+            strict=True,
+            allow_inf_nan=False,
         ),
         **fields,
     )

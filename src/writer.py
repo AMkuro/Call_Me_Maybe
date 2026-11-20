@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from .errors import StartupError
-from .schema import FunctionCall
+from .schema import FunctionCallRequest
 
 
 def _prepare_destination(path: Path) -> None:
@@ -57,7 +57,7 @@ def prepare_output(path: Path) -> None:
         raise StartupError(f"cannot prepare output at {path}: {e}") from e
 
 
-def save_results(path: Path, calls: list[FunctionCall]) -> None:
+def save_results(path: Path, calls: list[FunctionCallRequest]) -> None:
     """Write ``calls`` as a JSON array, replacing the file atomically.
 
     The array is written to a temporary file next to ``path``, which then

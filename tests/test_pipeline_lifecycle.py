@@ -12,7 +12,7 @@ from src import __main__ as entry, pipeline
 from src.cli import Args
 from src.errors import PromptError
 from src.model_port import Model
-from src.schema import FunctionCall
+from src.schema import FunctionCallRequest
 
 
 class BatchLifecycleTests(unittest.TestCase):
@@ -21,8 +21,8 @@ class BatchLifecycleTests(unittest.TestCase):
     def test_batch_saves_successes_and_reports_failure(self) -> None:
         """A failed prompt preserves both successes and exact saved JSON."""
         prompts = ['first', 'bad', 'last']
-        first = FunctionCall(prompt='first', name='f', parameters={})
-        last = FunctionCall(prompt='last', name='f', parameters={})
+        first = FunctionCallRequest(prompt='first', name='f', parameters={})
+        last = FunctionCallRequest(prompt='last', name='f', parameters={})
         resources = MagicMock()
         dashboard = MagicMock()
         with tempfile.TemporaryDirectory() as directory:

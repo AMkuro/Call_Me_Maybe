@@ -19,7 +19,7 @@ from src.loader import index_functions
 from src.generation import MAX_NUMBER_STEPS, MAX_VALUE_STEPS
 from src.pipeline import process_prompt
 from src.runtime import GenerationAssets
-from src.schema import FunctionCall, FunctionDef, ParamType
+from src.schema import FunctionCallRequest, FunctionDef, JsonValueTypes
 
 
 class MeasurementProgress(BaseModel):
@@ -39,7 +39,7 @@ class MeasurementProgress(BaseModel):
     def function_selected(self, name: str) -> None:
         """Function correctness is assessed from the completed call."""
 
-    def parameter_started(self, name: str, param_type: ParamType) -> None:
+    def parameter_started(self, name: str, param_type: JsonValueTypes) -> None:
         """Start the counter under the existing report's parameter key."""
         self.parameter = f"{name} ({param_type})"
         self.counts[self.parameter] = 0
@@ -63,7 +63,7 @@ class MeasurementProgress(BaseModel):
         self.counts[self.parameter] = step
 
 
-def assess_call(case: dict[str, Any], call: FunctionCall) -> bool:
+def assess_call(case: dict[str, Any], call: FunctionCallRequest) -> bool:
     """Compare held-out expectations, including normalized numeric values."""
     if call.name != case["expected_name"]:
         return False

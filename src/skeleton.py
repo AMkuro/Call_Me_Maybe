@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from .schema import FunctionDef, ParamType
+from .schema import FunctionDef, JsonValueTypes
 
 
 class FixedTextPart(BaseModel):
@@ -32,7 +32,7 @@ class ArgumentGenerationPart(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str
-    type: ParamType
+    type: JsonValueTypes
     terminator: Literal[",", "}"]
 
 
@@ -93,7 +93,7 @@ def build_call_skeleton(
     )
     if not fn.parameters:
         return [head, FixedTextPart(text=',"parameters":{}}')]
-    parts: list[FixedTextPart | ArgumentGenerationPart] = [head]
+    parts: list[JsonPart] = [head]
     for index, (name, spec) in enumerate(fn.parameters.items()):
         prefix = ',"parameters":{' if index == 0 else ""
         # Keep ": ": without the space, Qwen3 never ended "2.0" in our runs.

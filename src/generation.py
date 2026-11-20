@@ -15,8 +15,8 @@ from .skeleton import (
     build_call_skeleton,
 )
 from .values import (
-    allowed_tokens_for_arguments,
-    is_argument_generation_complete,
+    allowed_tokens_for_argument,
+    is_argument_part_complete,
 )
 
 MAX_VALUE_STEPS = 256
@@ -191,7 +191,7 @@ def generate_call_json(
     # Only this loop extends output_ids; each part gets a prompt and the
     # output so far as context and returns its own IDs.
     output_ids: list[int] = []
-    number_slot_slices: list[slice] = []
+    raw_json_number_part_slices: list[slice] = []
     generated_char_count = 0
     for part in build_call_skeleton(user_prompt, fn):
         if isinstance(part, FixedTextPart):
@@ -205,7 +205,7 @@ def generate_call_json(
             part_text = part.text
         else:
             if observing(progress):
-                progress.parameter_started(part.name, part.type)
+                progress.argument_started(part.name, part.type)
             part_ids = generate_argument_part(
                 part,
                 example_ids + output_ids,
@@ -217,7 +217,7 @@ def generate_call_json(
                 part_ids, model=model, vocab=vocab
             )
             if part.type == "number":
-                number_slot_slices.append(
+                raw_json_number_part_slices.append(
                     slice(
                         generated_char_count,
                         generated_char_count + len(part_text),
@@ -228,7 +228,7 @@ def generate_call_json(
     text = _decode_tokens_with_vocab_check(
         output_ids, model=model, vocab=vocab
     )
-    return text, number_slot_slices
+    return text, raw_json_number_part_slices
 
 
 def generate_argument_part(
@@ -264,11 +264,9 @@ def generate_argument_part(
     limit = MAX_NUMBER_STEPS if slot.type == "number" else MAX_VALUE_STEPS
     try:
         while True:
-            if is_argument_generation_complete(
-                written, slot.type, slot.terminator
-            ):
+            if is_argument_part_complete(written, slot.type, slot.terminator):
                 return generated
-            allowed = allowed_tokens_for_arguments(
+            allowed = allowed_tokens_for_argument(
                 vocab, slot.type, written, slot.terminator
             )
             if len(generated) >= limit:

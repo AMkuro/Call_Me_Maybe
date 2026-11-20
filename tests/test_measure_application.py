@@ -2,7 +2,7 @@
 
 import unittest
 
-from src.schema import FunctionCall
+from src.schema import FunctionCallRequest
 from tools.measure_application import assess_call
 
 
@@ -14,7 +14,7 @@ class NumericOracleTests(unittest.TestCase):
         for literal in ['9007199254740993', '0.12345678901234567']:
             case = {'expected_name': 'store_number',
                     'requested_number_literal': literal}
-            call = FunctionCall(prompt='test', name='store_number',
+            call = FunctionCallRequest(prompt='test', name='store_number',
                                 parameters={'number': float(literal)})
             self.assertFalse(assess_call(case, call))
 
@@ -23,7 +23,7 @@ class NumericOracleTests(unittest.TestCase):
         for literal in ['2', '-0.25', '100000000000000000000']:
             case = {'expected_name': 'store_number',
                     'requested_number_literal': literal}
-            call = FunctionCall(prompt='test', name='store_number',
+            call = FunctionCallRequest(prompt='test', name='store_number',
                                 parameters={'number': float(literal)})
             self.assertTrue(assess_call(case, call))
         self.assertFalse(assess_call(

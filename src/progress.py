@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal, Protocol, TypeGuard
 
 if TYPE_CHECKING:
     from .decoder import SelectionMode
-    from .schema import ParamType
+    from .schema import JsonValueTypes
 
 # Each stage is named after the function it runs, so the display
 # points at the code that is working.
@@ -42,7 +42,7 @@ class GenerationProgress(Protocol):
         """
         ...
 
-    def parameter_started(self, name: str, param_type: ParamType) -> None:
+    def argument_started(self, name: str, param_type: JsonValueTypes) -> None:
         """Report that the value of one parameter starts.
 
         Args:

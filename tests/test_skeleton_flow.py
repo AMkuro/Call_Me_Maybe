@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from src import __main__ as entry, generation, pipeline, runtime
 from src.errors import PromptError
 from src.model_port import Model
-from src.schema import FunctionCall, FunctionDef
+from src.schema import FunctionCallRequest, FunctionDef
 from src.skeleton import ArgumentGenerationPart
 from test_constraints import encode_name
 
@@ -200,14 +200,14 @@ class MainTests(unittest.TestCase):
             pipeline, 'save_results', side_effect=self.save,
         ))
 
-    def save(self, path: Path, calls: list[FunctionCall]) -> None:
+    def save(self, path: Path, calls: list[FunctionCallRequest]) -> None:
         """Write fixture results in place of the unfinished atomic writer."""
         records = [call.model_dump() for call in calls]
         self.saved.append(records)
         path.write_text(json.dumps(records), encoding='utf-8')
 
     def run_main(
-        self, prompts: list[str], results: Sequence[FunctionCall | Exception],
+        self, prompts: list[str], results: Sequence[FunctionCallRequest | Exception],
     ) -> int:
         """Run actual CLI orchestration with fixed per-prompt outcomes."""
         self.prompts.write_text(json.dumps([{'prompt': p} for p in prompts]))
@@ -221,7 +221,7 @@ class MainTests(unittest.TestCase):
 
     def test_save_error_is_reported_and_stops_processing(self) -> None:
         """A failed write exits nonzero before another prompt is processed."""
-        call = FunctionCall(prompt='x', name='f', parameters={})
+        call = FunctionCallRequest(prompt='x', name='f', parameters={})
         with patch.object(pipeline, 'save_results',
                           side_effect=OSError('disk full')):
             try:
@@ -246,8 +246,8 @@ class MainTests(unittest.TestCase):
 
     def test_partial_success_keeps_each_successful_result(self) -> None:
         """A skipped prompt does not discard either successful result."""
-        first = FunctionCall(prompt='a', name='f', parameters={})
-        last = FunctionCall(prompt='c', name='f', parameters={})
+        first = FunctionCallRequest(prompt='a', name='f', parameters={})
+        last = FunctionCallRequest(prompt='c', name='f', parameters={})
         self.assertEqual(self.run_main(
             ['a', 'b', 'c'], [first, PromptError('failed'), last],
         ), 1)

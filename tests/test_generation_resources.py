@@ -10,14 +10,14 @@ from src.errors import StartupError
 from src.loader import index_functions
 from src.model_port import Model
 from src.runtime import GenerationAssets
-from src.schema import FunctionDef, ParamSpec
+from src.schema import FunctionDef, ValueTypeSpec
 from test_constraints import encode_name
 
 
 def function(name: str) -> FunctionDef:
     """Return a minimal definition named ``name``."""
     return FunctionDef(name=name, description='test', parameters={},
-                       returns=ParamSpec(type='string'))
+                       returns=ValueTypeSpec(type='string'))
 
 
 class ResourceTests(unittest.TestCase):
