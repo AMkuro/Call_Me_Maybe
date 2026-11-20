@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import math
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -153,14 +151,6 @@ def validate_call(
         parameters = build_argument_validation_model(fn).model_validate(
             call.parameters
         )
-        # The saved output must be float: Python's json reads each number so.
-        loaded = json.loads(text)["parameters"]
-        for name, spec in fn.parameters.items():
-            value = loaded[name]
-            if spec.type == "number" and not (
-                isinstance(value, float) and math.isfinite(value)
-            ):
-                raise ValueError(f"{name!r} does not load as a finite float")
     except ValueError as e:  # JSON errors and pydantic's are ValueErrors
         raise PromptError(f"invalid output: {e}") from e
     checked = FunctionCallRequest(

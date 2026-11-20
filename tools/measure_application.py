@@ -39,7 +39,7 @@ class MeasurementProgress(BaseModel):
     def function_selected(self, name: str) -> None:
         """Function correctness is assessed from the completed call."""
 
-    def parameter_started(self, name: str, param_type: JsonValueTypes) -> None:
+    def argument_started(self, name: str, param_type: JsonValueTypes) -> None:
         """Start the counter under the existing report's parameter key."""
         self.parameter = f"{name} ({param_type})"
         self.counts[self.parameter] = 0

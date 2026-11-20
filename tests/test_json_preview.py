@@ -22,7 +22,7 @@ class PreviewTests(unittest.TestCase):
         dashboard.stage('generate_call_json')
         for data in (b'{"a": 2,"b": "', b'\xe6', b'\x9d\xb1'):
             dashboard.output_token(data, token=1, mode='forced')
-        dashboard.parameter_started('c', 'string')
+        dashboard.argument_started('c', 'string')
         self.assertEqual(dashboard.fields['json'], '{"a": 2,"b": "東')
         self.assertEqual(dashboard.fields['tokens'], '3')
         frame = render_progress(dashboard.fields, 80, 24)
@@ -114,7 +114,7 @@ class PreviewTests(unittest.TestCase):
         """Structural tokens must clear the active argument."""
         with contextlib.redirect_stderr(io.StringIO()):
             dashboard = Dashboard(1, object.__new__(Model), {})
-        dashboard.parameter_started('a', 'number')
+        dashboard.argument_started('a', 'number')
         dashboard.output_token(b'}', token=1, mode='forced', fixed=True)
         self.assertNotIn('parameter', dashboard.fields)
 
@@ -128,7 +128,7 @@ class PreviewTests(unittest.TestCase):
         vocab = {i: bytes([i]) for i in range(256)}
         with contextlib.redirect_stderr(io.StringIO()):
             dashboard = Dashboard(1, model, vocab)
-        with patch.object(generation, 'build_parameters_prompt',
+        with patch.object(generation, 'build_arguments_prompt',
                           return_value='P'), \
                 patch.object(Model, 'encode', side_effect=lambda s:
                              list(s.encode())), \

@@ -424,7 +424,7 @@ class Dashboard:
         self.fields["function"] = name
         self.draw("function")
 
-    def parameter_started(self, name: str, param_type: JsonValueTypes) -> None:
+    def argument_started(self, name: str, param_type: JsonValueTypes) -> None:
         """Show the parameter whose value starts, clearing the last value.
 
         Args:

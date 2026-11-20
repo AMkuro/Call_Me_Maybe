@@ -4,7 +4,12 @@ import json
 from collections.abc import Mapping
 
 from .schema import FunctionDef, Scalar
-from .skeleton import FixedTextPart, build_call_skeleton, escape_lt, json_string
+from .skeleton import (
+    FixedTextPart,
+    build_call_skeleton,
+    escape_lt,
+    json_string,
+)
 
 NAME_INSTRUCTIONS = (
     "Choose the function matching the request. Reply with its exact name only."

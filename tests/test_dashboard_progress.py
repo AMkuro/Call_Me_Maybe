@@ -212,7 +212,7 @@ class BorrowedProgressTests(unittest.TestCase):
             dashboard.value_token(b'\xe6', 1, token=42, mode='forced')
             dashboard.value_token(b'\xe6\x9d\xb1', 2, token=43, mode='greedy')
             dashboard.stage('generate_call_json')
-            dashboard.parameter_started('x', 'string')
+            dashboard.argument_started('x', 'string')
         self.assertEqual(frames[0]['token'], '42 (forced)')
         self.assertEqual(frames[0]['value_tokens'], '1')
         self.assertEqual(frames[1]['token'], '43 (greedy)')

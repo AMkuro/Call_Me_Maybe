@@ -15,7 +15,7 @@ class NumericOracleTests(unittest.TestCase):
             case = {'expected_name': 'store_number',
                     'requested_number_literal': literal}
             call = FunctionCallRequest(prompt='test', name='store_number',
-                                parameters={'number': float(literal)})
+                                       parameters={'number': float(literal)})
             self.assertFalse(assess_call(case, call))
 
     def test_exact_numbers_and_changed_names(self) -> None:
@@ -24,7 +24,7 @@ class NumericOracleTests(unittest.TestCase):
             case = {'expected_name': 'store_number',
                     'requested_number_literal': literal}
             call = FunctionCallRequest(prompt='test', name='store_number',
-                                parameters={'number': float(literal)})
+                                       parameters={'number': float(literal)})
             self.assertTrue(assess_call(case, call))
         self.assertFalse(assess_call(
             {'expected_name': 'other', 'expected_parameters': {}}, call,
@@ -43,9 +43,9 @@ class ProgressMeasurementTests(unittest.TestCase):
         progress.stage('select_function')
         progress.name_token(ids, mode='forced', raw_top=None)
         progress.function_selected('f')
-        progress.parameter_started('a', 'number')
+        progress.argument_started('a', 'number')
         progress.value_token(b'12,', 2, token=3, mode='greedy')
-        progress.parameter_started('b', 'boolean')
+        progress.argument_started('b', 'boolean')
         self.assertEqual(progress.counts,
                          {'a (number)': 2, 'b (boolean)': 0})
         self.assertTrue(progress.available)

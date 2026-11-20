@@ -21,8 +21,12 @@ from src.errors import PromptError, StartupError
 from src.loader import load_functions, load_prompts
 from src.model_port import Model
 from src.pipeline import validate_call
-from src.schema import FunctionCallRequest, FunctionDef, build_argument_validation_model
-from src.skeleton import FixedTextPart, ArgumentGenerationPart, build_call_skeleton
+from src.schema import (
+    FunctionCallRequest, FunctionDef, build_argument_validation_model,
+)
+from src.skeleton import (
+    FixedTextPart, ArgumentGenerationPart, build_call_skeleton,
+)
 from src.writer import save_results
 
 
@@ -151,7 +155,8 @@ class StructureTests(unittest.TestCase):
         self.assertEqual(parts, [
             head,
             FixedTextPart(text=',"parameters":{"quote\\\"": '),
-            ArgumentGenerationPart(name='quote"', type='string', terminator=','),
+            ArgumentGenerationPart(name='quote"', type='string',
+                                   terminator=','),
             FixedTextPart(text='"b": '),
             ArgumentGenerationPart(name='b', type='number', terminator='}'),
             FixedTextPart(text='}'),
@@ -214,7 +219,7 @@ class StructureTests(unittest.TestCase):
         for name in ['other', ' dynamic ']:
             with self.subTest(name=name):
                 text = json.dumps({'prompt': 'test', 'name': name,
-                                   'parameters': {'value': 2}})
+                                   'parameters': {'value': 2.0}})
                 with self.assertRaisesRegex(PromptError,
                                             'name mismatch') as error:
                     validate_call(text, definition(value='number'), 'test')
@@ -234,7 +239,8 @@ class StructureTests(unittest.TestCase):
         for parameters in [{}, {'a': 1, 'other': 2}, {'a': math.inf}]:
             with self.subTest(parameters=parameters):
                 with self.assertRaises(ValidationError):
-                    build_argument_validation_model(fn).model_validate(parameters)
+                    build_argument_validation_model(fn).model_validate(
+                        parameters)
         with self.assertRaises(ValidationError):
             FunctionCallRequest.model_validate({
                 'prompt': 'x', 'name': 'f', 'parameters': {}, 'other': True,
@@ -276,9 +282,9 @@ class DecoderTests(unittest.TestCase):
         with patch.object(Model, 'logits',
                           return_value=[20.0, 1.0, 3.0]) as llm, \
                 patch.object(generation, 'MAX_VALUE_STEPS', 2), \
-                patch.object(generation, 'is_slot_complete',
+                patch.object(generation, 'is_argument_part_complete',
                              side_effect=lambda data, *_: data == b'ab'), \
-                patch.object(generation, 'allowed_slot_tokens',
+                patch.object(generation, 'allowed_tokens_for_argument',
                              side_effect=[[1], [1, 2]]):
             self.assertEqual(generation.generate_argument_part(
                 slot, prefix, model=model, vocab={1: b'a', 2: b'b'},
@@ -293,9 +299,9 @@ class DecoderTests(unittest.TestCase):
             with self.subTest(cap=cap, allowed=allowed), \
                     patch.object(Model, 'logits', return_value=[0.0, 0.0]), \
                     patch.object(generation, 'MAX_VALUE_STEPS', cap), \
-                    patch.object(generation, 'is_slot_complete',
+                    patch.object(generation, 'is_argument_part_complete',
                                  return_value=False), \
-                    patch.object(generation, 'allowed_slot_tokens',
+                    patch.object(generation, 'allowed_tokens_for_argument',
                                  return_value=allowed):
                 with self.assertRaisesRegex(PromptError, message):
                     generation.generate_argument_part(
@@ -310,10 +316,10 @@ class DecoderTests(unittest.TestCase):
                 with self.subTest(length=length, repeat=repeat), \
                         patch.object(Model, 'logits',
                                      return_value=[0.0, 1.0]), \
-                        patch.object(generation, 'is_slot_complete',
+                        patch.object(generation, 'is_argument_part_complete',
                                      side_effect=lambda data, *_:
                                      len(data) == length), \
-                        patch.object(generation, 'allowed_slot_tokens',
+                        patch.object(generation, 'allowed_tokens_for_argument',
                                      return_value=[0, 1]):
                     if length <= 256:
                         result = generation.generate_argument_part(
@@ -332,12 +338,14 @@ class DecoderTests(unittest.TestCase):
     def test_value_errors_identify_the_parameter(self) -> None:
         """Limit errors explain which typed parameter could not complete."""
         model = object.__new__(Model)
-        slot = ArgumentGenerationPart(name='source_string', type='string', terminator='}')
+        slot = ArgumentGenerationPart(name='source_string', type='string',
+                                      terminator='}')
         with patch.object(generation, 'MAX_VALUE_STEPS', 0):
             with self.assertRaisesRegex(
                 PromptError, r"source_string.*string.*token limit 0",
             ):
-                generation.generate_argument_part(slot, [], model=model, vocab={})
+                generation.generate_argument_part(slot, [], model=model,
+                                                  vocab={})
 
 
 class WriterTests(unittest.TestCase):
@@ -348,7 +356,7 @@ class WriterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'nested' / 'calls.json'
             call = FunctionCallRequest(prompt='日本語\n"', name='dynamic',
-                                parameters={'s': '\\', 'n': 2.0})
+                                       parameters={'s': '\\', 'n': 2.0})
             save_results(path, [call])
             self.assertEqual(json.loads(path.read_text()), [call.model_dump()])
             save_results(path, [])

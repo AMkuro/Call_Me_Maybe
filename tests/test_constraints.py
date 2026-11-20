@@ -291,8 +291,10 @@ class GrammarTests(unittest.TestCase):
                     self.assertIn(1, allowed_tokens_for_argument(
                         {1: token}, 'number', written, terminator,
                     ))
-                self.assertTrue(is_argument_part_complete(data, 'number', terminator))
-        self.assertTrue(is_argument_part_complete(b' \n-12.5 \t}', 'number', '}'))
+                self.assertTrue(
+                    is_argument_part_complete(data, 'number', terminator))
+        self.assertTrue(
+            is_argument_part_complete(b' \n-12.5 \t}', 'number', '}'))
 
     def test_invalid_numbers_and_crossing_tokens_are_masked(self) -> None:
         """A candidate cannot add bad syntax or text after a terminator."""
@@ -368,7 +370,8 @@ class GrammarTests(unittest.TestCase):
         ]
         for data, expected in cases:
             with self.subTest(data=data):
-                self.assertEqual(_classify_value_prefix(data, 'string', b'}'), expected)
+                self.assertEqual(
+                    _classify_value_prefix(data, 'string', b'}'), expected)
 
     def test_candidate_order_and_ids_match_slot_state(self) -> None:
         """Incremental candidates obey the reference contract at boundaries."""

@@ -13,7 +13,9 @@ from pydantic import ValidationError
 
 from src.errors import PromptError
 from src.pipeline import validate_call
-from src.schema import FunctionCallRequest, build_argument_validation_model
+from src.schema import (
+    FunctionCallRequest, build_argument_validation_model, validate_number,
+)
 from src.writer import save_results
 from tools.measure_application import assess_call
 from test_application import definition
@@ -31,10 +33,11 @@ class NumericIntegrityTests(unittest.TestCase):
     def test_direct_numeric_inputs_become_checked_floats(self) -> None:
         """Direct construction and declared numbers use the same checks."""
         model = build_argument_validation_model(definition(value='number'))
-        values: list[Any] = [0, -2, 2, 9007199254740992,
+        values: list[Any] = [10.0, Decimal('10.0'),
                              Decimal('0.1'), 2.75]
         for value in values:
             with self.subTest(value=value):
+                self.assertIs(type(validate_number(value)), float)
                 checked = model.model_validate({'value': value})
                 result = checked.model_dump(by_alias=True)['value']
                 call = FunctionCallRequest(prompt='x', name='dynamic',
@@ -44,12 +47,19 @@ class NumericIntegrityTests(unittest.TestCase):
                 self.assertIs(type(call.parameters['value']), float)
                 self.assertEqual(Decimal(json.dumps(result)), Decimal(value))
         invalid: list[tuple[Any, str]] = [
-            (9007199254740993, 'precision'),
+            (10, 'integer'),
+            (0, 'integer'),
+            (-3, 'integer'),
+            (9007199254740993, 'integer'),
             (Decimal('9007199254740993'), 'precision'),
-            (10 ** 400, 'overflow'),
+            (10 ** 400, 'integer'),
+            (Decimal('1e400'), 'overflow'),
+            (Decimal('1e-400'), 'underflow'),
         ]
         for value, reason in invalid:
             with self.subTest(reason=reason, type=type(value)):
+                with self.assertRaisesRegex(ValueError, reason):
+                    validate_number(value)
                 with self.assertRaisesRegex(ValidationError, reason):
                     model.model_validate({'value': value})
                 with self.assertRaisesRegex(ValidationError, reason):
@@ -106,19 +116,39 @@ class NumericIntegrityTests(unittest.TestCase):
                     validate_call(record(literal), definition(value='number'),
                                   'x')
 
+    def test_accepted_records_pass_the_removed_float_recheck(self) -> None:
+        """Whatever validate_call accepts loads as a finite float in json."""
+        fn = definition(value='number')
+        accepted = 0
+        for literal in ['0.1', '-0.0', '2.50', '1e5', '1e-300', '2', '-7',
+                        '9007199254740992.0', '9007199254740993', '1e309',
+                        '1e-999', '0.1234567890123456789']:
+            with self.subTest(literal=literal):
+                value = json.loads(record(literal))['parameters']['value']
+                old_check = isinstance(value, float) and math.isfinite(value)
+                try:
+                    validate_call(record(literal), fn, 'x')
+                except PromptError:
+                    continue
+                accepted += 1
+                self.assertTrue(old_check, literal)
+        self.assertEqual(accepted, 6)
+
     def test_strict_numeric_and_boolean_types(self) -> None:
         """Do not interpret numeric strings, bools or boolean-like strings."""
         number = build_argument_validation_model(definition(value='number'))
         boolean = build_argument_validation_model(definition(value='boolean'))
-        for value in ['2', '２', True, False, None, [], {}]:
+        for value in [10, 0, -3, '2', '２', True, False, None, [], {}]:
             with self.subTest(number=value):
+                with self.assertRaises(ValueError):
+                    validate_number(value)
                 with self.assertRaises(ValidationError):
                     number.model_validate({'value': value})
         for value in [1, 0, 1.0, 'false', 'true', '1', None]:
             with self.subTest(boolean=value):
                 with self.assertRaises(ValidationError):
                     boolean.model_validate({'value': value})
-        for value in [2, 2.5]:
+        for value in [2.0, 2.5]:
             self.assertEqual(number.model_validate({'value': value})
                              .model_dump()['parameter_0'], value)
         for value in [True, False]:
@@ -151,9 +181,9 @@ class NumericIntegrityTests(unittest.TestCase):
         self.assertFalse(assess_call({
             'expected_name': 'dynamic', 'expected_parameters': {'value': 1},
         }, FunctionCallRequest(prompt='x', name='dynamic',
-                        parameters={'value': True})))
+                               parameters={'value': True})))
         self.assertTrue(assess_call({
             'expected_name': 'dynamic',
             'expected_parameters': {'value': Decimal('0.1')},
         }, FunctionCallRequest(prompt='x', name='dynamic',
-                        parameters={'value': 0.1})))
+                               parameters={'value': 0.1})))

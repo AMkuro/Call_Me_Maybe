@@ -92,9 +92,9 @@ class PipelineTests(unittest.TestCase):
 
                 with patch.object(Model, 'decode', side_effect=decode), \
                         patch.object(Model, 'logits', side_effect=logits), \
-                        patch.object(generation, 'is_slot_complete',
+                        patch.object(generation, 'is_argument_part_complete',
                                      side_effect=complete), \
-                        patch.object(generation, 'allowed_slot_tokens',
+                        patch.object(generation, 'allowed_tokens_for_argument',
                                      side_effect=allowed), \
                         patch('src.decoder.constrained_argmax', side_effect=(
                             lambda scores, permitted:
@@ -121,10 +121,10 @@ class PipelineTests(unittest.TestCase):
                 with patch.object(Model, 'encode', side_effect=encode), \
                         patch.object(Model, 'decode', side_effect=decode), \
                         patch.object(Model, 'logits', return_value=[0.0]), \
-                        patch.object(generation, 'build_parameters_prompt',
+                        patch.object(generation, 'build_arguments_prompt',
                                      return_value=''), \
                         patch.object(generation,
-                                     'generate_slot',
+                                     'generate_argument_part',
                                      side_effect=[encode('12.0,'),
                                                   encode('true}')]):
                     text, _ = generation.generate_call_json(
@@ -147,7 +147,7 @@ class PipelineTests(unittest.TestCase):
             'prompt': 'x', 'name': 'f',
             'parameters': {'number': 12.0, 'text': '12', 'flag': True},
         })
-        with patch.object(pipeline, 'build_parameters_model',
+        with patch.object(pipeline, 'build_argument_validation_model',
                           return_value=Parameters):
             result = pipeline.validate_call(text, definition(), 'x')
         self.assertIs(type(result.parameters['number']), float)
@@ -158,7 +158,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_invalid_parameters_still_raise_prompt_error(self) -> None:
         """Normalization must not swallow validation failures."""
-        with patch.object(pipeline, 'build_parameters_model',
+        with patch.object(pipeline, 'build_argument_validation_model',
                           return_value=Parameters):
             with self.assertRaises(PromptError):
                 pipeline.validate_call(
@@ -207,7 +207,8 @@ class MainTests(unittest.TestCase):
         path.write_text(json.dumps(records), encoding='utf-8')
 
     def run_main(
-        self, prompts: list[str], results: Sequence[FunctionCallRequest | Exception],
+        self, prompts: list[str],
+        results: Sequence[FunctionCallRequest | Exception],
     ) -> int:
         """Run actual CLI orchestration with fixed per-prompt outcomes."""
         self.prompts.write_text(json.dumps([{'prompt': p} for p in prompts]))

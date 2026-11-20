@@ -34,7 +34,7 @@ class ForcedJsonTests(unittest.TestCase):
                                ('decode', self.decode),
                                ('logits', self.logits)):
             patch.object(Model, method, side_effect=effect).start()
-        patch.object(generation, 'build_parameters_prompt',
+        patch.object(generation, 'build_arguments_prompt',
                      return_value='P').start()
 
     def encode(self, text: str) -> list[int]:
@@ -186,10 +186,17 @@ class ForcedJsonTests(unittest.TestCase):
         cases = (
             ('2', '2.0'), ('-5', '-5.0'), ('0', '0.0'), ('-0', '-0.0'),
             ('12.25', '12.25'), ('2.00', '2.00'),
-            ('9007199254740993', '9007199254740993.0'),
-            ('123456789012345678901234567890',
-             '123456789012345678901234567890.0'),
+            ('9007199254740992', '9007199254740992.0'),
         )
+        # A float cannot hold these after ".0" is added: precision loss.
+        for raw_number in ('9007199254740993',
+                           '123456789012345678901234567890'):
+            with self.subTest(rejected=raw_number):
+                self.target = (head + raw_number + middle + '-0}}').encode()
+                with patch.object(pipeline, 'select_function',
+                                  return_value=fn), \
+                        self.assertRaisesRegex(PromptError, 'precision'):
+                    pipeline.process_prompt(prompt, resources)
         for raw_number, saved_number in cases:
             with self.subTest(number=raw_number):
                 self.contexts.clear()
@@ -348,28 +355,29 @@ class ForcedJsonTests(unittest.TestCase):
         self.assertEqual(self.contexts, [[80], [80, 300]])
 
     def test_llm_number_literal_survives_validation_and_save(self) -> None:
-        """Save exactly the model's decimal, including huge integer digits."""
+        """Save exactly the model's decimal, including trailing zeros."""
         fn = self.definition('f', n='number')
         resources = runtime.GenerationAssets.model_construct(
             model=self.model, vocab=self.vocab, functions={'f': fn},
             trie=trie_from_paths({'f': (1,)}),
         )
         text = ('{"prompt":"request","name":"f","parameters":'
-                '{"n":9007199254740993.0}}')
+                '{"n":9007199254740992.00}}')
         with patch.object(pipeline, 'select_function', return_value=fn), \
                 patch.object(pipeline, 'generate_call_json',
                              return_value=(text, [])):
             call = pipeline.process_prompt('request', resources)
-        self.assertEqual(call.parameters['n'], 9007199254740993)
+        self.assertEqual(call.parameters['n'], 9007199254740992.0)
+        self.assertIs(type(call.parameters['n']), float)
         self.assertEqual(call._generated_json, text)
         self.assertNotIn('_generated_json', call.model_dump())
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'output.json'
             save_results(path, [call])
             saved = path.read_text(encoding='utf-8')
-        self.assertIn('9007199254740993.0', saved)
+        self.assertIn('9007199254740992.00', saved)
         self.assertEqual(json.loads(saved, parse_float=Decimal)[0]
-                         ['parameters']['n'], Decimal('9007199254740993.0'))
+                         ['parameters']['n'], Decimal('9007199254740992.00'))
 
     def test_process_rejects_changed_prompt(self) -> None:
         fn = self.definition('f')

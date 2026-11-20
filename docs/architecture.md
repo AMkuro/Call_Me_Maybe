@@ -254,13 +254,13 @@ EOS はユーザーが承認した暫定方式で、障害となった場合に�
 
 ADR-0026の追加条件に従い、`generate_call_json`は引数用プロンプトID列Pと、
 JSON本体の確定ID列Oを分離する。出力の形は`skeleton.build_call_skeleton(user_prompt, fn)`だけが決める。
-これは`prompt`と選択済みの`name`を含む先頭、引数キー、括弧を`FixedText`、値を`ValueSlot`として、出力順に並べる。
+これは`prompt`と選択済みの`name`を含む先頭、引数キー、括弧を`FixedText`、値を`ArgumentGenerationPart`として、出力順に並べる。
 `generate_call_json`は各`FixedText.text`を`_commit_fixed_text`で処理し、few-shotの例を作る
 `prompt.build_example_call_json`も同じ骨組みから例の答えを作る。出力の形を変える時に直す場所は骨組み1か所である。
 固定断片は一括encodeし、語彙バイト列・SDKのdecode・期待文字列の一致を確認してから、
 各IDの直前に「P + O + この断片で確定済みのID」で1回forwardし（1候補なので点数は使わない）、断片のID列を返す。
 
-Oを伸ばすのは`generate_call_json`だけである。`_commit_fixed_text`と`generate_slot`は、どちらも
+Oを伸ばすのは`generate_call_json`だけである。`_commit_fixed_text`と`generate_argument_part`は、どちらも
 そのときのP + Oを文脈として受け取り、自分が確定したID列を返す。呼び出し側がそれをOへextendする。
 両者の受け渡しを同じ形にしているので、Oの更新は1か所を読めば分かる。
 
@@ -276,7 +276,7 @@ Oを伸ばすのは`generate_call_json`だけである。`_commit_fixed_text`と
 時間は[方式Bの性能評価](research/2026-11-18-method-b-performance.md)と
 [方式Bの高速化の検証](research/2026-11-18-method-b-speedups.md)に、精度と分けて記録する。
 
-- `ValueSlot`では既存どおり引数名・型を通知し、`generate_slot`へP + Oのスナップショットを渡す。
+- `ArgumentGenerationPart`では既存どおり引数名・型を通知し、`generate_argument_part`へP + Oのスナップショットを渡す。
 - 値ループはローカル生成列Vを1個ずつ確定する。値生成中の論理出力はO + V、分岐時のモデル入力はP + O + Vである。
   Vのバイト列`written`は、IDを1つ確定するたびにそのIDの語彙バイト列を足して保つ（毎ステップの全連結はしない）。
 - 完成したVのSDK復号と語彙バイト列のUTF-8復号が一致したらOへ統合する。
@@ -389,8 +389,9 @@ generation/pipelineを一時ディレクトリから読み込む実行と、変�
 これは数字を書き続ける場合の計算量を抑える上限であり、桁数やfloatの有効桁数を表すものではない。
 範囲と精度は生成後に別途検証する。32トークンを超える正当な数値も生成できない制約がある。
 
-保存する本文はPydanticによる検証に加え、標準の`json.loads`でnumber引数がすべて有限のfloatになることを検査する。
-汎用の数値検証でもfloatの範囲・十進数の精度を確認し、保持できない整数を拒否する。
+保存する本文は`json_io.loads`で解析し、Pydanticでnumber引数の有限性と十進数精度を検査する。
+整数表記は正規化で`.0`を付ける。未正規化の整数はintとして解析され、`validate_number`が拒否するため、
+標準の`json.loads`による再解析・数値型の再チェックは不要となる。
 受理した本文の符号や末尾ゼロは保存時にも保持する。
 公開parametersと保存本文の十進数値の一致は§3.3の精度検証で確認する。
 
@@ -424,19 +425,20 @@ JSONだけを返す、JSONの型を使う、パターンの説明を正規表現
 生成後の検証は、構文制約と骨組みの実装に不整合があった場合の確認境界となる。
 `validate_call` は全文を `json_io.loads` で読み、strictな`FunctionCall`で記録のキーと型を検証する。
 `call.name`が選択済みの`fn.name`と完全一致することも確認し、不一致なら期待した名前と実際の名前を含むPromptErrorにする。
-続いて `build_parameters_model` が選択済みの定義から作ったstrictなモデルで、必須引数、余分なキー、型を確認する。
+続いて `build_argument_validation_model` が選択済みの定義から作ったstrictなモデルで、必須引数、余分なキー、型を確認する。
 `validate_call`は検証後の`call.prompt`と入力文面の完全一致も確認し、不一致をPromptErrorにする。
 内部のフィールド名とは別に元の引数名を保持し、`_private` や `model_dump` のような名前も出力に戻す。
-汎用のnumber検証はJSON整数・小数の両方を受け付けるが、bool・数値文字列・全角数字からの変換はしない。
+number検証はDecimalとfloatを受け付け、int・bool・数値文字列・全角数字を拒否する。
 LLM生成の文法は§4の整数・小数（指数禁止）であり、入力解析や汎用検証の受理範囲とは区別する。
 booleanも整数・文字列から変換しない。これは構造化済みJSONの検査であり、依頼文の数値表現の解釈とは異なる。
 
 数値引数には`Number = Annotated[float, BeforeValidator(validate_number)]`を適用する。
-整数入力はDecimalへ正確に変換し、小数・指数のDecimalと同じ検査を通す。
+intはBeforeValidatorで明示的に拒否し、Pydanticによる暗黙のfloat変換を防ぐ。
+小数・指数を解析したDecimalには従来の精度検査を適用し、float入力は有限性を確認する。
 有限のfloat候補を`json.dumps`→Decimalで再解釈して元の値と比較し、一致した場合だけfloatを返す。
 整数へのフォールバックは廃止し、不一致は精度損失エラーとする。
 理由は、検証済み引数と保存JSONを読むfloatの値を一致させ、丸めを隠さないためである。
-直接構築する`FunctionCall`も同じ契約となり、安全な整数入力はfloatに変わり、保持できない整数は拒否される。
+直接構築する`FunctionCallRequest`も同じ契約となり、整数入力は大きさによらず拒否される。
 Pydantic 2.14.3のstrictなfloatも整数入力を変換するため、型注釈だけに任せず変換前に検査する。
 `0.1`はJSON再出力が一致するため受理し、二進数として厳密な表現は要求しない。
 非有限値、オーバーフロー、非ゼロ値のゼロへのアンダーフローも拒否する。
@@ -455,7 +457,8 @@ numberを文字列化せず、入力側の数値解析も変更しない。
 原子的保存は、同じディレクトリの一時ファイルへ全件を書き、close後に`os.replace`する方式を維持する。
 
 制限の根拠はPythonのint文字列変換の実行時上限、floatの有限範囲と再出力精度、§3.2と§4の生成上限である。
-整数・小数・指数表記ともfloat候補が有限で、JSON再出力の十進数値が元の値と一致する必要がある。
+小数・指数表記はfloat候補が有限で、JSON再出力の十進数値が元の値と一致する必要がある。
+生成時の整数表記は`.0`を補ってから同じ検査を通す。
 検証は`test_numeric_integrity.py`と`test_decimal_output.py`で、直接構築、境界値、拒否理由、正規化と保存表記を確認する。
 長い小数は保存精度を保持できなければPromptErrorにし、正当な短い値に見せかけない。
 これは実装上の制約であり、Subjectの追加要件とはしない。
@@ -465,7 +468,7 @@ numberを文字列化せず、入力側の数値解析も変更しない。
 
 ## 4. 候補トークンの判定と終了条件
 
-`select_function`と`generate_slot`が自分の生成列を所有し、`generate_slot`は値の上限も所有する。
+`select_function`と`generate_argument_part`が自分の生成列を所有し、`generate_argument_part`は値の上限も所有する。
 名前は木、値は型の文法を直接照会し、共通の`infer_and_select_next_token(model, ids, allowed)`で1トークンを選ぶ。
 制約判定・終了判定・採用後の処理をコールバックへ渡さない。
 
@@ -477,19 +480,19 @@ numberを文字列化せず、入力側の数値解析も変更しない。
 
 元の logits は変更しない。点数列の型・次元、NaN、正の無限大、許可候補がすべて非有限の場合を確認する。
 値の上限はnumberが32トークン、それ以外が暫定256トークンで、未完了の値を切り詰めて成功扱いにはしない。
-`generate_slot` は失敗に引数名と型を付け、例えば「text の string 値が256トークンでも終端に達しない」と通知する。
+`generate_argument_part` は失敗に引数名と型を付け、例えば「text の string 値が256トークンでも終端に達しない」と通知する。
 `select_function`は名前選択中の失敗に`function name: `を付ける。共通の`infer_and_select_next_token`のエラー文は、
 名前と値のどちらを生成していたかを含まず、文脈は呼び出し側が付ける。
 
 用語: `FixedText`は骨組みの固定JSON断片、`"forced"`は候補が1つだけの時の選択方式（SelectionMode）で、別の概念である。
 値の直後に置く`,`または`}`は、コードでは`terminator`と呼ぶ（`ValueSlot.terminator`）。
-「slot」は値とその`terminator`の組で、`generate_slot`・`allowed_slot_tokens`・`is_slot_complete`が扱う単位である。
+「slot」は値とその`terminator`の組で、`generate_argument_part`・`allowed_tokens_for_argument`・`is_argument_part_complete`が扱う単位である。
 
 ### 値の文法とバイト列の扱い（現行実装）
 
-`generate_slot`のループ先頭で、語彙から生成済みのバイト列を連結する。
-`is_slot_complete(written, slot.type, slot.terminator)`が真なら完了し、
-偽なら`allowed_slot_tokens`で次のIDを求める。トークン全体を加えた接頭辞が正当か確認し、
+`generate_argument_part`のループ先頭で、語彙から生成済みのバイト列を連結する。
+`is_argument_part_complete(written, slot.type, slot.terminator)`が真なら完了し、
+偽なら`allowed_tokens_for_argument`で次のIDを求める。トークン全体を加えた接頭辞が正当か確認し、
 区切りを越えて次の値や余分な文章を含むトークンを拒否する。
 
 | 型 | 許す値の形 | 完了条件 |
@@ -505,7 +508,7 @@ stringでは共通接頭辞の状態を一度求め、各語彙候補の追加�
 
 `_slot_state`を、スロット全体の`_INVALID`・`_INCOMPLETE`・`_COMPLETE`の基準とする。
 stringの判定では、`_string_slot_state`が構文の走査結果とUTF-8接頭辞の妥当性を組み合わせる。
-`allowed_slot_tokens`のstring分岐も同じ関数を使うため、候補専用の完成条件は持たない。
+`allowed_tokens_for_argument`のstring分岐も同じ関数を使うため、候補専用の完成条件は持たない。
 構文遷移は`_scan_json_string_fragment(state, fragment, terminator)`だけに定義する。
 この関数は開始状態からバイト断片を走査し、到達した構文状態を返す。UTF-8の検証は行わない。
 `\u`の後は残り4桁の状態から16進数字ごとに状態を1減らし、最後の1桁を消費して文字列内部へ戻る。
@@ -558,14 +561,14 @@ SDK 呼び出しの例外は `Model` が起動時または1件の失敗へ変換
 名前の通知は従来どおり`name_token`でID列を借用し、変更・保持せず同期的にdecodeする。
 制約前のargmaxと採用IDが異なる場合の警告も同じlogitsから作る。
 全JSONの通知は`output_token(data, token=..., mode=..., fixed=...)`を使う。
-固定部分では`_commit_fixed_text`がIDを追加した直後、値では`generate_slot`がIDとバイト列を
+固定部分では`_commit_fixed_text`がIDを追加した直後、値では`generate_argument_part`がIDとバイト列を
 追加した直後に呼ぶ。固定部分のmodeはforced、値のmodeは実際の選択結果である。
 表示用のforward、プロンプト変更、選択処理やマスクの変更はない。
 `observing`は通知ごとにavailableを確認し、stderr書込みが失敗した後の通知を止める。
 
 Dashboardは通知された語彙バイトを標準ライブラリのUTF-8 incremental decoderへ渡す。
 途中の文字はdecoder内に保留し、完全な文字だけを接頭辞へ追加する。JSONプレビューのためのSDK decodeは呼ばない。
-固定部分の通知で現在の引数欄を消し、`parameter_started`で新しい引数名・型を表示する。
+固定部分の通知で現在の引数欄を消し、`argument_started`で新しい引数名・型を表示する。
 名前選択中にはJSONがまだなく、その旨と名前の途中経過を表示する。
 JSONトークン数はJSON生成開始時に0に戻し、固定部分と値の確定ごとに1増やす。
 引数ごとの既存`value_token`は診断・測定用に残すが、JSON表示はその上書きに依存しない。
@@ -624,7 +627,7 @@ GPUの実CLIをTTYとリダイレクトで動かす確認と、推論を行わ�
 | モデルへ与える説明・形式 | `prompt.py` の設定値と組み立て関数 | 名前段階・引数段階それぞれの文字列を返す。名前の応答形式は EOS の木と整合させる |
 | 関数を選ぶ処理 | `generation.select_function`、`name_trie.py` | 入力された定義の `FunctionDef` を返す |
 | トークンを選ぶ方法 | `decoder.py` | 許可IDから1つ選び、ID・方式・任意診断を返す。列や上限は管理せず、観察で選択を変えない |
-| 引数値の許可文法・終了条件 | `values.py`、`generate_slot` | 値とスロットのJSON区切りのID列を返す。文字列の中の区切り文字では終了しない |
+| 引数値の許可文法・終了条件 | `values.py`、`generate_argument_part` | 値とスロットのJSON区切りのID列を返す。文字列の中の区切り文字では終了しない |
 | JSON全文の組み立て | `generate_call_json`、`skeleton.py` | 固定IDを1個ずつ確定し、値の確定IDを統合。各部分と完成Oの復号をバイト列と照合し、補正前JSONとnumber範囲を返す |
 | numberの保存表記の補正 | `values.normalize_call_json` | 生成時のnumber範囲だけへfloat_textを適用し、他の表記を保持する。process_promptが検証前に呼ぶ |
 | 値の生成上限 | `generation.MAX_VALUE_STEPS`、`MAX_NUMBER_STEPS` | 超過を値の短縮で隠さず、理由付きの PromptError にする |
@@ -728,7 +731,7 @@ TokenChoiceは変更前には観測時だけPydantic検証され、生成ID列�
 | --- | --- | --- | --- |
 | プロンプト・初期ID | 関数一覧から名前用入力 | 選択関数と固定JSONを含む入力 | 各pipeline関数 |
 | 終了判定 | leaf_nameで完成経路（名前+EOS）の葉を確認 | バイト列とslot.type・terminatorでis_slot_complete | 各ループに直接記載 |
-| 許可ID | next_tokens | allowed_slot_tokens | 各ループに直接記載 |
+| 許可ID | next_tokens | allowed_tokens_for_argument | 各ループに直接記載 |
 | 生成上限 | なし（§3: 有限の木の経路は葉で終わる） | numberはMAX_NUMBER_STEPS、それ以外はMAX_VALUE_STEPS | 値のループ。終了確認後、選択前に確認 |
 | 空候補・forced・モデル呼び出し | 同じ順序 | 同じ順序 | 共通の1トークン選択関数 |
 | 負の無限大マスク・argmax・不正logits拒否 | 同じ | 同じ | 既存constrained_argmaxを維持 |
@@ -826,7 +829,7 @@ class GenerationProgress(Protocol):
 
     def function_selected(self, name: str) -> None: ...
 
-    def parameter_started(self, name: str, param_type: ParamType) -> None: ...
+    def argument_started(self, name: str, param_type: ParamType) -> None: ...
 
     def name_token(
         self,
@@ -860,7 +863,7 @@ ProtocolのPythonクラスとしての性質とSubjectの留保は§9.9に記す
 | --- | --- | --- |
 | stage | process_promptで各段階に入る直前 | 段階表示。トークンを生成する段階（select_function・generate_call_json）に入る時は値・件数・現在トークン欄を消す。validate_callでは残し、検証の失敗時に最後の値が見えるようにする |
 | function_selected | select_functionで葉から名前が確定した時 | 確定した関数名の表示 |
-| parameter_started | generate_call_jsonでValueSlotへ入る前 | name/type表示、値・件数・現在トークン欄の初期化。terminatorは不要 |
+| argument_started | generate_call_jsonでValueSlotへ入る前 | name/type表示、値・件数・現在トークン欄の初期化。terminatorは不要 |
 | name_token | 名前ループで採用ID追加後 | tokens[-1]を採用ID、modeを方式として表示。ID列を公開decodeし、raw_topで従来の警告を作る |
 | output_token | 固定・値の各ループで採用ID追加後 | 語彙バイトとID/方式を同時に反映し、確定JSON接頭辞と全JSONトークン数を表示。fixed=Trueなら引数欄を消す |
 | value_token | 値ループで採用ID追加後 | tokenを採用ID、modeを方式、writtenを途中の値、stepをトークン数として表示 |
@@ -974,7 +977,7 @@ make install・必須lint/mypy・251テストが成功した。実GPUの既知11
 | process_all / process_prompt | resourcesを受け取り、必要なフィールドを下位へ展開。progressは別引数 |
 | select_function | model・functions・trie。vocabや資源構造体全体は渡さない |
 | generate_call_json | model・vocab。fnは選択済みの処理対象。progressも別に渡す |
-| generate_slot | model・vocabと処理対象slot/ids。functions・trieは渡さない |
+| generate_argument_part | model・vocabと処理対象slot/ids。functions・trieは渡さない |
 | infer_and_select_next_token | model・ids・allowedと診断要求だけ。共有構造体・表示先・上限は渡さない |
 
 DashboardもGenerationAssetsを丸ごと受け取らず、__main__._endから必要なmodel/vocab参照と件数だけを受け取る。
@@ -1022,7 +1025,7 @@ def normalize_call_json(
     raw_json: str, number_slot_slices: Sequence[slice],
 ) -> str: ...
 
-def generate_slot(
+def generate_argument_part(
     slot: ValueSlot,
     ids: list[int],
     *,
@@ -1056,7 +1059,7 @@ __main__._end：resourcesから必要な参照を取り出してDashboardをwith
   → pipeline.process_all(prompts, resources, ...) → process_prompt(prompt, resources, progress=...)
     → stage(select_function) → select_function(model, functions, trie, progress)
     → stage(generate_call_json) → generate_call_json(model, vocab, fn, progress)
-      → 固定IDの逐次確定 / parameter_started(name, type) → generate_slot(model, vocab, slot, P + O, progress)
+      → 固定IDの逐次確定 / argument_started(name, type) → generate_argument_part(model, vocab, slot, P + O, progress)
     → O全文の復号・整合性検査 → (raw_json, number_slot_slices)
     → normalize_call_json → stage(validate_call) → validate_call → prompt一致検査 → FunctionCall
   → 成功ごとに保存 → 完了/失敗通知 → 次の入力
@@ -1406,7 +1409,7 @@ SDK・生成方式は変更せず、実験ツールと開発環境は提出対�
 
 出力のキーと引数の名前・順序は既に分かっているため、`generate_parameters` はモデルにその構造を
 選ばせる必要がない。入力の `prompt` と選択済みの名前を `json.dumps` でエスケープし、記録の先頭を作る。
-`build_parameters_prompt`には選んだ1関数の定義と依頼、引数の順序を入れ、
+`build_arguments_prompt`には選んだ1関数の定義と依頼、引数の順序を入れ、
 関数を実行せず、値だけを引用符外のLFで区切って出すよう指示する。
 引数生成用の入力は一度だけencodeし、複数の引数を同じ応答の続きとして生成する。
 `PARAMETER_EXAMPLES`（既定は空）に例があれば、systemと依頼の間に会話の組（user: 定義と依頼、
@@ -1414,7 +1417,7 @@ assistant: 骨組みと同じ書き方の答え）として置く（ADR-0020）�
 
 その後の構造は `build_skeleton` が定義から作る。固定文字列を `Forced`、値を生成する場所を
 `ValueSlot(name, type)`で表す。`Forced`は最終JSONの文字列だけに追加し、モデルの入力ID列には追加しない。
-`ValueSlot`では`generate_value`が型に合う値と終端LFを生成し、生のID列を次の引数の入力へ継続する。
+`ArgumentGenerationPart`では`generate_value`が型に合う値と終端LFを生成し、生のID列を次の引数の入力へ継続する。
 追加する`normalize_value`が、LFまでの中間表現をint/検査済みfloat・string・booleanの値へ正規化する（ADR-0017）。
 正規化後の値を`json.dumps`でJSON化し、最終出力に差し込む。生成時の生の表記はモデルの文脈に残す。
 引数がない場合は空の `parameters` と記録の閉じ括弧を強制する。
@@ -1426,9 +1429,9 @@ assistant: 骨組みと同じ書き方の答え）として置く（ADR-0020）�
 | 部分 | モデルが生成する中間表現 | 最終JSONへ追加する内容 |
 | --- | --- | --- |
 | `Forced` | なし | `, "parameters": {"a": ` |
-| a の `ValueSlot`（number） | `2,000,000⏎` | 正規化した`2000000.0` |
+| a の `ArgumentGenerationPart`（number） | `2,000,000⏎` | 正規化した`2000000.0` |
 | `Forced` | なし | `, "b": ` |
-| b の `ValueSlot`（number） | `3⏎` | 正規化した`3.0` |
+| b の `ArgumentGenerationPart`（number） | `3⏎` | 正規化した`3.0` |
 | `Forced` | なし | `}}`（引数と記録を閉じる） |
 
 `2`は単独で有効な数でも`265`の途中かもしれないため、値として成立しただけでは止めない。

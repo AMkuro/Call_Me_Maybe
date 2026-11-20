@@ -44,7 +44,7 @@ def validate_number(value: object) -> float:
     if isinstance(value, bool):
         raise ValueError("boolean is not a JSON number argument")
     if isinstance(value, int):
-        value = Decimal(value)
+        raise ValueError("integer is not a float number argument")
     if isinstance(value, Decimal):
         if not value.is_finite():
             raise ValueError("number must be finite")

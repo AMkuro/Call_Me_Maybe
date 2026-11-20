@@ -19,7 +19,8 @@ from trie_fixtures import trie_from_paths
 from src.schema import FunctionCallRequest, FunctionDef
 from src.skeleton import ArgumentGenerationPart
 from src.values import (
-    allowed_tokens_for_argument, integer_to_float_literal, is_argument_part_complete, normalize_call_json,
+    allowed_tokens_for_argument, integer_to_float_literal,
+    is_argument_part_complete, normalize_call_json,
 )
 from src.writer import save_results
 
@@ -104,12 +105,10 @@ class DecimalGrammarTests(unittest.TestCase):
         """A token cannot hide an exponent or trailing material."""
         vocab = {1: b'2.0', 2: b'2.0,', 3: b'.0}', 4: b'1e10',
                  5: b'1.0e10', 6: b'0,', 7: b'2.0, extra'}
-        self.assertEqual(allowed_tokens_for_argument(vocab, 'number', b'', ','),
-                         [1, 2, 6])
-        self.assertEqual(allowed_tokens_for_argument(vocab, 'number', b'2', '}'),
-                         [1, 3])
-        self.assertEqual(allowed_tokens_for_argument(vocab, 'number', b'2.', ','),
-                         [6])
+        allowed = allowed_tokens_for_argument
+        self.assertEqual(allowed(vocab, 'number', b'', ','), [1, 2, 6])
+        self.assertEqual(allowed(vocab, 'number', b'2', '}'), [1, 3])
+        self.assertEqual(allowed(vocab, 'number', b'2.', ','), [6])
         self.assertTrue(is_argument_part_complete(b'2.0}', 'number', '}'))
         self.assertFalse(is_argument_part_complete(b'2.0', 'number', '}'))
 
@@ -154,7 +153,8 @@ class DecimalGrammarTests(unittest.TestCase):
 
             with self.subTest(length=length), \
                     patch.object(Model, 'logits', side_effect=logits):
-                slot = ArgumentGenerationPart(name='x', type='number', terminator='}')
+                slot = ArgumentGenerationPart(name='x', type='number',
+                                              terminator='}')
                 if length == 32:
                     ids = generation.generate_argument_part(
                         slot, [], model=model, vocab=vocab)
@@ -226,7 +226,8 @@ class DecimalSaveTests(unittest.TestCase):
         for call in calls:
             self.assertEqual(set(call.model_dump()),
                              {'prompt', 'name', 'parameters'})
-        self.assertEqual(set(FunctionCallRequest.model_json_schema()['properties']),
+        schema = FunctionCallRequest.model_json_schema()
+        self.assertEqual(set(schema['properties']),
                          {'prompt', 'name', 'parameters'})
 
     def test_precision_rejections_keep_existing_reasons(self) -> None:
@@ -249,9 +250,9 @@ class DecimalSaveTests(unittest.TestCase):
 
     def test_saved_numbers_must_load_as_float(self) -> None:
         """Python's json must read every number argument as a finite float."""
-        for literal in ('2', '-7'):
+        for literal in ('10', '-3'):
             with self.subTest(literal=literal), \
-                    self.assertRaisesRegex(PromptError, 'float'):
+                    self.assertRaisesRegex(PromptError, 'integer'):
                 text = ('{"prompt":"p","name":"record","parameters":'
                         '{"x":' + literal + ',"s":"","b":false}}')
                 pipeline.validate_call(text, definition(), 'p')
@@ -273,7 +274,8 @@ class DecimalSaveTests(unittest.TestCase):
     def test_manual_call_keeps_the_documented_fallback(self) -> None:
         """Manually built calls still use ordinary JSON serialization."""
         call = FunctionCallRequest(prompt='手動', name='record',
-                            parameters={'x': 2, 's': '1e10', 'b': True})
+                                   parameters={'x': 2.0, 's': '1e10',
+                                               'b': True})
         self.assertIs(type(call.parameters['x']), float)
         self.assertIsNone(call._generated_json)
         with tempfile.TemporaryDirectory() as directory:

@@ -241,7 +241,8 @@ class LoopObservationTests(unittest.TestCase):
         from src.skeleton import ArgumentGenerationPart
 
         model = object.__new__(Model)
-        slot = ArgumentGenerationPart(name='flag', type='boolean', terminator='}')
+        slot = ArgumentGenerationPart(name='flag', type='boolean',
+                                      terminator='}')
         for vocab, expected, mode in (
             ({1: b'true}'}, 1, 'forced'),
             ({1: b'true}', 2: b'true}'}, 2, 'greedy'),
