@@ -25,6 +25,9 @@ cpu = ['torch>=2.0.0']
 
 [tool.uv]
 default-groups = ['dev', 'cpu']
+# Rebuild the local SDK on every sync; uv otherwise reuses a stale cached
+# build after llm_sdk is replaced, even in a new .venv.
+reinstall-package = ['llm-sdk']
 
 [tool.uv.sources]
 llm-sdk = { path = 'llm_sdk' }
