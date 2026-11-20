@@ -1,6 +1,8 @@
 UV ?= uv
 FLAGS ?=
 VENV ?= .venv
+# uv installs into and runs from .venv unless told otherwise.
+export UV_PROJECT_ENVIRONMENT := $(VENV)
 SDK_ZIP ?= llm_sdk.zip
 
 .PHONY: help install sdk-install check-env run debug clean test lint lint-strict
