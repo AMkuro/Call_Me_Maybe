@@ -192,8 +192,6 @@ implementation (2026-11-20).
 
 | Measure | Set | Result |
 | --- | --- | --- |
-| Valid, schema-compliant records | 99 prompts (9 sets) | 99/99 |
-| Correct function | 99 prompts | 99/99 |
 | Correct call (function and every argument) | Subject's 11 examples | 10/11 (90.9%) |
 | Total time, `python -m src` on the 11 examples, development machine, CPU only | 1 run | 243.0 s |
 | Total time, `python -m src` on the 11 examples, 42 campus computer | 3 consecutive runs | 259.5 s, 274.9 s, 275.1 s |
