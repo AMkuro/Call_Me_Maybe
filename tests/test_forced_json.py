@@ -106,17 +106,17 @@ class ForcedJsonTests(unittest.TestCase):
         self.assertEqual(self.contexts,
                          [[80] + list(b'{"x": '[:end]) for end in range(6)])
 
-    def test_integer_is_returned_raw_with_number_range(self) -> None:
+    def test_integer_is_returned_raw_with_number_slice(self) -> None:
         """Return raw text; normalization never enters the model context."""
         fn = self.definition('timer', minutes='number', repeat='boolean')
         self.target = (b'{"prompt":"t","name":"timer","parameters":'
                        b'{"minutes": 10,"repeat": true}}')
-        raw, ranges = generation.generate_call_json(
+        raw, number_slot_slices = generation.generate_call_json(
             't', fn, model=self.model, vocab=self.vocab,
         )
         self.assertEqual(raw, self.target.decode())
-        self.assertEqual([raw[start:end] for start, end in ranges], ['10,'])
-        text = normalize_call_json(raw, ranges)
+        self.assertEqual([raw[part] for part in number_slot_slices], ['10,'])
+        text = normalize_call_json(raw, number_slot_slices)
         self.assertEqual(text, '{"prompt":"t","name":"timer","parameters":'
                          '{"minutes": 10.0,"repeat": true}}')
         # The context keeps what the model wrote; ".0" is never forwarded.
@@ -124,6 +124,53 @@ class ForcedJsonTests(unittest.TestCase):
         self.assertIn(b'{"prompt":"t","name":"timer","parameters":'
                       b'{"minutes": 10,"repeat": ', outputs)
         self.assertFalse(any(b'10.0' in output for output in outputs))
+
+    def test_number_slices_use_raw_character_positions(self) -> None:
+        """Unicode and earlier fractions must not shift later number slots."""
+        fn = self.definition('record', a='number', s='string',
+                             flag='boolean', b='number')
+        self.target = (
+            '{"prompt":"p","name":"record","parameters":'
+            '{"a": 2,"s": "日本語🙂","flag": false,"b": -5}}'
+        ).encode()
+        raw, number_slot_slices = generation.generate_call_json(
+            'p', fn, model=self.model, vocab=self.vocab,
+        )
+        self.assertEqual(len(number_slot_slices), 2)
+        for number_slice in number_slot_slices:
+            self.assertIsInstance(number_slice, slice)
+            self.assertIsNone(number_slice.step)
+        self.assertEqual([raw[part] for part in number_slot_slices],
+                         ['2,', '-5}'])
+        self.assertLessEqual(number_slot_slices[0].stop,
+                             number_slot_slices[1].start)
+        self.assertEqual(normalize_call_json(raw, number_slot_slices),
+                         '{"prompt":"p","name":"record","parameters":'
+                         '{"a": 2.0,"s": "日本語🙂","flag": false,"b": -5.0}}')
+        out = list(self.target)
+        self.assertEqual(self.decodings[-1], out)
+        self.assertEqual(self.contexts,
+                         [[80] + out[:i] for i in range(len(out))])
+
+    def test_no_number_slots_return_no_slices(self) -> None:
+        """Empty parameters and string/boolean parameters need no edits."""
+        for parameters, members in (
+            ({}, ''),
+            ({'s': 'string', 'flag': 'boolean'},
+             '"s": "日本語🙂","flag": true'),
+        ):
+            with self.subTest(parameters=parameters):
+                fn = self.definition('record', **parameters)
+                self.target = (
+                    '{"prompt":"p","name":"record","parameters":{'
+                    + members + '}}'
+                ).encode()
+                raw, number_slot_slices = generation.generate_call_json(
+                    'p', fn, model=self.model, vocab=self.vocab,
+                )
+                self.assertEqual(number_slot_slices, [])
+                self.assertEqual(normalize_call_json(raw, number_slot_slices),
+                                 self.target.decode())
 
     def test_pipeline_preserves_raw_tokens_and_exact_saved_json(self) -> None:
         """Pin forwarding, notifications and saved bytes before refactoring."""
@@ -341,14 +388,15 @@ class ForcedJsonTests(unittest.TestCase):
         fn = self.definition('f', n='number')
         head = '{"prompt":"x","name":"f","parameters":{"n": '
         raw = head + '2}'  # missing the record's closing brace
-        ranges = [(len(head), len(raw))]
-        self.assertEqual(normalize_call_json(raw, ranges), head + '2.0}')
+        number_slot_slices = [slice(len(head), len(raw))]
+        self.assertEqual(normalize_call_json(raw, number_slot_slices),
+                         head + '2.0}')
         resources = runtime.GenerationAssets.model_construct(
             model=self.model, vocab=self.vocab, functions={'f': fn},
             trie=trie_from_paths({'f': (1,)}),
         )
         with patch.object(pipeline, 'select_function', return_value=fn), \
                 patch.object(pipeline, 'generate_call_json',
-                             return_value=(raw, ranges)):
+                             return_value=(raw, number_slot_slices)):
             with self.assertRaisesRegex(PromptError, 'invalid output'):
                 pipeline.process_prompt('x', resources)

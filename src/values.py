@@ -53,27 +53,28 @@ def float_text(fragment: str) -> str:
 
 
 def normalize_call_json(
-    raw_json: str, number_ranges: Sequence[tuple[int, int]],
+    raw_json: str, number_slot_slices: Sequence[slice],
 ) -> str:
     """Add missing fractions only within generated number slots.
 
     Args:
         raw_json: The verified, unmodified text returned by generation.
-        number_ranges: Ordered, nonoverlapping character ranges from
-            generation, each including the number slot's terminator.
-            Starts are inclusive and ends exclusive.
+        number_slot_slices: Ordered, nonoverlapping slices into raw_json
+            before normalization, using Python string indices, not bytes
+            or tokens. Starts are inclusive, stops exclusive, steps None.
+            Each includes the number slot's terminator ("," or "}").
 
     Returns:
         The same JSON text, with integer number slots changed by float_text.
         No parsing or numeric conversion changes the original digits.
     """
     parts: list[str] = []
-    offset = 0
-    for start, end in number_ranges:
-        parts.append(raw_json[offset:start])
-        parts.append(float_text(raw_json[start:end]))
-        offset = end
-    parts.append(raw_json[offset:])
+    copied_until = 0
+    for number_slice in number_slot_slices:
+        parts.append(raw_json[copied_until:number_slice.start])
+        parts.append(float_text(raw_json[number_slice]))
+        copied_until = number_slice.stop
+    parts.append(raw_json[copied_until:])
     return "".join(parts)
 
 

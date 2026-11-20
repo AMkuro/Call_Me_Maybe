@@ -137,13 +137,13 @@ class PreviewTests(unittest.TestCase):
                 patch.object(Model, 'logits', side_effect=lambda ids:
                              [1. if i == raw[len(ids) - 1] else 0.
                               for i in range(256)]):
-            text, ranges = generation.generate_call_json(
+            text, number_slot_slices = generation.generate_call_json(
                 'p', fn, model=model, vocab=vocab, progress=dashboard,
             )
         self.assertEqual(dashboard.fields['json'].encode(), raw)
         self.assertEqual(int(dashboard.fields['tokens']), len(raw))
         self.assertEqual(text, raw.decode())
-        self.assertEqual(normalize_call_json(text, ranges),
+        self.assertEqual(normalize_call_json(text, number_slot_slices),
                          raw.decode().replace('2,', '2.0,'))
 
     def test_resize_reads_terminal_size_at_each_frame(self) -> None:

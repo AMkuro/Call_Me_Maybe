@@ -53,10 +53,10 @@ def generated(literal: str, prompt: str = '依頼') -> FunctionCall:
             '"parameters":{"x":' + literal + ',"s":'
             + json.dumps('日本語 " \\ \n 1e10 2.0 <|im_end|>') + ',"b":false}}')
     start = text.index(literal, text.index('"parameters":{"x":'))
-    ranges = [(start, start + len(literal) + 1)]
+    number_slot_slices = [slice(start, start + len(literal) + 1)]
     with patch.object(pipeline, 'select_function', return_value=fn), \
             patch.object(pipeline, 'generate_call_json',
-                         return_value=(text, ranges)):
+                         return_value=(text, number_slot_slices)):
         return pipeline.process_prompt(prompt, resources)
 
 
@@ -177,7 +177,7 @@ class DecimalSaveTests(unittest.TestCase):
                 self.assertIn('"x":' + literal + '.0,', text)
 
     def test_normalization_preserves_all_other_text(self) -> None:
-        """Only supplied character ranges may gain a fraction."""
+        """Only supplied number-slot slices may gain a fraction."""
         head = '{"prompt":"東 2, \\u0032","parameters":{"s":"-5}","a":'
         for raw, expected in (
             ('2,', '2.0,'), ('-5}', '-5.0}'), ('0}', '0.0}'),
@@ -190,7 +190,7 @@ class DecimalSaveTests(unittest.TestCase):
             with self.subTest(raw=raw):
                 text = head + raw + '}'
                 self.assertEqual(normalize_call_json(
-                    text, [(len(head), len(head) + len(raw))],
+                    text, [slice(len(head), len(head) + len(raw))],
                 ), head + expected + '}')
         text = '{"prompt":"数字2,","parameters":{}}'
         self.assertEqual(normalize_call_json(text, []), text)

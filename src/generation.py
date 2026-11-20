@@ -145,7 +145,7 @@ def generate_call_json(
     model: Model,
     vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
-) -> tuple[str, list[tuple[int, int]]]:
+) -> tuple[str, list[slice]]:
     """Generate raw JSON and locate its number slots for normalization.
 
     Fixed parts of the layout (build_call_skeleton) are committed as is,
@@ -159,9 +159,10 @@ def generate_call_json(
         progress: Receives each step, or None.
 
     Returns:
-        The unmodified decoded output and its number-slot character
-        ranges, in order. Each range includes the slot's terminator,
-        with an inclusive start and exclusive end.
+        The unmodified raw_json and ordered, nonoverlapping number-slot
+        slices into that pre-normalization Python string (not bytes or
+        tokens). Starts are inclusive, stops exclusive, and steps None.
+        Each slice includes the slot's terminator ("," or "}").
 
     Raises:
         PromptError: A value cannot be generated, or SDK decoding differs
@@ -171,8 +172,8 @@ def generate_call_json(
     # Only this loop extends output_ids; each part gets the prompt and the
     # output so far as context and returns its own IDs.
     output_ids: list[int] = []
-    number_ranges: list[tuple[int, int]] = []
-    offset = 0
+    number_slot_slices: list[slice] = []
+    generated_char_count = 0
     for part in build_call_skeleton(user_prompt, fn):
         context = prompt_ids + output_ids
         if isinstance(part, FixedText):
@@ -190,11 +191,16 @@ def generate_call_json(
                 part_ids, model=model, vocab=vocab
             )
             if part.type == "number":
-                number_ranges.append((offset, offset + len(part_text)))
-        offset += len(part_text)
+                number_slot_slices.append(
+                    slice(
+                        generated_char_count,
+                        generated_char_count + len(part_text),
+                    )
+                )
+        generated_char_count += len(part_text)
         output_ids.extend(part_ids)
     text = _decode_and_verify_output(output_ids, model=model, vocab=vocab)
-    return text, number_ranges
+    return text, number_slot_slices
 
 
 def generate_slot(

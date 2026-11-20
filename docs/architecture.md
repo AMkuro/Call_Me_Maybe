@@ -343,12 +343,15 @@ UTF-8途中の単トークンを復号して連結せず、値はbytesで制約�
 モデルへ戻す文脈は確定したID列のままとし、追加した`.0`はforwardしない。
 
 責務分離（2026-11-20、所有者が範囲を渡す設計を承認）:
-生成の戻り値は`(raw_json, number_ranges)`とする。`number_ranges`は生成時の`ValueSlot.type`がnumberの箇所だけを
-記録した、補正前JSONの文字位置の組`(start, end)`のリストである。開始を含み終了を含まず、各スロットの区切り文字までを含む。
+生成の戻り値は`(raw_json, number_slot_slices)`とする。`number_slot_slices`は生成時の`ValueSlot.type`がnumberの箇所だけを
+記録した、補正前JSONのPython文字列インデックスによる`slice(start, stop)`のリストである。
+開始を含み終了を含まず、stepはNoneで、各スロットの区切り文字までを含む。
 固定部分と検証済みの完成スロットの文字数を足して位置を求めるため、UTF-8のバイト数やトークン数と混同しない。
 引数がない場合やnumber引数がない場合は空リストとなる。
 
-正規化は渡された範囲だけを`float_text`へ渡し、範囲外を元のまま連結する。
+正規化は`raw_json[number_slice]`だけを`float_text`へ渡し、範囲外を元のまま連結する。
+すべてのsliceは補正前のraw_jsonを参照し、先行する補正で後続の位置を動かさない。
+生成側の`generated_char_count`は生成済み文字数、正規化側の`copied_until`は元の文字列の処理済み終端を表す。
 範囲は同じ生成呼び出しから受け取る内部データで、昇順かつ重複せず、各numberスロットに対応することを生成側が保証する。
 正規化側は関数定義からの再探索やJSON解析を行わない。既存の値文法・文字列表記の処理と一緒に`values.py`へ置き、
 生成処理から保存用補正への依存を外す。`float_text`のインターフェースと正規表現は変更しない。
@@ -363,7 +366,7 @@ UTF-8途中の単トークンを復号して連結せず、値はbytesで制約�
 
 比較した方法: 文字列だけを返す方法では、正規化側で引数値の位置を再探索する必要がある。
 JSONの再シリアライズは数値・エスケープ・固定部分の表記を変えうるため採らず、
-既知の範囲だけを返すtupleを採用した。新しいパーサーやデータクラスは追加しない。
+既知の範囲を直接切り出せる組み込みsliceを採用した。新しいパーサーやデータクラスは追加しない。
 検証方法: 固定logitsの回帰テストで、変更前から同じ生のID列・全forward入力・通知と、同じ保存ファイルを確認する。
 Unicode文字列の後にnumberを置く例でも、文字位置による補正が他の表記を変更しないことを検査する。
 
@@ -1007,10 +1010,10 @@ def generate_call_json(
     model: Model,
     vocab: Mapping[int, bytes],
     progress: GenerationProgress | None = None,
-) -> tuple[str, list[tuple[int, int]]]: ...
+) -> tuple[str, list[slice]]: ...
 
 def normalize_call_json(
-    raw_json: str, number_ranges: Sequence[tuple[int, int]],
+    raw_json: str, number_slot_slices: Sequence[slice],
 ) -> str: ...
 
 def generate_slot(
@@ -1048,7 +1051,7 @@ __main__._end：resourcesから必要な参照を取り出してDashboardをwith
     → stage(select_function) → select_function(model, functions, trie, progress)
     → stage(generate_call_json) → generate_call_json(model, vocab, fn, progress)
       → 固定IDの逐次確定 / parameter_started(name, type) → generate_slot(model, vocab, slot, P + O, progress)
-    → O全文の復号・整合性検査 → (raw_json, number_ranges)
+    → O全文の復号・整合性検査 → (raw_json, number_slot_slices)
     → normalize_call_json → stage(validate_call) → validate_call → prompt一致検査 → FunctionCall
   → 成功ごとに保存 → 完了/失敗通知 → 次の入力
 with終了：端末復帰 → 要約 → _endで保存エラー報告または終了コードを返す

@@ -70,6 +70,11 @@ def process_prompt(
 ) -> FunctionCall:
     """Select a function, generate raw JSON, normalize and validate it.
 
+    Pass generation's ordered, nonoverlapping number-slot slices directly
+    to normalization. They use pre-normalization raw_json Python string
+    indices: inclusive starts, exclusive stops, steps None, and include
+    each slot's terminator ("," or "}").
+
     Args:
         user_prompt: The user's request.
         resources: The model and the data shared by every prompt.
@@ -92,14 +97,14 @@ def process_prompt(
     )
     if observing(progress):
         progress.stage("generate_call_json")
-    raw_json, number_ranges = generate_call_json(
+    raw_json, number_slot_slices = generate_call_json(
         user_prompt,
         fn,
         model=resources.model,
         vocab=resources.vocab,
         progress=progress,
     )
-    normalized_json = normalize_call_json(raw_json, number_ranges)
+    normalized_json = normalize_call_json(raw_json, number_slot_slices)
     if observing(progress):
         progress.stage("validate_call")
     return validate_call(normalized_json, fn, user_prompt)
