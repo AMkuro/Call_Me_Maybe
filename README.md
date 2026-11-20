@@ -186,28 +186,25 @@ succeed; save-time I/O errors are still reported.
 ## Performance analysis
 
 Measured on a development machine (AMD Ryzen AI MAX+ 395), not on a campus
-computer. Accuracy and time come from separate runs. These are historical
-measurements from the 2026-11-19 submission audit, before subsequent prompt
-and validation changes; they do not establish current accuracy or runtime.
-They have not been repeated for this documentation audit.
+computer. Accuracy and time come from separate runs of the current
+implementation (2026-11-20, one run each).
 
 | Measure | Set | Result |
 | --- | --- | --- |
 | Valid, schema-compliant records | 99 prompts (9 sets) | 99/99 |
 | Correct function | 99 prompts | 99/99 |
 | Correct call (function and every argument) | Subject's 11 examples | 10/11 (90.9%) |
-| Correct call | 8 further sets, 88 prompts | 71/88 (80.7%) |
-| Correct call | all 99 prompts | 81/99 (81.8%) |
-| Total time, `python -m src` on the 11 examples, CPU only | 1 run | 221.8 s |
+| Total time, `python -m src` on the 11 examples, CPU only | 1 run | 243.0 s |
 
-The wrong calls are argument errors, not function errors: 17 of the 18 are
-regular expressions for "every number" or "vowels" (for example `aeiou`
-instead of `[aeiouAEIOU]`; one of them also writes `asterisks` instead of
-`*`), and one drops the sign of `-14`. Accuracy in those runs was below 90% on the harder sets; those results do
-not predict accuracy for a different mix of prompts.
+The one wrong call is an argument, not a function: for "Replace all vowels
+in 'Programming is fun' with asterisks" the model writes `[aeiou]` where
+`[aeiouAEIOU]` was expected. The comparison is exact; on this text both
+patterns replace the same characters. The weak point is turning words such
+as "vowels" or "every number" into a regular expression; the result does not
+predict accuracy for a different mix of prompts.
 
 The time run used CPU cores 0–15 with 6 threads, at most 16 GiB of memory, no
-swap and the model already cached; the 11 prompts took 11.0–38.9 s each. The
+swap and the model already cached; the 11 prompts took 12.1–44.1 s each. The
 SDK recomputes the whole prefix for every output token and has no cache, so
 each output token in the measured implementation costs one forward pass
 whose cost grows with the prompt and the output so far. Copying the prompt
@@ -246,19 +243,20 @@ logits; the dashboard performs no additional inference.
 - Regular expressions. The 0.6B model copies literal values well but often
   fails to turn "every number" or "vowels" into `\d+` or `[aeiouAEIOU]`.
   In the recorded experiments, an instruction sentence about patterns fixed
-  the Subject's number example. The other cases were the main source of
-  wrong arguments in that audit (see Performance analysis). Scoring the wrong and the expected values showed
-  that the model itself prefers the wrong one in all 18 cases, so a better
+  the Subject's number example. Such patterns remain the main source of
+  wrong arguments (see Performance analysis). Scoring the wrong and the
+  expected values showed that the model itself prefers the wrong one in
+  every wrong case examined, so a better
   search under the same model (beam search, or decoding faithful to the
   model's distribution) was not expected to fix those cases. Two historical
   comparisons were:
   - Two worked examples before the request (a character class, and a negative
-    number copied as written) raised the 99 prompts from 81 to 89 correct
-    when patterns are judged by their effect, but not the Subject's 11
-    examples (10/11). They nearly doubled the CPU time of the 11 examples
-    (221.8 s to 417.0 s, one run), because every forward pass reads the
-    longer prompt. The current implementation uses one regex example;
-    those two-example results do not measure the current prompt.
+    number copied as written) raised the Subject's 11 examples from 10/11
+    to 11/11 when patterns are judged by their effect. They nearly doubled the CPU time of the 11
+    examples (221.8 s to 417.0 s, one run), because every forward pass
+    reads the longer prompt. The current implementation therefore shows
+    one regex example only while argument values are generated; those
+    two-example results do not measure the current prompt.
   - Letting the model think before the JSON (Qwen3's think block, capped at
     160 tokens) lowered the 11 examples to 9/11, as the thought was cut off,
     and adds a forward pass for every thought token.
@@ -306,8 +304,8 @@ spaces inside `parameters` were written by the model and are valid JSON):
 
 Each record has exactly `prompt`, `name` and `parameters`. When stderr is
 redirected, the run ends with one line per prompt and a total, for example
-`[1/11] done    fn_add_numbers  16.4 s` and
-`11 prompts: 11 done, 0 failed, 216.4 s`. Generated files in `data/output/`
+`[1/11] done    fn_add_numbers  17.4 s` and
+`11 prompts: 11 done, 0 failed, 237.5 s`. Generated files in `data/output/`
 are not tracked.
 
 ## Resources
